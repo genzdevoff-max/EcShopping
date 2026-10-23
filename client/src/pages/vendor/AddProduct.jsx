@@ -1,0 +1,628 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  PlusCircle, 
+  Tag, 
+  Image as ImageIcon, 
+  DollarSign, 
+  Layers, 
+  CheckCircle, 
+  AlertCircle, 
+  X, 
+  ShoppingCart, 
+  Sparkles,
+  Percent,
+  UploadCloud,
+  Loader2,
+  Trash2,
+  RefreshCw,
+  Cloud,
+  Link as LinkIcon
+} from 'lucide-react';
+import { createProductOnServer } from '../../utils/storage';
+import api from '../../utils/api';
+import './AddProduct.css';
+
+export default function AddProduct({ vendor }) {
+  const navigate = useNavigate();
+
+  // Unit Options explicitly defined by user
+  const UNIT_OPTIONS = [
+    'Pieces (PCS)',
+    'Nos (Numbers)',
+    'Kilogram (KG)',
+    'Gram (G)',
+    'Litre (L)',
+    'Millilitre (ML)',
+    'Metre (M)',
+    'Centimetre (CM)',
+    'Feet (FT)',
+    'Box',
+    'Pack',
+    'Set',
+    'Pair',
+    'Dozen',
+    'Roll',
+    'Bundle',
+    'Carton',
+    'Bottle',
+    'Packet',
+    'Bag'
+  ];
+
+  // Form State with common placeholders
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [image, setImage] = useState('');
+  const [sellingPrice, setSellingPrice] = useState('');
+  const [strikePrice, setStrikePrice] = useState('');
+  const [unit, setUnit] = useState(UNIT_OPTIONS[2]); // Default 'Kilogram (KG)'
+  const [stockStatus, setStockStatus] = useState('in_stock');
+  const [categoriesList, setCategoriesList] = useState([]);
+
+  // Cloudinary Upload state
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [showManualUrl, setShowManualUrl] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Floating Toast state
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type, id: Date.now() });
+    setTimeout(() => {
+      setToast(null);
+    }, 3200);
+  };
+
+  // Sample quick images for fast UI testing
+  const SAMPLE_IMAGES = [
+    { label: 'Tomatoes', url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80' },
+    { label: 'Bananas', url: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=600&q=80' },
+    { label: 'Fresh Milk', url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=600&q=80' },
+    { label: 'Pure Honey', url: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&q=80' },
+    { label: 'Organic Rice', url: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80' },
+    { label: 'Cold-pressed Oil', url: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=600&q=80' }
+  ];
+
+  // Fetch available categories from TiDB (vendor token attached by api.js)
+  useEffect(() => {
+    const fetchCats = async () => {
+      try {
+        const data = await api.getCategories({ vendorId: vendor?.id || '' });
+        if (data?.success && Array.isArray(data.categories) && data.categories.length > 0) {
+          setCategoriesList(data.categories);
+          setCategory(data.categories[0].name);
+        } else {
+          setCategoriesList([{ id: 'default', name: 'General' }]);
+          setCategory('General');
+        }
+      } catch {
+        setCategoriesList([{ id: 'default', name: 'General' }]);
+        setCategory('General');
+      }
+    };
+    fetchCats();
+  }, [vendor?.id]);
+
+  // Discount Calculation
+  const parsedSelling = parseFloat(sellingPrice) || 0;
+  const parsedStrike = parseFloat(strikePrice) || 0;
+  const hasDiscount = parsedStrike > parsedSelling && parsedSelling > 0;
+  const discountPercent = hasDiscount ? Math.round(((parsedStrike - parsedSelling) / parsedStrike) * 100) : 0;
+  const savingsAmount = hasDiscount ? (parsedStrike - parsedSelling).toFixed(2) : 0;
+
+  // Cloudinary File Upload Handler
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Please upload an image file (PNG, JPG, WEBP, etc.)', 'error');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Image size should be less than 10MB', 'error');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // Vendor token is attached by api.js — the upload endpoint rejects
+      // anonymous or expired sessions.
+      const data = await api.uploadImage(file, 'vendor');
+      if (data && data.success && data.url) {
+        setImage(data.url);
+        if (data.isFallback) {
+          showToast('Image loaded! (Add Cloudinary keys in server/.env for cloud CDN)', 'success');
+        } else {
+          showToast('Image successfully uploaded to Cloudinary! ☁️', 'success');
+        }
+      } else {
+        showToast((data && data.error) || 'Failed to upload image', 'error');
+      }
+    } catch (err) {
+      showToast('Image upload failed: ' + (err.message || 'unknown error'), 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileInputChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  // Form Submit Handler — server-authoritative: the product only exists once
+  // the API confirms it (status 'pending' until an admin approves).
+  const [submitting, setSubmitting] = useState(false);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (submitting) return;
+
+    if (!name.trim()) {
+      showToast('Please enter product name', 'error');
+      return;
+    }
+
+    if (!sellingPrice || parsedSelling <= 0) {
+      showToast('Please enter a valid selling price', 'error');
+      return;
+    }
+
+    const newProdData = {
+      title: name.trim(),
+      name: name.trim(),
+      description: description.trim(),
+      category: category || 'General',
+      price: parsedSelling,
+      strikePrice: parsedStrike > 0 ? parsedStrike : null,
+      unit: unit,
+      image: image.trim(),
+      stockStatus: stockStatus
+    };
+
+    setSubmitting(true);
+    const result = await createProductOnServer(vendor, newProdData);
+    setSubmitting(false);
+
+    if (result.ok) {
+      showToast(`Product "${name}" submitted — waiting for admin approval`, 'success');
+      setTimeout(() => {
+        navigate('/vendor/products');
+      }, 1200);
+    } else {
+      showToast(result.error || 'Submission failed. Nothing was saved.', 'error');
+    }
+  };
+
+  return (
+    <div className="add-prod-root">
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div className="add-prod-toast-wrap">
+          <div className={`add-prod-toast-item ${toast.type}`}>
+            {toast.type === 'success' && <CheckCircle size={18} className="add-prod-toast-icon" />}
+            {toast.type === 'error' && <AlertCircle size={18} className="add-prod-toast-icon" />}
+            <span className="add-prod-toast-text">{toast.message}</span>
+            <button 
+              type="button" 
+              className="add-prod-toast-dismiss"
+              onClick={() => setToast(null)}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main 2-Column Grid */}
+      <div className="add-prod-grid">
+        {/* ================= LEFT COLUMN: FORM ================= */}
+        <div className="add-prod-form-card">
+          <form onSubmit={handleSubmit}>
+            {/* 1. Basic Product Info */}
+            <div className="add-prod-section">
+              <div className="add-prod-section-header">
+                <Tag size={18} />
+                <span>Basic Details</span>
+              </div>
+
+              {/* Product Name */}
+              <div className="add-prod-field">
+                <label htmlFor="prod-name-input" className="add-prod-label">
+                  <span>Product Name</span>
+                  <span className="req">*</span>
+                </label>
+                <input 
+                  id="prod-name-input"
+                  type="text" 
+                  className="add-prod-input"
+                  placeholder="Enter product name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* Category Dropdown */}
+              <div className="add-prod-field">
+                <label htmlFor="prod-cat-select" className="add-prod-label">
+                  <span>Category</span>
+                  <span className="req">*</span>
+                </label>
+                <select 
+                  id="prod-cat-select"
+                  className="add-prod-select"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  required
+                >
+                  <option value="" disabled>Select category</option>
+                  {categoriesList.map(cat => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Product Description */}
+              <div className="add-prod-field">
+                <label htmlFor="prod-desc-textarea" className="add-prod-label">
+                  <span>Product Description</span>
+                  <span className="opt">(optional)</span>
+                </label>
+                <textarea 
+                  id="prod-desc-textarea"
+                  className="add-prod-textarea"
+                  placeholder="Enter product description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                ></textarea>
+              </div>
+            </div>
+
+            {/* 2. Pricing & Discount Section */}
+            <div className="add-prod-section">
+              <div className="add-prod-section-header">
+                <DollarSign size={18} />
+                <span>Pricing & Discount</span>
+              </div>
+
+              <div className="add-prod-row-2col">
+                {/* Selling Price */}
+                <div className="add-prod-field">
+                  <label htmlFor="prod-selling-price" className="add-prod-label">
+                    <span>Selling Price (₹)</span>
+                    <span className="req">*</span>
+                  </label>
+                  <input 
+                    id="prod-selling-price"
+                    type="number" 
+                    step="0.01"
+                    min="0"
+                    className="add-prod-input"
+                    placeholder="Enter selling price"
+                    value={sellingPrice}
+                    onChange={(e) => setSellingPrice(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* Strike-out Price */}
+                <div className="add-prod-field">
+                  <label htmlFor="prod-strike-price" className="add-prod-label">
+                    <span>Strike-out Price (₹)</span>
+                    <span className="opt">(optional)</span>
+                  </label>
+                  <input 
+                    id="prod-strike-price"
+                    type="number" 
+                    step="0.01"
+                    min="0"
+                    className="add-prod-input"
+                    placeholder="Enter strike out price"
+                    value={strikePrice}
+                    onChange={(e) => setStrikePrice(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Live Discount Calculator Badge */}
+              {hasDiscount && (
+                <div className="add-prod-discount-pill">
+                  <Percent size={14} />
+                  <span>Save ₹{savingsAmount} ({discountPercent}% OFF)</span>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Unit & Inventory Section */}
+            <div className="add-prod-section">
+              <div className="add-prod-section-header">
+                <Layers size={18} />
+                <span>Unit & Inventory</span>
+              </div>
+
+              <div className="add-prod-row-2col">
+                {/* Unit Options Dropdown */}
+                <div className="add-prod-field">
+                  <label htmlFor="prod-unit-select" className="add-prod-label">
+                    <span>Unit</span>
+                    <span className="req">*</span>
+                  </label>
+                  <select 
+                    id="prod-unit-select"
+                    className="add-prod-select"
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Select unit</option>
+                    {UNIT_OPTIONS.map((u, idx) => (
+                      <option key={idx} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Stock Status */}
+                <div className="add-prod-field">
+                  <label htmlFor="prod-stock-select" className="add-prod-label">
+                    <span>Stock Status</span>
+                    <span className="req">*</span>
+                  </label>
+                  <select 
+                    id="prod-stock-select"
+                    className="add-prod-select"
+                    value={stockStatus}
+                    onChange={(e) => setStockStatus(e.target.value)}
+                    required
+                  >
+                    <option value="in_stock">In Stock</option>
+                    <option value="out_of_stock">Out of Stock</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Product Image (Cloudinary Upload) */}
+            <div className="add-prod-section">
+              <div className="add-prod-section-header">
+                <ImageIcon size={18} />
+                <span>Product Image (Cloudinary)</span>
+              </div>
+
+              {/* Hidden file input for Cloudinary upload */}
+              <input 
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileInputChange}
+                accept="image/*"
+                style={{ display: 'none' }}
+              />
+
+              {/* Upload Dropzone when no image is selected */}
+              {!image ? (
+                <div 
+                  className={`add-prod-dropzone ${dragActive ? 'drag-active' : ''} ${uploading ? 'uploading' : ''}`}
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  onClick={() => !uploading && fileInputRef.current?.click()}
+                >
+                  {uploading ? (
+                    <div className="add-prod-upload-loading">
+                      <Loader2 size={36} className="add-prod-spinner" />
+                      <div className="upload-loading-text">
+                        <strong>Uploading to Cloudinary...</strong>
+                        <span>Storing securely on Cloudinary CDN</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="add-prod-dropzone-content">
+                      <div className="add-prod-dropzone-icon">
+                        <UploadCloud size={38} />
+                      </div>
+                      <div className="add-prod-dropzone-text">
+                        <p className="dropzone-main"><strong>Click to upload</strong> or drag & drop</p>
+                        <p className="dropzone-sub">PNG, JPG, WEBP, GIF (up to 10MB)</p>
+                      </div>
+                      <span className="dropzone-badge">
+                        <Cloud size={13} /> Cloudinary Direct Storage
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Uploaded Image Preview & Management Card */
+                <div className="add-prod-uploaded-box">
+                  <div className="add-prod-uploaded-left">
+                    <img src={image} alt="Uploaded product preview" className="add-prod-uploaded-img" />
+                    <div className="add-prod-uploaded-meta">
+                      <div className="add-prod-uploaded-title">
+                        <CheckCircle size={15} className="uploaded-check-icon" />
+                        <span>Product Image Ready</span>
+                      </div>
+                      <span className="add-prod-uploaded-url" title={image}>
+                        {image.startsWith('data:') ? 'Image selected (Ready for Cloudinary)' : image}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="add-prod-uploaded-actions">
+                    <button 
+                      type="button" 
+                      className="add-prod-action-btn replace"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      title="Upload a different image"
+                    >
+                      <RefreshCw size={13} />
+                      <span>Change</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      className="add-prod-action-btn remove"
+                      onClick={() => setImage('')}
+                      disabled={uploading}
+                      title="Remove image"
+                    >
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Optional URL Toggle */}
+              <div className="add-prod-url-toggle-wrap">
+                <button 
+                  type="button" 
+                  className="add-prod-url-toggle-btn"
+                  onClick={() => setShowManualUrl(!showManualUrl)}
+                >
+                  <LinkIcon size={12} />
+                  <span>{showManualUrl ? 'Hide image URL input' : 'Or paste image URL manually'}</span>
+                </button>
+              </div>
+
+              {showManualUrl && (
+                <div className="add-prod-field add-prod-manual-url">
+                  <input 
+                    id="prod-image-input"
+                    type="url" 
+                    className="add-prod-input"
+                    placeholder="Enter image URL"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {/* Sample Preset Chips */}
+              <div className="add-prod-samples-wrap">
+                <span className="add-prod-sample-label">Quick samples:</span>
+                {SAMPLE_IMAGES.map((sample, idx) => (
+                  <button 
+                    key={idx}
+                    type="button"
+                    className="add-prod-chip"
+                    onClick={() => setImage(sample.url)}
+                  >
+                    {sample.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Form Actions */}
+            <div className="add-prod-actions">
+              <button type="submit" className="add-prod-submit-btn" disabled={submitting}>
+                {submitting ? <Loader2 size={18} className="add-prod-spinner" /> : <PlusCircle size={18} />}
+                <span>{submitting ? 'Submitting…' : 'Publish Product'}</span>
+              </button>
+              <button 
+                type="button" 
+                className="add-prod-cancel-btn"
+                onClick={() => navigate('/vendor/products')}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* ================= RIGHT COLUMN: LIVE STOREFRONT PREVIEW ================= */}
+        <div className="add-prod-preview-card">
+          <div className="add-prod-preview-header">
+            <h4>Live Storefront Preview</h4>
+            <span className="add-prod-preview-badge">Customer View</span>
+          </div>
+
+          {/* Mock Product Card identical to storefront */}
+          <div className="mockup-product-card">
+            {/* Image Box */}
+            <div className="mockup-image-box">
+              {image ? (
+                <img 
+                  src={image} 
+                  alt={name || 'Preview'} 
+                  className="mockup-image"
+                  onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?auto=format&fit=crop&w=600&q=80'; }}
+                />
+              ) : (
+                <div className="mockup-no-image">
+                  <ImageIcon size={32} />
+                  <span>No image selected</span>
+                </div>
+              )}
+
+              {/* Discount Tag */}
+              {hasDiscount && (
+                <div className="mockup-discount-tag">
+                  {discountPercent}% OFF
+                </div>
+              )}
+            </div>
+
+            {/* Card Body */}
+            <div className="mockup-card-body">
+              <span className="mockup-category-tag">
+                {category || 'CATEGORY'}
+              </span>
+
+              <h4 className="mockup-title">
+                {name || 'Product Name'}
+              </h4>
+
+              <span className="mockup-unit-pill">
+                {unit}
+              </span>
+
+              <div className="mockup-price-row">
+                <span className="mockup-selling-price">
+                  ₹{sellingPrice ? Number(sellingPrice).toLocaleString('en-IN') : '0'}
+                </span>
+                {hasDiscount && (
+                  <span className="mockup-strike-price">
+                    ₹{Number(strikePrice).toLocaleString('en-IN')}
+                  </span>
+                )}
+              </div>
+
+              <button type="button" className="mockup-cart-btn">
+                <ShoppingCart size={15} />
+                <span>ADD TO CART</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}

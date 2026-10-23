@@ -1,0 +1,418 @@
+/* Shared UI component styles (ProductCard, Pagination, States, etc.) */
+
+/* ---------------- Product card ---------------- */
+
+.pcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.pcard:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--sh-md);
+  border-color: var(--line-strong);
+}
+
+.pcard-media {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--paper-2);
+  overflow: hidden;
+}
+
+.pcard-media a { display: block; width: 100%; height: 100%; }
+
+.pcard-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s var(--ease);
+}
+
+.pcard:hover .pcard-media img { transform: scale(1.05); }
+
+.pcard-badges {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pcard-badges .badge { box-shadow: var(--sh-xs); }
+
+.pcard-wish {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  box-shadow: var(--sh-xs);
+}
+
+.pcard-wish:hover { color: var(--accent); border-color: var(--accent); transform: scale(1.06); }
+.pcard-wish.active { color: var(--accent); border-color: var(--accent-100); background: var(--accent-50); }
+
+.pcard-stock {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 7px;
+  text-align: center;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(31, 42, 38, 0.82);
+  color: #fff;
+}
+
+.pcard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 13px 13px;
+  flex: 1;
+}
+
+.pcard-seller {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.pcard-title {
+  font-family: var(--font-display);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.32;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.64em;
+  transition: color 0.15s var(--ease);
+}
+
+.pcard-title:hover { color: var(--brand-600); }
+
+.pcard-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pcard-variant {
+  font-size: 0.66rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.pcard-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.pcard-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: var(--r-pill);
+  background: var(--brand-50);
+  border: 1.5px solid var(--brand-100);
+  color: var(--brand-700);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: all 0.2s var(--ease);
+}
+
+.pcard-add:hover {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.pcard-add.added {
+  background: var(--success-soft);
+  border-color: var(--brand-300);
+  color: var(--success);
+}
+
+.pcard-add:disabled { background: var(--paper-2); color: var(--muted-2); border-color: var(--line); }
+
+/* Compact / horizontal variant */
+
+.pcard.horizontal {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.pcard.horizontal .pcard-media {
+  width: 108px;
+  flex-shrink: 0;
+  aspect-ratio: auto;
+}
+
+.pcard.horizontal .pcard-body { padding: 12px 14px; gap: 5px; }
+.pcard.horizontal .pcard-title { font-size: 0.92rem; min-height: 0; }
+.pcard.horizontal .pcard-foot { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+/* ---------------- Rating ---------------- */
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.rating-stars { display: inline-flex; gap: 1px; color: var(--gold); }
+.rating-value { font-weight: 700; color: var(--ink); }
+
+/* ---------------- Pagination ---------------- */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: clamp(26px, 4vw, 42px);
+}
+
+.page-btn {
+  min-width: 40px;
+  height: 40px;
+  padding-inline: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.page-btn:hover:not(:disabled):not(.active) {
+  border-color: var(--brand-300);
+  color: var(--brand);
+  background: var(--brand-50);
+}
+
+.page-btn.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.page-btn:disabled { opacity: 0.45; }
+.page-info { font-size: 0.85rem; color: var(--muted); padding-inline: 6px; }
+
+/* ---------------- Section head extras ---------------- */
+
+.section-head .head-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+
+/* ---------------- Breadcrumbs inline block ---------------- */
+
+.crumbs-bar {
+  padding-block: 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+/* ---------------- Avatar ---------------- */
+
+.avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.avatar.sm { width: 34px; height: 34px; font-size: 0.8rem; }
+.avatar.lg { width: 68px; height: 68px; font-size: 1.5rem; }
+.avatar.accent { background: var(--accent); }
+
+/* ---------------- Tabs content ---------------- */
+
+.tab-panel { padding-top: 22px; }
+
+/* ---------------- Accordion extras ---------------- */
+
+.accordion.bordered-soft { border-radius: var(--r-md); }
+
+/* ---------------- Misc reusable bits ---------------- */
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  border: none;
+  margin-block: 20px;
+}
+
+.dot-sep::after {
+  content: '•';
+  margin-inline: 7px;
+  color: var(--muted-2);
+}
+
+.seller-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  background: var(--brand-50);
+  border: 1px solid var(--brand-100);
+  border-radius: var(--r-pill);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--brand-700);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2rem);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.skeleton-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+  padding-bottom: 14px;
+}
+
+.skeleton-card .sk-media { aspect-ratio: 1 / 1; border-radius: 0; }
+.skeleton-card .sk-line { height: 12px; margin: 12px 15px 0; }
+.skeleton-card .sk-line.short { width: 55%; }
+.skeleton-card .sk-line.tiny { width: 35%; height: 10px; }
+
+/* Trust / benefit item */
+.benefit {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.benefit:hover { border-color: var(--brand-300); box-shadow: var(--sh-sm); }
+
+.benefit-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  background: var(--brand-50);
+  color: var(--brand);
+  border: 1px solid var(--brand-100);
+}
+
+.benefit h4 { font-family: var(--font-ui); font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+.benefit p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+
+/* Testimonial card */
+.quote-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  height: 100%;
+}
+
+.quote-card .quote-text {
+  font-size: 0.94rem;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+
+.quote-card .quote-stars { color: var(--gold); display: flex; gap: 2px; }
+
+.quote-card .quote-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.quote-card .quote-name { font-weight: 700; font-size: 0.9rem; color: var(--ink); }
+.quote-card .quote-loc { font-size: 0.78rem; color: var(--muted); }
+
+.placeholder-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border: 1px dashed #e6cf95;
+  padding: 4px 9px;
+  border-radius: var(--r-xs);
+}

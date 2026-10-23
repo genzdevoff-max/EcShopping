@@ -1,0 +1,100 @@
+.store-page {
+  padding-block: clamp(24px, 3vw, 40px) clamp(46px, 6vw, 72px);
+}
+
+.store-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 560px;
+  margin-bottom: 22px;
+  padding: 6px 6px 6px 16px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-pill);
+}
+
+.store-search:focus-within {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-50);
+}
+
+.store-search svg { color: var(--muted); flex-shrink: 0; }
+
+.store-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 9px 0;
+  font-size: 0.94rem;
+}
+
+.store-search input:focus { outline: none; }
+
+.store-count { margin-bottom: 14px; font-size: 0.85rem; color: var(--muted); }
+
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 24px);
+}
+
+.store-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  transition: box-shadow 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.store-card:hover { border-color: var(--brand-300); box-shadow: var(--sh-sm); }
+
+.store-card-head { display: flex; align-items: flex-start; gap: 13px; }
+
+.store-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-100);
+  color: var(--brand);
+}
+
+.store-card-head h2 { font-size: 1.05rem; line-height: 1.3; }
+.store-city { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+
+.store-details {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 0.86rem;
+  color: var(--ink-2);
+}
+
+.store-details li { display: flex; align-items: flex-start; gap: 9px; }
+.store-details svg { flex-shrink: 0; margin-top: 2px; color: var(--brand); }
+.store-details a { color: var(--brand); font-weight: 600; }
+
+.store-directions { margin-top: auto; align-self: flex-start; }
+
+.store-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 44px 24px;
+  text-align: center;
+}
+
+.store-empty h2 { font-size: 1.2rem; }
+
+@media (max-width: 760px) {
+  .store-grid { grid-template-columns: 1fr; }
+}

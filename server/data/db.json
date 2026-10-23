@@ -1,0 +1,24 @@
+{
+  "users": [
+    {
+      "id": "c1",
+      "name": "Demo User",
+      "email": "customer@example.com",
+      "password": "password123",
+      "phone": "9876543210",
+      "createdAt": "2026-10-18T00:00:00.000Z"
+    }
+  ],
+  "vendors": [
+    {
+      "id": "v1",
+      "name": "Ramesh Farms",
+      "email": "ramesh@example.com",
+      "password": "password123",
+      "status": "approved",
+      "phone": "9876543211",
+      "directSelling": true,
+      "createdAt": "2026-10-18T00:00:00.000Z"
+    }
+  ]
+}

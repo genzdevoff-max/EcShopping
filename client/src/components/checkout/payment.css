@@ -1,0 +1,114 @@
+/* Checkout payment components */
+
+/* ---------------- PhonePe option ---------------- */
+
+.pp-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'radio main right'
+    'note note note';
+  align-items: center;
+  gap: 8px 14px;
+  padding: 15px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.pp-option:hover { border-color: var(--brand-300); }
+
+.pp-option.selected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-50);
+}
+
+.pp-option.disabled { opacity: 0.55; cursor: not-allowed; }
+
+.pp-option input { grid-area: radio; accent-color: var(--brand); width: 17px; height: 17px; }
+
+.pp-main { grid-area: main; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.pp-wordmark {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: 1.02rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.pp-sub { font-size: 0.78rem; color: var(--muted); }
+
+.pp-right {
+  grid-area: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.pp-amount { font-size: 0.85rem; font-weight: 700; color: var(--ink); }
+
+.pp-note {
+  grid-area: note;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.pp-note svg { color: var(--muted-2); flex-shrink: 0; }
+
+/* ---------------- Payment state banners ---------------- */
+
+.pay-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.87rem;
+}
+
+.pay-state strong { display: block; font-size: 0.9rem; margin-bottom: 3px; }
+.pay-state p { color: var(--muted); line-height: 1.55; }
+.pay-state > svg { flex-shrink: 0; margin-top: 1px; }
+
+.pay-state.processing { background: var(--info-soft); border-color: #cfe0f4; color: #1d4f85; }
+.pay-state.processing p { color: #2b6cb0; }
+.pay-state.success { background: var(--success-soft); border-color: #c8e8d9; color: #14603f; }
+.pay-state.success p { color: #1d7a52; }
+.pay-state.failed { background: var(--danger-soft); border-color: #f4c9c5; color: #96281c; }
+.pay-state.failed p { color: #b23a2d; }
+.pay-state.pending { background: var(--warning-soft); border-color: #f0e0b4; color: #7a5410; }
+.pay-state.pending p { color: #97701f; }
+.pay-state.warning { background: var(--warning-soft); border-color: #f0e0b4; color: #7a5410; }
+.pay-state.warning p { color: #97701f; }
+
+.pay-ref {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.74rem;
+  font-family: ui-monospace, monospace;
+  opacity: 0.85;
+}
+
+.pay-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+.spin { animation: pp-spin 0.9s linear infinite; }
+
+@keyframes pp-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation-duration: 2.4s; }
+}

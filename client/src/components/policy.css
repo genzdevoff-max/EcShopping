@@ -1,0 +1,188 @@
+/* Policy / information pages */
+
+.policy-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: clamp(18px, 3vw, 34px);
+  align-items: start;
+  padding-block: clamp(24px, 3vw, 40px) clamp(46px, 6vw, 72px);
+}
+
+.policy-toc {
+  position: sticky;
+  top: calc(var(--header-h) + 18px);
+  padding: 20px;
+}
+
+.policy-toc h2 {
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.policy-toc ol {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  counter-reset: toc;
+}
+
+.policy-toc li { counter-increment: toc; }
+
+.policy-toc a {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  line-height: 1.45;
+  padding-left: 24px;
+  position: relative;
+}
+
+.policy-toc a::before {
+  content: counter(toc);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-size: 0.62rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+
+.policy-toc a:hover { color: var(--brand); }
+
+.policy-body { padding: clamp(22px, 3vw, 36px); max-width: 78ch; }
+
+.policy-section { scroll-margin-top: calc(var(--header-h) + 24px); }
+.policy-section + .policy-section { margin-top: 34px; padding-top: 6px; }
+
+.policy-updated {
+  margin-top: 34px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+/* FAQ page extras */
+
+.faq-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.faq-categories { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.faq-group { margin-bottom: clamp(22px, 3vw, 34px); }
+
+.faq-group h2 {
+  font-size: 1.25rem;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 8px 16px;
+  background: var(--surface);
+  min-width: min(280px, 100%);
+}
+
+.faq-search:focus-within { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-50); }
+.faq-search svg { color: var(--muted); flex-shrink: 0; }
+
+.faq-search input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  padding-block: 3px;
+}
+
+.faq-search input:focus { outline: none; }
+
+/* Contact / about / bulk extras */
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: clamp(14px, 2vw, 20px);
+}
+
+.info-card {
+  padding: clamp(18px, 2.4vw, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-card .info-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  background: var(--brand-50);
+  color: var(--brand);
+}
+
+.info-card h3 { font-size: 1rem; }
+.info-card p { font-size: 0.87rem; color: var(--muted); line-height: 1.6; }
+.info-card a { color: var(--brand); font-weight: 600; }
+
+.stat-band {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 18px;
+  padding: clamp(20px, 3vw, 30px);
+  background: var(--brand-900);
+  border-radius: var(--r-lg);
+  color: #fff;
+  text-align: center;
+}
+
+.stat-band .stat-value { color: #fff; }
+.stat-band .stat-label { color: rgba(255, 255, 255, 0.72); }
+
+.form-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 16px 18px;
+  border: 1px solid #c8e8d9;
+  background: var(--success-soft);
+  color: #14603f;
+  border-radius: var(--r-md);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.form-success svg { flex-shrink: 0; margin-top: 2px; }
+
+/* Responsive */
+
+@media (max-width: 900px) {
+  .policy-layout { grid-template-columns: 1fr; }
+  .policy-toc { position: static; }
+  .policy-toc ol { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .policy-toc a { padding: 6px 12px 6px 30px; border: 1px solid var(--line); border-radius: var(--r-pill); font-size: 0.78rem; }
+  .about-layout { grid-template-columns: 1fr !important; }
+}

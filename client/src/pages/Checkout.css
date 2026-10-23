@@ -1,0 +1,259 @@
+/* Checkout page */
+
+.checkout-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: clamp(20px, 3vw, 36px);
+  align-items: start;
+  padding-block: clamp(24px, 3vw, 40px) clamp(46px, 6vw, 72px);
+}
+
+.checkout-main { display: flex; flex-direction: column; gap: clamp(16px, 2vw, 22px); }
+
+/* ---------------- Sections ---------------- */
+
+.co-section { padding: clamp(18px, 2.4vw, 26px); }
+
+.co-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.co-head h2 { font-size: 1.15rem; }
+
+.co-num {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.co-account-note { margin-top: 16px; align-items: center; display: flex; gap: 8px; }
+.co-account-note svg { flex-shrink: 0; }
+
+.field-error {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.input.has-error,
+.input:invalid:not(:placeholder-shown) { border-color: var(--danger); }
+
+/* ---------------- Delivery ---------------- */
+
+.co-delivery-list { display: grid; gap: 10px; }
+
+.co-delivery {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.co-delivery:hover { border-color: var(--brand-300); }
+
+.co-delivery.selected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-50);
+  background: var(--brand-50);
+}
+
+.co-delivery input { accent-color: var(--brand); width: 16px; height: 16px; }
+.co-delivery > svg { color: var(--brand); flex-shrink: 0; }
+
+.co-delivery-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.co-delivery-main strong { font-size: 0.92rem; }
+.co-delivery-main small { font-size: 0.78rem; color: var(--muted); }
+
+.co-delivery-price { font-size: 0.9rem; font-weight: 700; color: var(--ink); }
+.co-delivery-price em { font-style: normal; color: var(--success); font-weight: 800; }
+
+/* ---------------- Payment ---------------- */
+
+.co-pay-list { display: grid; gap: 10px; }
+
+.co-pay-option {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.co-pay-option:hover { border-color: var(--brand-300); }
+
+.co-pay-option.selected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-50);
+}
+
+.co-pay-option.disabled { opacity: 0.6; cursor: not-allowed; }
+.co-pay-option input { accent-color: var(--brand); width: 16px; height: 16px; }
+.co-pay-option > svg { color: var(--brand); flex-shrink: 0; }
+
+.co-pay-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.co-pay-main strong { font-size: 0.92rem; }
+.co-pay-main small { font-size: 0.78rem; color: var(--muted); }
+
+.co-soon {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: var(--r-pill);
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+/* ---------------- Summary ---------------- */
+
+.checkout-summary {
+  position: sticky;
+  top: calc(var(--header-h) + 18px);
+}
+
+.co-summary-panel h2 { font-size: 1.15rem; margin-bottom: 16px; }
+
+.co-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.co-items li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.co-items img {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-xs);
+  object-fit: cover;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.co-item-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.co-item-name small { font-size: 0.74rem; font-weight: 500; color: var(--muted); }
+.co-item-price { font-size: 0.85rem; font-weight: 700; white-space: nowrap; }
+
+/* Coupon */
+
+.co-coupon { margin-top: 18px; }
+
+.co-coupon-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 6px 8px 6px 13px;
+  background: var(--surface);
+}
+
+.co-coupon-row:focus-within { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-50); }
+.co-coupon-row svg { color: var(--muted); flex-shrink: 0; }
+
+.co-coupon-row input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 0.87rem;
+  text-transform: uppercase;
+  padding-block: 6px;
+}
+
+.co-coupon-row input:focus { outline: none; }
+.co-coupon-row input:disabled { color: var(--success); font-weight: 700; }
+
+.co-coupon-msg { margin-top: 8px; font-size: 0.79rem; font-weight: 600; }
+.co-coupon-msg.ok { color: var(--success); }
+.co-coupon-msg.err { color: var(--danger); }
+.co-coupon-hint { margin-top: 7px; }
+
+.summary-divider { height: 1px; background: var(--line); margin-block: 16px; }
+
+.co-summary-panel .summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  padding-block: 6px;
+}
+
+.co-summary-panel .summary-row.discount { color: var(--success); font-weight: 600; }
+
+.co-summary-panel .summary-row.total {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--ink);
+  padding-top: 10px;
+}
+
+.co-place { margin-top: 18px; }
+
+.co-secure-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 12px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ---------------- Responsive ---------------- */
+
+@media (max-width: 960px) {
+  .checkout-layout { grid-template-columns: 1fr; }
+  .checkout-summary { position: static; order: -1; }
+}
+
+@media (max-width: 560px) {
+  .co-head h2 { font-size: 1.05rem; }
+  .co-delivery { padding: 12px 13px; }
+}
