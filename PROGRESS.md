@@ -1,8 +1,63 @@
 # EcShopping — Progress & Session Handover Log
 
-**Current Date:** 2026-10-26  
+**Current Date:** 2026-10-27  
 **Current Phase:** PHASE 18: PRODUCTION READINESS, VIDEO REVIEWS & SYSTEM POLISH (Audit Verified)  
-**Last Completed Task:** `TASK-P18-06` (Final Production Readiness Verification & Deployment Audit)
+**Last Completed Task:** `TASK-P18-09` (Final Feature Verification, Fixes & Deployment Readiness Audit)
+
+1. **Final Feature Verification, Fixes & Deployment Readiness Audit (`TASK-P18-09`):**
+   - **Feature A: Vendor Product Submission -> Admin Email Notification (COMPLETED & VERIFIED):**
+     - Upgraded Nodemailer transport export in `server/index.js` (`export const transporter`).
+     - Added automatic admin email dispatch upon successful vendor product creation (`POST /api/products`).
+     - Constructed HTML email containing product title, vendor name, category, price, stock status, product ID, and direct link to the Admin Approval dashboard.
+     - Implemented graceful degradation: non-blocking email dispatch ensures SMTP network timeouts or failures never fail product creation (HTTP 201 preserved); missing SMTP configuration logs a warning cleanly.
+     - Verified with automated test suite `server/test/api/product-notification.test.js` (4/4 tests pass).
+   - **Feature B: Forgot-Password & Password-Reset Flows across Customer, Vendor & Admin (COMPLETED & VERIFIED):**
+     - **Database:** Created `password_resets` table in TiDB Cloud schema (`server/db.js`) with primary key ID, email, role, SHA-256 token hash, 1-hour expiration timestamp, and `used_at` single-use timestamp.
+     - **Backend Endpoints:**
+       - `POST /api/auth/forgot-password`: Rate-limited via `authLimiter`, enumeration-safe (identical 200 response for non-existent accounts), cryptographically random 32-byte hex token generation, hashed storage, and branded Pine Green HTML email notification with secure reset link.
+       - `POST /api/auth/verify-reset-token`: Validates token existence, SHA-256 hash match, role isolation, expiration, and single-use status.
+       - `POST /api/auth/reset-password`: Validates token validity, enforces role-specific password policies (minimum 8 characters for customer and vendor, minimum 12 characters for admin), hashes with bcrypt, clears legacy plaintext columns, and invalidates token upon success.
+     - **Client API & UI Integration:**
+       - Added `forgotPassword`, `verifyResetToken`, and `resetPassword` to `client/src/utils/api.js`.
+       - Updated `client/src/components/auth/AuthForm.jsx`: In-place Customer "Forgot password?" form with email input, loading/submit state, and support recovery notice.
+       - Updated `client/src/pages/vendor/VendorLogin.jsx`: In-place Vendor "Forgot password?" form with vendor email input and state.
+       - Updated `client/src/pages/admin/AdminLogin.jsx`: Added "Forgot password?" link and administrator recovery view.
+       - Created `client/src/pages/ResetPassword.jsx` and `ResetPassword.css`: Branded reset interface with verification spinner, password eye toggles, password strength validation, and redirection to role-specific login.
+       - Mounted `/reset-password` route in `client/src/App.jsx`.
+     - Verified with automated test suite `server/test/api/password-reset.test.js` (6/6 tests pass).
+   - **Feature C: Admin Ability to Remove Vendor-Uploaded Products (COMPLETED & VERIFIED):**
+     - Backend `DELETE /api/products/:id` supports both vendor self-deletion (own products only) and admin deletion of any vendor product.
+     - Updated `client/src/utils/api.js` `deleteProduct(id, role = 'vendor')` to accept caller role.
+     - Admin UI in `client/src/pages/admin/AdminDashboard.jsx`: Products table includes red "Delete" action button with confirmation dialog and loading spinner.
+     - Relational safety verified: historical orders and `order_items` preserve product records when a product is removed.
+     - Verified with automated test suite `server/test/api/admin-product-deletion.test.js` (6/6 tests pass).
+   - **Quality & Regression Metrics:**
+     - Client tests: 53/53 passed (100%).
+     - Server tests: 120/120 passed (100%).
+     - Client lint: 0 errors (54 style/hook warnings).
+     - Client production build: successful in 5.94s with zero errors.
+
+1. **Profile UI, Mobile Category Fix, Gmail SMTP & Dual-Mode PhonePe Configuration (`TASK-P18-08`):**
+   - **Customer Profile Personal Details & Security UI (RESOLVED):**
+     - Diagnosed root cause: `CustomerProfile.css` was missing styles for `.settings-section`, `.settings-box`, `.profile-form`, `.form-group`, `.input-wrap`, `.input-icon`, `.disabled-input`, `.field-hint`, `.btn-save-profile`, `.alert-banner`, `.address-grid`, `.address-card`, and modal dialogs.
+     - Implemented full Pine Green/Terracotta theme styling with explicit `1.5px solid #cbd5e1` borders, 44px min-height touch targets, brand focus rings (`0 0 0 3px rgba(14, 92, 74, 0.12)`), positioned Lucide icons (`left: 14px`, `padding-left: 42px`), muted disabled styling for immutable email, and mobile responsive column stacking (<768px, <480px).
+   - **Mobile Category Text Below Products (RESOLVED):**
+     - Diagnosed root cause: In `Home.jsx`, the `.cat-tiles-section` ("Shop by Category" / "Explore Aisles" tile grid) was rendered directly below the top product rails ("Best Offers" and "Best Sellers"), cluttering mobile viewports with a duplicate category block.
+     - Added targeted media query in `client/src/components/home/home.css` (`@media (max-width: 768px) { .cat-tiles-section { display: none; } }`).
+     - Mobile users now browse products cleanly; primary top horizontal category navigation (`CompactCategoryNav`) remains 100% intact, and desktop displays continue showing the category tiles.
+   - **Gmail SMTP Configuration & Architecture (RESOLVED):**
+     - Upgraded Nodemailer transport configuration in `server/index.js` to support `SMTP_HOST` (default `smtp.gmail.com`), `SMTP_PORT` (default `465`), and `secure` flag (true for 465, false for 587/STARTTLS), while preserving fallback to `service: 'gmail'`.
+     - Verified `transporter.verify()` handles non-blocking connection validation without leaking passwords or tokens.
+     - Updated `server/.env.example` with clear instructions on generating Google App Passwords and configuring port 465/587.
+     - Audited email triggers: Product submission admin notification (`server/index.js:1425`) is active; additional notification points documented for future enablement.
+   - **PhonePe Dual-Mode Architecture Discovery & Documentation (RESOLVED):**
+     - Detailed comparison between Option A (legacy Hermes PG v1: Merchant ID, Salt Key, Salt Index, Base64 payload with SHA256 checksum in `X-VERIFY` header) and Option B (Standard Checkout v2: OAuth bearer token via `/v1/oauth/token`, `/checkout/v2/pay`, `/checkout/v2/order/{id}/status`).
+     - Documented configuration precedence: environment variables strictly take precedence over database/portal settings; fail-closed HTTP 503 is enforced when credentials are not configured.
+   - **Verification:**
+     - Client tests: 53/53 passed (100%).
+     - Server tests: 102/102 passed (100%).
+     - Client lint: 0 errors (53 warnings).
+     - Client build: built in 6.85s without errors.
 
 1. **Final Production Readiness Verification & Deployment Audit (`TASK-P18-06`):**
    - Conducted an independent, evidence-based audit of all 8 critical operational surfaces.

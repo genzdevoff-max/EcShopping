@@ -309,6 +309,14 @@
   }
 }
 
+/* Hide redundant category tiles block below products on mobile viewports
+   while keeping top CompactCategoryNav and desktop discovery fully functional. */
+@media (max-width: 768px) {
+  .cat-tiles-section {
+    display: none;
+  }
+}
+
 /* ---------------- Compact Trust / Policy Strip (Bottom) ---------------- */
 
 .compact-trust-strip {

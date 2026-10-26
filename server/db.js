@@ -235,6 +235,21 @@ export const initDatabase = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Create Password Resets table (customer, vendor, admin forgot password)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        id VARCHAR(64) PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        token_hash VARCHAR(255) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_resets_token (token_hash),
+        INDEX idx_resets_email_role (email, role)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     // Additive migration: hashed password columns for existing users/vendors.
     // The legacy `password` columns are kept until a separate cleanup is
     // approved so this upgrade can never destroy existing data.
@@ -286,7 +301,7 @@ export const initDatabase = async () => {
     `);
 
     connection.release();
-    console.log('✅ TiDB Cloud tables (users, vendors, categories, products, orders, order_items, reviews, admins, customer_addresses) ready & clean (no dummy data)!');
+    console.log('✅ TiDB Cloud tables (users, vendors, categories, products, orders, order_items, reviews, admins, customer_addresses, password_resets) ready & clean (no dummy data)!');
   } catch (error) {
     console.error('❌ Error initializing TiDB Cloud database:', error.message);
   }

@@ -21,10 +21,33 @@ export default function VendorLogin({ onLogin, initialSignUp = false }) {
   const [phone, setPhone] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
 
+  const [isForgot, setIsForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMsg('');
+    if (!forgotEmail || !forgotEmail.includes('@')) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const data = await api.forgotPassword(forgotEmail.trim(), 'vendor');
+      setSuccessMsg(data?.message || 'If an account exists with that email, a password reset link has been sent.');
+    } catch (err) {
+      setError(err.message || 'Unable to request password reset. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   // Handle Vendor Login (server-side bcrypt verification via TiDB)
   const handleLoginSubmit = async (e) => {
@@ -120,9 +143,17 @@ export default function VendorLogin({ onLogin, initialSignUp = false }) {
         <div className="auth-form-side">
           <div className="auth-form-box">
             <header className="auth-form-header">
-              <h1>{isSignUp ? 'Become a seller' : 'Vendor login'}</h1>
+              <h1>
+                {isForgot
+                  ? 'Reset vendor password'
+                  : isSignUp
+                  ? 'Become a seller'
+                  : 'Vendor login'}
+              </h1>
               <p>
-                {isSignUp
+                {isForgot
+                  ? "Enter your registered vendor email and we'll send you a password reset link."
+                  : isSignUp
                   ? 'Register your business to start listing and selling products on EcShopping.'
                   : 'Sign in to manage your products, storefront, and incoming customer orders.'}
               </p>
@@ -139,7 +170,48 @@ export default function VendorLogin({ onLogin, initialSignUp = false }) {
               </div>
             )}
 
-            {!isSignUp ? (
+            {isForgot ? (
+              <form onSubmit={handleForgotSubmit} className="auth-form" noValidate>
+                <div className="field">
+                  <label className="field-label" htmlFor="vendor-forgot-email">
+                    Registered vendor email <span className="req" aria-hidden="true">*</span>
+                  </label>
+                  <div className="auth-input-wrap">
+                    <Mail size={17} className="auth-field-icon" aria-hidden="true" />
+                    <input
+                      id="vendor-forgot-email"
+                      className="input auth-input"
+                      type="email"
+                      placeholder="vendor@example.com"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      required
+                      disabled={forgotLoading}
+                    />
+                    {forgotEmail.includes('@') && (
+                      <CheckCircle size={16} className="auth-valid-check" aria-hidden="true" />
+                    )}
+                  </div>
+                </div>
+
+                <div className="auth-buttons">
+                  <button type="submit" className="btn btn-primary" disabled={forgotLoading}>
+                    {forgotLoading ? 'Sending link…' : 'Send reset link'} <ArrowRight size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => {
+                      setIsForgot(false);
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                  >
+                    Back to vendor login
+                  </button>
+                </div>
+              </form>
+            ) : !isSignUp ? (
               /* VENDOR LOGIN FORM */
               <form onSubmit={handleLoginSubmit} className="auth-form" noValidate>
                 <div className="field">
@@ -201,7 +273,12 @@ export default function VendorLogin({ onLogin, initialSignUp = false }) {
                   <button
                     type="button"
                     className="btn-link"
-                    onClick={() => setError('Please contact store administrator at admin@ecshopping.local to reset your vendor credentials.')}
+                    onClick={() => {
+                      setIsForgot(true);
+                      setError('');
+                      setSuccessMsg('');
+                      if (email) setForgotEmail(email);
+                    }}
                   >
                     Forgot password?
                   </button>

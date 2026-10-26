@@ -197,6 +197,14 @@ export default function AdminDashboard({ onLogout }) {
     }, 'Failed to delete video');
   };
 
+  const handleDeleteProduct = async (prod) => {
+    if (!window.confirm(`Are you sure you want to delete product "${prod.title}"?`)) return;
+    await runRowAction(prod.id, async () => {
+      const res = await api.deleteProduct(prod.id, 'admin');
+      if (!res?.success) throw new Error(res?.error || 'Failed to delete product');
+    }, 'Failed to delete product');
+  };
+
   const filteredCategories = state.categories.filter((cat) => {
     const matchesSearch = (cat.name || '').toLowerCase().includes(catSearch.toLowerCase()) ||
                           (cat.description || '').toLowerCase().includes(catSearch.toLowerCase());
@@ -773,36 +781,60 @@ export default function AdminDashboard({ onLogout }) {
                             </span>
                           </td>
                           <td>
-                            {product.status === 'pending' ? (
-                              <div className="action-buttons">
-                                <button
-                                  type="button"
-                                  className="approve-btn"
-                                  disabled={busyId === product.id}
-                                  onClick={() => runRowAction(product.id, () => api.updateProductStatus(product.id, 'approved'), 'Product approval failed')}
-                                >
-                                  <CheckCircle size={14} /> Approve
-                                </button>
+                            <div className="action-buttons" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              {product.status === 'pending' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="approve-btn"
+                                    disabled={busyId === product.id}
+                                    onClick={() => runRowAction(product.id, () => api.updateProductStatus(product.id, 'approved'), 'Product approval failed')}
+                                  >
+                                    <CheckCircle size={14} /> Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="reject-btn"
+                                    disabled={busyId === product.id}
+                                    onClick={() => runRowAction(product.id, () => api.updateProductStatus(product.id, 'rejected'), 'Product rejection failed')}
+                                  >
+                                    <XCircle size={14} /> Reject
+                                  </button>
+                                </>
+                              ) : (
                                 <button
                                   type="button"
                                   className="reject-btn"
                                   disabled={busyId === product.id}
-                                  onClick={() => runRowAction(product.id, () => api.updateProductStatus(product.id, 'rejected'), 'Product rejection failed')}
+                                  onClick={() => runRowAction(product.id, () => api.updateProductStatus(product.id, 'pending'), 'Status reset failed')}
+                                  title="Move back to pending for another review"
                                 >
-                                  <XCircle size={14} /> Reject
+                                  Re-review
                                 </button>
-                              </div>
-                            ) : (
+                              )}
                               <button
                                 type="button"
-                                className="reject-btn"
+                                className="delete-btn"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '5px 10px',
+                                  background: '#fef2f2',
+                                  border: '1px solid #fecaca',
+                                  color: '#dc2626',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
                                 disabled={busyId === product.id}
-                                onClick={() => runRowAction(product.id, () => api.updateProductStatus(product.id, 'pending'), 'Status reset failed')}
-                                title="Move back to pending for another review"
+                                onClick={() => handleDeleteProduct(product)}
+                                title={`Delete product "${product.title}"`}
                               >
-                                Re-review
+                                <Trash2 size={13} /> Delete
                               </button>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       ))}

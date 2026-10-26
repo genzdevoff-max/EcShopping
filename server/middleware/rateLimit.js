@@ -3,12 +3,14 @@ import rateLimit from 'express-rate-limit';
 // In-memory stores: fine for a single server process. For horizontal
 // deployments swap in a shared store (e.g. rate-limit-redis) per instance.
 const quietValidation = { validate: { trustProxy: false } };
+const isTest = () => process.env.NODE_ENV === 'test';
 
 const windowMs = Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
 
 export const authLimiter = rateLimit({
   windowMs,
   limit: Number(process.env.RATE_LIMIT_AUTH_MAX) || 10,
+  skip: isTest,
   standardHeaders: true,
   legacyHeaders: false,
   ...quietValidation,
@@ -18,6 +20,7 @@ export const authLimiter = rateLimit({
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: Number(process.env.RATE_LIMIT_REGISTER_MAX) || 5,
+  skip: isTest,
   standardHeaders: true,
   legacyHeaders: false,
   ...quietValidation,
@@ -27,6 +30,7 @@ export const registerLimiter = rateLimit({
 export const reviewLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: Number(process.env.RATE_LIMIT_REVIEW_MAX) || 20,
+  skip: isTest,
   standardHeaders: true,
   legacyHeaders: false,
   ...quietValidation,
@@ -36,6 +40,7 @@ export const reviewLimiter = rateLimit({
 export const paymentLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   limit: Number(process.env.RATE_LIMIT_PAYMENT_MAX) || 30,
+  skip: isTest,
   standardHeaders: true,
   legacyHeaders: false,
   ...quietValidation,

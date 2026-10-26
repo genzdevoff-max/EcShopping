@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { v2 as cloudinary } from 'cloudinary';
-import { randomInt } from 'node:crypto';
+import crypto, { randomInt } from 'node:crypto';
 import multer from 'multer';
 import pool, { initDatabase } from './db.js';
 import {
@@ -79,17 +79,36 @@ app.get('/', (req, res) => {
 // Initialize TiDB Cloud Database tables (clean, no dummy data)
 initDatabase();
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.SMTP_EMAIL,
-    pass: process.env.SMTP_PASSWORD
-  }
-});
+const smtpPort = Number(process.env.SMTP_PORT) || 465;
+const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+const isSmtpSecure = process.env.SMTP_SECURE !== undefined
+  ? String(process.env.SMTP_SECURE).trim().toLowerCase() === 'true'
+  : smtpPort === 465;
+
+const transportConfig = process.env.SMTP_HOST || process.env.SMTP_PORT
+  ? {
+      host: smtpHost,
+      port: smtpPort,
+      secure: isSmtpSecure,
+      family: 4,
+      auth: {
+        user: process.env.SMTP_EMAIL,
+        pass: process.env.SMTP_PASSWORD
+      }
+    }
+  : {
+      service: process.env.SMTP_SERVICE || 'gmail',
+      auth: {
+        user: process.env.SMTP_EMAIL,
+        pass: process.env.SMTP_PASSWORD
+      }
+    };
+
+export const transporter = nodemailer.createTransport(transportConfig);
 
 if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
   transporter.verify()
-    .then(() => console.log(`✅ SMTP connected as ${process.env.SMTP_EMAIL}`))
+    .then(() => console.log(`✅ SMTP connected as ${process.env.SMTP_EMAIL} (${smtpHost}:${smtpPort}, secure=${isSmtpSecure})`))
     .catch((err) => console.error('❌ SMTP connection failed:', err.message));
 } else {
   console.warn('⚠️ SMTP not configured (SMTP_EMAIL / SMTP_PASSWORD) — emails will be skipped.');
@@ -733,6 +752,292 @@ app.post('/api/auth/admin/login', authLimiter, async (req, res) => {
   } catch (err) {
     console.error('❌ Admin login DB error:', err);
     return res.status(500).json({ success: false, error: 'Unable to process the login right now. Please try again.' });
+  }
+});
+
+// ================= PASSWORD RESET FLOWS (TiDB Cloud) =================
+
+// 1. Request password reset (Forgot Password)
+app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
+  const { email, role } = req.body || {};
+
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanRole = String(role || '').trim().toLowerCase();
+
+  const allowedRoles = ['customer', 'vendor', 'admin'];
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!cleanEmail || !emailRegex.test(cleanEmail) || !allowedRoles.includes(cleanRole)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Valid email and role (customer, vendor, admin) are required'
+    });
+  }
+
+  // Consistent message returned for all cases to prevent account enumeration
+  const standardMessage = 'If an account exists with that email, a password reset link has been sent.';
+
+  try {
+    let accountExists = false;
+    let userName = '';
+
+    if (cleanRole === 'customer') {
+      const [rows] = await pool.query(
+        'SELECT id, name FROM users WHERE LOWER(email) = ?',
+        [cleanEmail]
+      );
+      if (rows.length > 0) {
+        accountExists = true;
+        userName = rows[0].name || 'Customer';
+      }
+    } else if (cleanRole === 'vendor') {
+      const [rows] = await pool.query(
+        'SELECT id, name FROM vendors WHERE LOWER(email) = ?',
+        [cleanEmail]
+      );
+      if (rows.length > 0) {
+        accountExists = true;
+        userName = rows[0].name || 'Vendor';
+      }
+    } else if (cleanRole === 'admin') {
+      const [rows] = await pool.query(
+        'SELECT id FROM admins WHERE LOWER(email) = ?',
+        [cleanEmail]
+      );
+      if (rows.length > 0) {
+        accountExists = true;
+        userName = 'Administrator';
+      }
+    }
+
+    if (accountExists) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const resetId = 'pr_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      // Invalidate existing active tokens for this email and role
+      await pool.query(
+        'UPDATE password_resets SET used_at = NOW() WHERE LOWER(email) = ? AND role = ? AND used_at IS NULL',
+        [cleanEmail, cleanRole]
+      );
+
+      // Record new reset token
+      await pool.query(
+        'INSERT INTO password_resets (id, email, role, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
+        [resetId, cleanEmail, cleanRole, tokenHash, expiresAt]
+      );
+
+      // Construct reset URL safely
+      const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://ec-shopping.vercel.app' : 'http://localhost:5173');
+      const resetLink = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(rawToken)}&role=${encodeURIComponent(cleanRole)}`;
+
+      // Dispatch reset email
+      if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
+        const fromAddress = process.env.SMTP_FROM || `"${process.env.SENDER_NAME || 'EcShopping Support'}" <${process.env.SMTP_EMAIL}>`;
+        try {
+          await transporter.sendMail({
+            from: fromAddress,
+            to: cleanEmail,
+            subject: 'Reset your EcShopping password',
+            text: `Hello ${userName},\n\nA password reset was requested for your EcShopping ${cleanRole} account.\n\nReset your password here: ${resetLink}\n\nThis link will expire in 60 minutes.\n\nIf you did not request this, please disregard this email.\n\nEcShopping Team`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 8px; color: #1f2937;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                  <h1 style="color: #0e5c4a; margin: 0; font-size: 24px; font-weight: 700;">EcShopping</h1>
+                  <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Password Reset Request</p>
+                </div>
+                <p style="font-size: 15px; line-height: 1.5; color: #374151;">
+                  Hello <strong>${escapeHtml(userName)}</strong>,
+                </p>
+                <p style="font-size: 15px; line-height: 1.5; color: #374151;">
+                  We received a request to reset the password for your EcShopping <strong>${escapeHtml(cleanRole)}</strong> account.
+                </p>
+                <div style="text-align: center; margin: 32px 0;">
+                  <a href="${resetLink}" style="display: inline-block; background-color: #0e5c4a; color: #ffffff; text-decoration: none; padding: 12px 28px; font-weight: 600; font-size: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(14,92,74,0.2);">
+                    Reset Password
+                  </a>
+                </div>
+                <p style="font-size: 13px; line-height: 1.5; color: #6b7280;">
+                  If the button doesn't work, copy and paste this link into your browser:<br/>
+                  <a href="${resetLink}" style="color: #0e5c4a; word-break: break-all;">${resetLink}</a>
+                </p>
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+                <p style="font-size: 12px; color: #9ca3af; margin: 0;">
+                  This link expires in 60 minutes. If you did not request a password reset, you can safely ignore this email — your account remains secure.
+                </p>
+              </div>
+            `
+          });
+          console.log(`✅ Password reset email sent to ${cleanEmail} (${cleanRole})`);
+        } catch (mailErr) {
+          console.error(`⚠️ Failed to send password reset email to ${cleanEmail}:`, mailErr.message);
+        }
+      } else {
+        console.warn(`⚠️ SMTP not configured — password reset token generated for ${cleanEmail} (${cleanRole})`);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: standardMessage
+    });
+  } catch (err) {
+    console.error('❌ Forgot password error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Unable to process your request right now. Please try again later.'
+    });
+  }
+});
+
+// 2. Verify password reset token
+app.post('/api/auth/verify-reset-token', authLimiter, async (req, res) => {
+  const { token, role } = req.body || {};
+
+  const cleanToken = String(token || '').trim();
+  const cleanRole = String(role || '').trim().toLowerCase();
+
+  if (!cleanToken || !cleanRole) {
+    return res.status(400).json({
+      success: false,
+      valid: false,
+      error: 'Token and role are required'
+    });
+  }
+
+  try {
+    const tokenHash = crypto.createHash('sha256').update(cleanToken).digest('hex');
+    const [rows] = await pool.query(
+      'SELECT id, email, role, expires_at, used_at FROM password_resets WHERE token_hash = ? AND role = ?',
+      [tokenHash, cleanRole]
+    );
+
+    if (rows.length === 0 || rows[0].used_at !== null) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: 'Invalid or already used password reset link'
+      });
+    }
+
+    const resetRecord = rows[0];
+    if (new Date(resetRecord.expires_at) < new Date()) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: 'Password reset link has expired. Please request a new one.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      valid: true,
+      email: resetRecord.email,
+      role: resetRecord.role
+    });
+  } catch (err) {
+    console.error('❌ Verify reset token error:', err);
+    return res.status(500).json({
+      success: false,
+      valid: false,
+      error: 'Unable to verify reset token'
+    });
+  }
+});
+
+// 3. Complete password reset
+app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
+  const { token, role, newPassword } = req.body || {};
+
+  const cleanToken = String(token || '').trim();
+  const cleanRole = String(role || '').trim().toLowerCase();
+
+  if (!cleanToken || !cleanRole || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      error: 'Token, role, and new password are required'
+    });
+  }
+
+  const allowedRoles = ['customer', 'vendor', 'admin'];
+  if (!allowedRoles.includes(cleanRole)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid role'
+    });
+  }
+
+  const minLength = cleanRole === 'admin' ? 12 : 8;
+  if (!passwordMeetsPolicy(newPassword, minLength)) {
+    return res.status(400).json({
+      success: false,
+      error: cleanRole === 'admin'
+        ? 'Admin password must be at least 12 characters long'
+        : 'Password must be at least 8 characters long'
+    });
+  }
+
+  try {
+    const tokenHash = crypto.createHash('sha256').update(cleanToken).digest('hex');
+    const [rows] = await pool.query(
+      'SELECT id, email, role, expires_at, used_at FROM password_resets WHERE token_hash = ? AND role = ?',
+      [tokenHash, cleanRole]
+    );
+
+    if (rows.length === 0 || rows[0].used_at !== null) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or already used password reset link'
+      });
+    }
+
+    const resetRecord = rows[0];
+    if (new Date(resetRecord.expires_at) < new Date()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password reset link has expired. Please request a new one.'
+      });
+    }
+
+    // Mark token as used
+    await pool.query(
+      'UPDATE password_resets SET used_at = NOW() WHERE id = ?',
+      [resetRecord.id]
+    );
+
+    // Hash the new password with bcrypt
+    const passwordHash = await hashPassword(newPassword);
+
+    // Update password in the target role table
+    if (cleanRole === 'customer') {
+      await pool.query(
+        'UPDATE users SET password_hash = ?, password = "" WHERE LOWER(email) = LOWER(?)',
+        [passwordHash, resetRecord.email]
+      );
+    } else if (cleanRole === 'vendor') {
+      await pool.query(
+        'UPDATE vendors SET password_hash = ?, password = "" WHERE LOWER(email) = LOWER(?)',
+        [passwordHash, resetRecord.email]
+      );
+    } else if (cleanRole === 'admin') {
+      await pool.query(
+        'UPDATE admins SET password_hash = ? WHERE LOWER(email) = LOWER(?)',
+        [passwordHash, resetRecord.email]
+      );
+    }
+
+    console.log(`✅ Password successfully reset for ${resetRecord.email} (${cleanRole})`);
+    return res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully. You can now log in with your new password.'
+    });
+  } catch (err) {
+    console.error('❌ Reset password error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Unable to reset password right now. Please try again later.'
+    });
   }
 });
 

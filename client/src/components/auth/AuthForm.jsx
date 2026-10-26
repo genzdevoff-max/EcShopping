@@ -13,6 +13,9 @@ import { saveCustomerSession, addCustomer } from '../../utils/storage';
 export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'login', showVendorLink = true }) {
   const navigate = useNavigate();
   const [isSignUp, setIsSignUp] = useState(initialMode === 'signup');
+  const [isForgot, setIsForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -33,6 +36,25 @@ export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'lo
       onSuccess();
     } else {
       navigate('/profile');
+    }
+  };
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMsg('');
+    if (!forgotEmail || !forgotEmail.includes('@')) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const data = await api.forgotPassword(forgotEmail.trim(), 'customer');
+      setSuccessMsg(data?.message || 'If an account exists with that email, a password reset link has been sent.');
+    } catch (err) {
+      setError(err.message || 'Unable to request password reset. Please try again.');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -102,9 +124,17 @@ export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'lo
   return (
     <div className="auth-form-box">
       <header className="auth-form-header">
-        <h1>{isSignUp ? 'Create your account' : 'Welcome back'}</h1>
+        <h1>
+          {isForgot
+            ? 'Reset your password'
+            : isSignUp
+            ? 'Create your account'
+            : 'Welcome back'}
+        </h1>
         <p>
-          {isSignUp
+          {isForgot
+            ? "Enter your email address and we'll send you a link to reset your password."
+            : isSignUp
             ? 'Join EcShopping to order fresh goods and track every delivery.'
             : 'Log in with your email to continue to your orders and wishlist.'}
         </p>
@@ -121,7 +151,52 @@ export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'lo
         </div>
       )}
 
-      {!isSignUp ? (
+      {isForgot ? (
+        <form onSubmit={handleForgotSubmit} className="auth-form" noValidate>
+          <div className="field">
+            <label className="field-label" htmlFor="forgot-email">
+              Registered email address <span className="req" aria-hidden="true">*</span>
+            </label>
+            <div className="auth-input-wrap">
+              <Mail size={17} className="auth-field-icon" aria-hidden="true" />
+              <input
+                id="forgot-email"
+                className="input auth-input"
+                type="email"
+                placeholder="you@example.com"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                required
+                disabled={forgotLoading}
+              />
+              {forgotEmail.includes('@') && (
+                <CheckCircle size={16} className="auth-valid-check" aria-hidden="true" />
+              )}
+            </div>
+          </div>
+
+          <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: '0 0 12px' }}>
+            Need direct assistance? You can also reach our team at support@ecshopping.local
+          </p>
+
+          <div className="auth-buttons">
+            <button type="submit" className="btn btn-primary" disabled={forgotLoading}>
+              {forgotLoading ? 'Sending link…' : 'Send reset link'} <ArrowRight size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => {
+                setIsForgot(false);
+                setError('');
+                setSuccessMsg('');
+              }}
+            >
+              Back to login
+            </button>
+          </div>
+        </form>
+      ) : !isSignUp ? (
         <form onSubmit={handleLoginSubmit} className="auth-form" noValidate>
           <div className="field">
             <label className="field-label" htmlFor="login-email">
@@ -183,7 +258,10 @@ export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'lo
               type="button"
               className="btn-link"
               onClick={() => {
-                setError('For account recovery or password resets, please contact support at support@ecshopping.local');
+                setIsForgot(true);
+                setError('');
+                setSuccessMsg('');
+                if (loginEmail) setForgotEmail(loginEmail);
               }}
             >
               Forgot password?

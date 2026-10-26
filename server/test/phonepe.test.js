@@ -5,12 +5,6 @@
 // configured. Sandbox end-to-end runs are gated on real credentials.
 process.env.DB_NAME = 'ecshopping_test';
 
-// Ensure no payment credentials are present for this process so the
-// fail-closed assertions are deterministic.
-for (const key of ['PHONEPE_CLIENT_ID', 'PHONEPE_CLIENT_VERSION', 'PHONEPE_CLIENT_SECRET', 'PHONEPE_REDIRECT_URL']) {
-  delete process.env[key];
-}
-
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import supertest from 'supertest';
@@ -18,6 +12,15 @@ import supertest from 'supertest';
 const { default: app } = await import('../index.js');
 const { initDatabase, pool } = await import('../db.js');
 const { validatePhonePeConfig, mapPhonePeState, assertPaisa, resetTokenCache } = await import('../utils/phonepe.js');
+
+// Ensure no payment credentials are present for this process so the
+// fail-closed assertions are deterministic (must run after index.js dotenv.config()).
+for (const key of [
+  'PHONEPE_CLIENT_ID', 'PHONEPE_CLIENT_VERSION', 'PHONEPE_CLIENT_SECRET', 'PHONEPE_REDIRECT_URL',
+  'PHONEPE_MERCHANT_ID', 'PHONEPE_SALT_KEY', 'PHONEPE_SALT_INDEX', 'phonepe_merchant_id', 'phonepe_salt_key'
+]) {
+  delete process.env[key];
+}
 
 before(async () => {
   await initDatabase();
@@ -86,4 +89,24 @@ test('POST /api/payments/phonepe/verify 404s unknown orders and never fabricates
   assert.equal([404, 503].includes(res.status), true, '404 when configured, 503 when the gateway is unconfigured');
   assert.equal(res.body.success, false);
   assert.ok(res.body.paymentStatus == null || res.body.paymentStatus !== 'paid', 'no phantom paid states');
+});
+
+test('Option A: validatePhonePeConfig detects Hermes PG v1 mode when merchant ID and salt key are set', () => {
+  const mockEnv = {
+    PHONEPE_MERCHANT_ID: 'MOCK_MERCHANT',
+    PHONEPE_SALT_KEY: 'mock-salt-key',
+    PHONEPE_SALT_INDEX: '1',
+    PHONEPE_REDIRECT_URL: 'https://example.com/return'
+  };
+  const check = validatePhonePeConfig(mockEnv);
+  assert.equal(check.ok, true);
+  assert.equal(check.mode, 'v1');
+});
+
+test('Option A: mapPhonePeState maps v1 response codes accurately', () => {
+  assert.equal(mapPhonePeState('PAYMENT_SUCCESS'), 'paid');
+  assert.equal(mapPhonePeState('SUCCESS'), 'paid');
+  assert.equal(mapPhonePeState('PAYMENT_ERROR'), 'failed');
+  assert.equal(mapPhonePeState('PAYMENT_DECLINED'), 'failed');
+  assert.equal(mapPhonePeState('PAYMENT_PENDING'), 'pending');
 });

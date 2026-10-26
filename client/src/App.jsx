@@ -17,6 +17,7 @@ import VendorLogin from './pages/vendor/VendorLogin';
 import VendorDashboard from './pages/vendor/VendorDashboard';
 import CustomerProfile from './pages/CustomerProfile';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import LoginModal from './components/auth/LoginModal';
 import Orders from './pages/Orders';
 import OrderDetails from './pages/OrderDetails';
@@ -304,6 +305,10 @@ function App() {
                       <Route
                         path="/register"
                         element={<Login onCustomerLogin={handleCustomerLogin} loggedInCustomer={loggedInCustomer} />}
+                      />
+                      <Route
+                        path="/reset-password"
+                        element={<ResetPassword />}
                       />
                       <Route path="/orders" element={<Orders loggedInCustomer={loggedInCustomer} onOpenLogin={() => setLoginOpen(true)} />} />
                       <Route path="/orders/:orderId" element={<OrderDetails loggedInCustomer={loggedInCustomer} />} />

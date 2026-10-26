@@ -116,6 +116,11 @@ export const api = {
   loginVendor: (email, password) => request('/api/auth/vendor/login', { method: 'POST', body: { email, password } }),
   adminLogin: (email, password) => request('/api/auth/admin/login', { method: 'POST', body: { email, password } }),
 
+  /* Password recovery and reset (customer, vendor, admin) */
+  forgotPassword: (email, role) => request('/api/auth/forgot-password', { method: 'POST', body: { email, role } }),
+  verifyResetToken: (token, role) => request('/api/auth/verify-reset-token', { method: 'POST', body: { token, role } }),
+  resetPassword: (token, role, newPassword) => request('/api/auth/reset-password', { method: 'POST', body: { token, role, newPassword } }),
+
   /* Vendors + customers (admin) */
   getVendors: (params) => request(`/api/vendors${qs(params)}`, { role: 'admin' }),
   getUsers: () => request('/api/users', { role: 'admin' }),
@@ -136,7 +141,7 @@ export const api = {
   createProduct: (product) => request('/api/products', { method: 'POST', body: product, role: 'vendor' }),
   updateProduct: (id, updates, role = 'vendor') => request(`/api/products/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role }),
   updateProductStatus: (id, status) => request(`/api/products/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status }, role: 'admin' }),
-  deleteProduct: (id) => request(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'vendor' }),
+  deleteProduct: (id, role = 'vendor') => request(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE', role }),
 
   /* Videos (Shorts & Video Reviews) */
   getPublicVideos: () => request('/api/videos/public'),
