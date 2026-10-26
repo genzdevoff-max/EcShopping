@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   LogOut, RefreshCw, CheckCircle, XCircle, Package, Users as UsersIcon,
-  ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Trash2
+  ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Trash2, Video, Film
 } from 'lucide-react';
 import api from '../../utils/api';
 import './AdminDashboard.css';
@@ -14,7 +14,7 @@ const fmtINR = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
  * the server before the list is refreshed. */
 export default function AdminDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [state, setState] = useState({ loading: true, error: null, vendors: [], products: [], orders: [], users: [], categories: [] });
+  const [state, setState] = useState({ loading: true, error: null, vendors: [], products: [], orders: [], users: [], categories: [], videos: [] });
   const [attempt, setAttempt] = useState(0);
   /* Per-row action bookkeeping: the in-flight action id and its latest error. */
   const [busyId, setBusyId] = useState(null);
@@ -25,6 +25,7 @@ export default function AdminDashboard({ onLogout }) {
   const [newCatDesc, setNewCatDesc] = useState('');
   const [newCatVendor, setNewCatVendor] = useState('shared');
   const [newCatStatus, setNewCatStatus] = useState('active');
+  const [newCatImage, setNewCatImage] = useState('');
   const [creatingCat, setCreatingCat] = useState(false);
   const [catFormMsg, setCatFormMsg] = useState({ type: null, text: '' });
 
@@ -32,6 +33,17 @@ export default function AdminDashboard({ onLogout }) {
   const [editCatName, setEditCatName] = useState('');
   const [editCatDesc, setEditCatDesc] = useState('');
   const [editCatStatus, setEditCatStatus] = useState('active');
+  const [editCatImage, setEditCatImage] = useState('');
+
+  /* Video review management form state */
+  const [newVidTitle, setNewVidTitle] = useState('');
+  const [newVidDesc, setNewVidDesc] = useState('');
+  const [newVidUrl, setNewVidUrl] = useState('');
+  const [newVidThumb, setNewVidThumb] = useState('');
+  const [newVidProduct, setNewVidProduct] = useState('');
+  const [newVidOrder, setNewVidOrder] = useState('0');
+  const [creatingVid, setCreatingVid] = useState(false);
+  const [vidFormMsg, setVidFormMsg] = useState({ type: null, text: '' });
 
   const [catSearch, setCatSearch] = useState('');
   const [catScopeFilter, setCatScopeFilter] = useState('all');
@@ -42,12 +54,13 @@ export default function AdminDashboard({ onLogout }) {
     (async () => {
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const [vendorRes, productRes, orderRes, userRes, catRes] = await Promise.all([
+        const [vendorRes, productRes, orderRes, userRes, catRes, videoRes] = await Promise.all([
           api.getVendors(),
           api.getProducts({}, 'admin'),
           api.getOrders({}, 'admin'),
           api.getUsers(),
-          api.getCategories({}, 'admin')
+          api.getCategories({}, 'admin'),
+          api.getVideos().catch(() => ({ success: true, videos: [] }))
         ]);
         if (cancelled) return;
         if (!vendorRes.success || !productRes.success || !orderRes.success || !userRes.success || !catRes.success) {
@@ -60,15 +73,20 @@ export default function AdminDashboard({ onLogout }) {
           products: productRes.products || [],
           orders: orderRes.orders || [],
           users: userRes.users || [],
-          categories: catRes.categories || []
+          categories: catRes.categories || [],
+          videos: videoRes?.videos || []
         });
       } catch (err) {
         if (cancelled) return;
+        if (err?.status === 401 && typeof onLogout === 'function') {
+          onLogout();
+          return;
+        }
         setState((s) => ({ ...s, loading: false, error: err.message || 'Could not reach the server' }));
       }
     })();
     return () => { cancelled = true; };
-  }, [attempt, activeTab]);
+  }, [attempt, activeTab, onLogout]);
 
   const handleCreateCategory = async (e) => {
     e.preventDefault();
@@ -79,12 +97,14 @@ export default function AdminDashboard({ onLogout }) {
       const res = await api.createCategory({
         name: newCatName.trim(),
         description: newCatDesc.trim(),
+        image: newCatImage.trim() || null,
         status: newCatStatus,
         vendorId: newCatVendor === 'shared' ? null : newCatVendor
       }, 'admin');
       if (res?.success) {
         setNewCatName('');
         setNewCatDesc('');
+        setNewCatImage('');
         setNewCatVendor('shared');
         setNewCatStatus('active');
         setCatFormMsg({ type: 'success', text: `Category "${res.category.name}" created successfully!` });
@@ -104,6 +124,7 @@ export default function AdminDashboard({ onLogout }) {
     setEditingCatId(cat.id);
     setEditCatName(cat.name);
     setEditCatDesc(cat.description || '');
+    setEditCatImage(cat.image || '');
     setEditCatStatus(cat.status || 'active');
   };
 
@@ -114,11 +135,66 @@ export default function AdminDashboard({ onLogout }) {
       const res = await api.updateCategory(editingCatId, {
         name: editCatName.trim(),
         description: editCatDesc.trim(),
+        image: editCatImage.trim() || null,
         status: editCatStatus
       }, 'admin');
       if (!res?.success) throw new Error(res?.error || 'Failed to update category');
       setEditingCatId(null);
     }, 'Category update failed');
+  };
+
+
+  const handleCreateVideo = async (e) => {
+    e.preventDefault();
+    if (!newVidTitle.trim() || !newVidUrl.trim() || !newVidProduct) {
+      setVidFormMsg({ type: 'error', text: 'Title, Video URL, and attached product are required.' });
+      return;
+    }
+    setCreatingVid(true);
+    setVidFormMsg({ type: null, text: '' });
+    try {
+      const res = await api.createVideo({
+        title: newVidTitle.trim(),
+        description: newVidDesc.trim(),
+        videoUrl: newVidUrl.trim(),
+        thumbnailUrl: newVidThumb.trim() || null,
+        productId: newVidProduct,
+        displayOrder: Number(newVidOrder) || 0
+      });
+      if (res?.success) {
+        setNewVidTitle('');
+        setNewVidDesc('');
+        setNewVidUrl('');
+        setNewVidThumb('');
+        setNewVidProduct('');
+        setNewVidOrder('0');
+        setVidFormMsg({ type: 'success', text: 'Video review added successfully!' });
+        setAttempt((n) => n + 1);
+        setTimeout(() => setVidFormMsg({ type: null, text: '' }), 3000);
+      } else {
+        setVidFormMsg({ type: 'error', text: res?.error || 'Failed to add video' });
+      }
+    } catch (err) {
+      setVidFormMsg({ type: 'error', text: err?.message || 'Failed to add video' });
+    } finally {
+      setCreatingVid(false);
+    }
+  };
+
+  const handleToggleVideoStatus = async (vid) => {
+    const nextStatus = vid.status === 'active' ? 'inactive' : 'active';
+    await runRowAction(vid.id, async () => {
+      const res = await api.updateVideo(vid.id, { status: nextStatus });
+      if (!res?.success) throw new Error(res?.error || 'Failed to update video status');
+    }, 'Failed to toggle video status');
+  };
+
+  const handleDeleteVideo = async (vidId) => {
+    if (!window.confirm('Delete this video review?')) return;
+    await runRowAction(vidId, async () => {
+      const res = await api.deleteVideo(vidId);
+      if (!res?.success) throw new Error(res?.error || 'Failed to delete video');
+    }, 'Failed to delete video');
   };
 
   const filteredCategories = state.categories.filter((cat) => {
@@ -173,6 +249,7 @@ export default function AdminDashboard({ onLogout }) {
             ['orders', 'Orders', state.orders.length],
             ['vendors', 'Vendors', state.vendors.length],
             ['products', 'Products', state.products.length],
+            ['videos', 'Video Reviews', (state.videos || []).length],
             ['customers', 'Customers', state.users.length]
           ].map(([key, label, count]) => (
             <a
@@ -200,6 +277,7 @@ export default function AdminDashboard({ onLogout }) {
             {activeTab === 'vendors' && 'Vendor management'}
             {activeTab === 'products' && 'Product approvals'}
             {activeTab === 'customers' && 'Customer accounts'}
+            {activeTab === 'videos' && 'Homepage Shorts & Video Reviews'}
           </h1>
         </header>
 
@@ -320,6 +398,20 @@ export default function AdminDashboard({ onLogout }) {
                         placeholder="Short blurb for shoppers..."
                         value={newCatDesc}
                         onChange={(e) => setNewCatDesc(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                        Image URL
+                      </label>
+                      <input
+                        type="url"
+                        className="admin-filter-input"
+                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        placeholder="https://... (Optional)"
+                        value={newCatImage}
+                        onChange={(e) => setNewCatImage(e.target.value)}
                       />
                     </div>
 
@@ -667,7 +759,14 @@ export default function AdminDashboard({ onLogout }) {
                             </div>
                           </td>
                           <td>{fmtINR(product.price)}</td>
-                          <td style={{ fontSize: '13px' }}>{product.stockStatus === 'out_of_stock' ? 'Out of stock' : 'In stock'}</td>
+                          <td style={{ fontSize: '13px' }}>
+                            <span className={`status-badge status-${product.stockStatus === 'out_of_stock' ? 'rejected' : 'approved'}`}>
+                              {product.stockStatus === 'out_of_stock' ? 'Out of stock' : 'In stock'}
+                            </span>
+                            <div style={{ fontSize: '11px', color: '#64748b', marginTop: 2 }}>
+                              {product.stockQuantity != null ? `${product.stockQuantity} units` : '—'}
+                            </div>
+                          </td>
                           <td>
                             <span className={`status-badge status-${product.status}`}>
                               {String(product.status || 'pending').toUpperCase()}
@@ -782,6 +881,239 @@ export default function AdminDashboard({ onLogout }) {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            
+            {activeTab === 'videos' && (
+              <div className="admin-cat-section-wrap">
+                {/* 1. Add Video Review Form */}
+                <div className="admin-cat-form-card">
+                  <h3 style={{ margin: '0 0 6px', fontSize: 16, color: '#0f172a' }}>
+                    <Plus size={16} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6 }} />
+                    Add Video Review or Short
+                  </h3>
+                  <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b' }}>
+                    Active videos appear in the 9:16 vertical reels rail on the homepage, linked to your approved products.
+                  </p>
+
+                  {vidFormMsg.text && (
+                    <div style={{
+                      padding: '8px 14px',
+                      borderRadius: 6,
+                      marginBottom: 14,
+                      fontSize: 13,
+                      background: vidFormMsg.type === 'success' ? '#dcfce7' : '#fee2e2',
+                      color: vidFormMsg.type === 'success' ? '#166534' : '#991b1b',
+                      border: vidFormMsg.type === 'success' ? '1px solid #bbf7d0' : '1px solid #fecaca'
+                    }}>
+                      {vidFormMsg.text}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleCreateVideo} className="admin-cat-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr)) auto' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                        Video Title *
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        placeholder="e.g. Traditional A2 Ghee Churning"
+                        value={newVidTitle}
+                        onChange={(e) => setNewVidTitle(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                        Video URL (MP4 or YouTube) *
+                      </label>
+                      <input
+                        type="url"
+                        className="admin-filter-input"
+                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        placeholder="https://...mp4 or YouTube URL"
+                        value={newVidUrl}
+                        onChange={(e) => setNewVidUrl(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                        Thumbnail Poster URL
+                      </label>
+                      <input
+                        type="url"
+                        className="admin-filter-input"
+                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        placeholder="https://... (Optional for YouTube)"
+                        value={newVidThumb}
+                        onChange={(e) => setNewVidThumb(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                        Attached Product *
+                      </label>
+                      <select
+                        className="admin-filter-input"
+                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        value={newVidProduct}
+                        onChange={(e) => setNewVidProduct(e.target.value)}
+                        required
+                      >
+                        <option value="">Select an approved product...</option>
+                        {state.products.filter(p => p.status === 'approved').map((p) => (
+                          <option key={p.id} value={p.id}>{p.title} (₹{p.price})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                        Display Order
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-input"
+                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        value={newVidOrder}
+                        onChange={(e) => setNewVidOrder(e.target.value)}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={creatingVid}
+                      style={{
+                        padding: '9px 18px',
+                        background: '#0e5c4a',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 6,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      {creatingVid ? <Loader2 size={16} className="spin" /> : <Plus size={16} />}
+                      Add Video
+                    </button>
+                  </form>
+                </div>
+
+                {/* 2. Video Reviews Table */}
+                <div className="admin-cat-section">
+                  <div className="admin-table-container">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: 80 }}>Thumbnail</th>
+                          <th>Title</th>
+                          <th>Attached Product</th>
+                          <th>Order</th>
+                          <th>Status</th>
+                          <th style={{ textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(state.videos || []).map((vid) => (
+                          <tr key={vid.id}>
+                            <td>
+                              <img
+                                src={vid.thumbnailUrl || '/placeholder.png'}
+                                alt=""
+                                style={{ width: 44, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }}
+                                onError={(e) => { e.currentTarget.src = '/placeholder.png'; }}
+                              />
+                            </td>
+                            <td>
+                              <strong>{vid.title}</strong>
+                              {vid.description && <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>{vid.description}</p>}
+                            </td>
+                            <td>
+                              {vid.productTitle ? (
+                                <span style={{ fontSize: 13, fontWeight: 600, color: '#0e5c4a' }}>
+                                  {vid.productTitle} (₹{vid.productPrice})
+                                </span>
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>None</span>
+                              )}
+                            </td>
+                            <td>{vid.displayOrder}</td>
+                            <td>
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '3px 8px',
+                                borderRadius: 4,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                background: vid.status === 'active' ? '#dcfce7' : '#f1f5f9',
+                                color: vid.status === 'active' ? '#166534' : '#64748b'
+                              }}>
+                                {vid.status === 'active' ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button
+                                type="button"
+                                className="approve-btn"
+                                style={{
+                                  background: vid.status === 'active' ? '#fef3c7' : '#dcfce7',
+                                  color: vid.status === 'active' ? '#92400e' : '#166534',
+                                  border: 'none',
+                                  padding: '5px 10px',
+                                  borderRadius: 4,
+                                  cursor: 'pointer',
+                                  marginRight: 8,
+                                  fontSize: 12,
+                                  fontWeight: 600
+                                }}
+                                disabled={busyId === vid.id}
+                                onClick={() => handleToggleVideoStatus(vid)}
+                              >
+                                {busyId === vid.id ? 'Saving...' : vid.status === 'active' ? 'Deactivate' : 'Activate'}
+                              </button>
+                              <button
+                                type="button"
+                                className="reject-btn"
+                                style={{
+                                  background: '#fee2e2',
+                                  color: '#991b1b',
+                                  border: 'none',
+                                  padding: '5px 10px',
+                                  borderRadius: 4,
+                                  cursor: 'pointer',
+                                  fontSize: 12,
+                                  fontWeight: 600
+                                }}
+                                disabled={busyId === vid.id}
+                                onClick={() => handleDeleteVideo(vid.id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {(!state.videos || state.videos.length === 0) && (
+                          <tr>
+                            <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                              No video reviews or shorts added yet. Use the form above to add your first video!
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}

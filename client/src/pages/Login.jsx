@@ -1,17 +1,20 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AuthForm from '../components/auth/AuthForm';
 import userLoginImg from '../assets/login-page/user-login.png';
 import './Login.css';
 
 export default function Login({ onCustomerLogin, loggedInCustomer }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (loggedInCustomer) navigate('/profile', { replace: true });
   }, [loggedInCustomer, navigate]);
 
   if (loggedInCustomer) return null;
+
+  const isRegisterRoute = location.pathname === '/register';
 
   return (
     <div className="auth-page">
@@ -41,7 +44,10 @@ export default function Login({ onCustomerLogin, loggedInCustomer }) {
 
         {/* Right side: login / sign-up form */}
         <main className="auth-form-side">
-          <AuthForm onCustomerLogin={onCustomerLogin} />
+          <AuthForm
+            onCustomerLogin={onCustomerLogin}
+            initialMode={isRegisterRoute ? 'signup' : 'login'}
+          />
         </main>
       </div>
     </div>

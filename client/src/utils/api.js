@@ -11,7 +11,10 @@
  * the stored token so a stale/expired session never loops.
  */
 
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const rawApiUrl = (typeof import.meta !== 'undefined' && typeof import.meta.env?.VITE_API_URL === 'string' ? import.meta.env.VITE_API_URL : '').trim();
+// Strip trailing slashes and any trailing '/api' to prevent double-slashes or '/api/api' duplication
+const cleanApiUrl = rawApiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+export const API_URL = cleanApiUrl || 'http://localhost:5000';
 
 const TOKEN_KEY_PREFIX = 'ecshopping_token_';
 const VALID_ROLES = ['customer', 'vendor', 'admin'];
@@ -38,6 +41,13 @@ export const authSessions = {
   },
   clear(role) {
     this.set(role, '');
+    try {
+      if (role === 'customer') localStorage.removeItem('ecshopping_current_customer');
+      else if (role === 'vendor') localStorage.removeItem('ecshopping_current_vendor');
+      else if (role === 'admin') localStorage.removeItem('ecshopping_current_admin');
+    } catch {
+      /* storage unavailable */
+    }
   },
   clearAll() {
     VALID_ROLES.forEach((role) => this.clear(role));
@@ -53,9 +63,11 @@ async function request(path, { method = 'GET', body, role, signal } = {}) {
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
   let res;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await fetch(`${API_URL}${normalizedPath}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -77,7 +89,10 @@ async function request(path, { method = 'GET', body, role, signal } = {}) {
 
   // Expired/invalid tokens: forget the stored token so the next attempt
   // goes out unauthenticated and auth pages show the signed-out state.
-  if (role && res.status === 401) authSessions.clear(role);
+  // Exclude field-level verification errors (e.g. incorrect current password on password update).
+  if (role && res.status === 401 && !data?.error?.toLowerCase().includes('current password')) {
+    authSessions.clear(role);
+  }
 
   const error = new Error((data && data.error) || `Request failed (${res.status})`);
   error.status = res.status;
@@ -119,9 +134,16 @@ export const api = {
   getProduct: (id) => request(`/api/products/${encodeURIComponent(id)}`),
   getRelatedProducts: (id) => request(`/api/products/${encodeURIComponent(id)}/related`),
   createProduct: (product) => request('/api/products', { method: 'POST', body: product, role: 'vendor' }),
-  updateProduct: (id, updates) => request(`/api/products/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role: 'vendor' }),
+  updateProduct: (id, updates, role = 'vendor') => request(`/api/products/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role }),
   updateProductStatus: (id, status) => request(`/api/products/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status }, role: 'admin' }),
   deleteProduct: (id) => request(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'vendor' }),
+
+  /* Videos (Shorts & Video Reviews) */
+  getPublicVideos: () => request('/api/videos/public'),
+  getVideos: () => request('/api/videos', { role: 'admin' }),
+  createVideo: (data) => request('/api/videos', { method: 'POST', body: data, role: 'admin' }),
+  updateVideo: (id, updates) => request(`/api/videos/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role: 'admin' }),
+  deleteVideo: (id) => request(`/api/videos/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
 
   /* Upload (vendor or admin) */
   uploadImage: (file, role = 'vendor') => api.upload(file, role),

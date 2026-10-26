@@ -257,3 +257,151 @@
   .co-head h2 { font-size: 1.05rem; }
   .co-delivery { padding: 12px 13px; }
 }
+
+
+/* ---------------- Saved Addresses ---------------- */
+
+.co-saved-addresses-block {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.co-saved-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.co-saved-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.co-saved-manage-link {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.co-saved-addresses-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.co-address-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+
+.co-address-card:hover {
+  border-color: var(--brand-300);
+}
+
+.co-address-card.selected {
+  border-color: var(--brand);
+  background: var(--brand-50, #f0f7f4);
+  box-shadow: 0 0 0 3px rgba(14, 92, 74, 0.12);
+}
+
+.co-address-card input[type="radio"] {
+  accent-color: var(--brand);
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.co-address-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.co-address-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.co-address-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.co-default-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+.co-address-lines {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.co-address-phone {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.co-address-new-card {
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  min-height: 80px;
+}
+
+.co-address-new-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--brand);
+}
+
+.co-save-address-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.co-save-address-opt input {
+  accent-color: var(--brand);
+  width: 16px;
+  height: 16px;
+}

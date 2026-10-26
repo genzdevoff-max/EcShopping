@@ -27,7 +27,7 @@ import CategoryManager from './CategoryManager';
 import AddProduct from './AddProduct';
 import AllProducts from './AllProducts';
 import EditProduct from './EditProduct';
-import api from '../../utils/api';
+import api, { authSessions } from '../../utils/api';
 import { 
   getProducts, 
   addProduct, 
@@ -144,8 +144,16 @@ export default function VendorDashboard({ vendor, onLogout }) {
 
   const loadData = async () => {
     if (!vendor) return;
+    if (!authSessions.get('vendor') && typeof onLogout === 'function') {
+      onLogout();
+      return;
+    }
     // Vendor token: pending listings + this vendor's scoped orders.
     await syncProductsFromServer('vendor');
+    if (!authSessions.get('vendor') && typeof onLogout === 'function') {
+      onLogout();
+      return;
+    }
     const allProducts = getProducts();
     setProducts(allProducts.filter(p => p.vendorId === vendor.id || (p.soldBy && p.soldBy.toLowerCase() === vendor.name.toLowerCase())));
 
@@ -183,9 +191,9 @@ export default function VendorDashboard({ vendor, onLogout }) {
   const rejectedProducts = products.filter(p => p.status === 'rejected');
   const approvedProducts = products.filter(p => p.status === 'approved');
 
-  const handleStockToggle = (product) => {
-    toggleProductStock(product.id);
-    loadData();
+  const handleStockToggle = async (product) => {
+    await toggleProductStock(product.id);
+    await loadData();
   };
 
   // Calculate vendor-specific revenue
@@ -771,7 +779,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
                               ? { background: '#dcfce7', color: '#166534' }
                               : { background: '#fee2e2', color: '#991b1b' }}
                           >
-                            {inStock ? 'In stock' : 'Out of stock'}
+                            {inStock ? `In stock (${p.stockQuantity != null ? p.stockQuantity : 50})` : 'Out of stock (0)'}
                           </span>
                         </td>
                         <td>

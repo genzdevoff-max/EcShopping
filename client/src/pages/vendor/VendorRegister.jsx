@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
-import { addVendor, getVendors } from '../../utils/storage';
+import api from '../../utils/api';
+import { addVendor } from '../../utils/storage';
 import '../admin/AdminLogin.css';
 
 export default function VendorRegister() {
@@ -11,27 +12,44 @@ export default function VendorRegister() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Check if email already exists
-    const vendors = getVendors();
-    if (vendors.some(v => v.email === email)) {
-      setError('Email is already registered!');
+    setError('');
+
+    if (!name.trim() || !email.trim() || !password) {
+      setError('Please fill in all required fields.');
       return;
     }
 
-    addVendor({
-      name,
-      email,
-      password,
-      status: 'pending' // Admin must approve
-    });
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
 
-    setSuccess(true);
-    setError('');
+    setLoading(true);
+
+    try {
+      const data = await api.registerVendor({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        phone: ''
+      });
+
+      if (data?.success && data.vendor) {
+        addVendor(data.vendor);
+        setSuccess(true);
+        setError('');
+      } else {
+        setError(data?.error || 'Registration failed. Please try again.');
+      }
+    } catch (err) {
+      setError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (success) {
@@ -107,8 +125,8 @@ export default function VendorRegister() {
             </div>
           </div>
           
-          <button type="submit" className="admin-login-btn">
-            Register Account
+          <button type="submit" className="admin-login-btn" disabled={loading}>
+            {loading ? 'Submitting…' : 'Register Account'}
           </button>
         </form>
         

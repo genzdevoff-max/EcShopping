@@ -1,0 +1,435 @@
+/* ============================================================
+   Product Quick View Pop-Up & Bottom-Sheet Styles
+   Desktop: Centered responsive modal with backdrop
+   Mobile: Bottom-sheet style with drag handle and scrollable body
+   ============================================================ */
+
+.quickview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 3vw, 32px);
+  background: var(--overlay, rgba(21, 33, 29, 0.65));
+  backdrop-filter: blur(4px);
+  animation: qvFadeIn 0.22s var(--ease) forwards;
+}
+
+@keyframes qvFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.quickview-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 860px;
+  max-height: calc(100vh - 48px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--sh-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: qvScaleIn 0.26s var(--ease) forwards;
+}
+
+@keyframes qvScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Close button */
+.quickview-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  color: var(--muted);
+  box-shadow: var(--sh-xs);
+  cursor: pointer;
+  transition: all 0.18s var(--ease);
+}
+
+.quickview-close-btn:hover {
+  background: var(--paper-2);
+  color: var(--ink);
+  border-color: var(--line-strong);
+  transform: scale(1.06);
+}
+
+.quickview-close-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Modal Content Grid */
+.quickview-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(340px, 1.25fr);
+  gap: clamp(20px, 3vw, 36px);
+  overflow-y: auto;
+  max-height: calc(100vh - 56px);
+  padding: clamp(24px, 3.5vw, 38px);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Left: Media */
+.quickview-media-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quickview-image-wrap {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  background: var(--paper-2);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.quickview-image-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.quickview-badges {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Right: Content */
+.quickview-details-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.quickview-seller {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.quickview-title {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.2rem, 2.5vw, 1.55rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+.quickview-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* Price block */
+.quickview-price-block {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.quickview-price-now {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--brand-800);
+}
+
+.quickview-price-was {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--muted-2);
+  text-decoration: line-through;
+}
+
+.quickview-discount-tag {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent-100);
+  color: var(--accent-600);
+}
+
+/* Description */
+.quickview-desc {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Variants */
+.quickview-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quickview-section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.quickview-variant-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quickview-variant-chip {
+  padding: 6px 14px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+}
+
+.quickview-variant-chip:hover {
+  border-color: var(--brand-300);
+  background: var(--brand-50);
+}
+
+.quickview-variant-chip.active {
+  border-color: var(--brand);
+  background: var(--brand-50);
+  color: var(--brand-800);
+  font-weight: 700;
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+/* Stock status */
+.quickview-stock-notice {
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quickview-stock-in {
+  color: var(--success);
+}
+
+.quickview-stock-out {
+  color: var(--danger);
+  background: var(--danger-soft);
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(192, 57, 43, 0.2);
+}
+
+/* Purchase actions row */
+.quickview-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.quickview-add-btn {
+  flex: 1;
+  min-width: 140px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.quickview-added-state {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+
+.quickview-details-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--brand);
+  text-decoration: none;
+  padding-top: 4px;
+  transition: color 0.15s var(--ease);
+}
+
+.quickview-details-link:hover {
+  color: var(--brand-800);
+  text-decoration: underline;
+}
+
+/* Mobile drag indicator handle */
+.quickview-sheet-handle {
+  display: none;
+}
+
+/* ============================================================
+   Mobile Bottom-Sheet Pop-Up (max-width: 768px)
+   ============================================================ */
+@media (max-width: 768px) {
+  .quickview-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .quickview-dialog {
+    max-width: 100%;
+    max-height: 88vh;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.28);
+    animation: qvSlideUp 0.28s var(--ease) forwards;
+  }
+
+  @keyframes qvSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .quickview-sheet-handle {
+    display: block;
+    width: 44px;
+    height: 5px;
+    border-radius: var(--r-pill);
+    background: var(--line-strong);
+    margin: 10px auto 4px;
+    flex-shrink: 0;
+  }
+
+  .quickview-close-btn {
+    top: 10px;
+    right: 12px;
+    width: 34px;
+    height: 34px;
+  }
+
+  .quickview-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 12px));
+    max-height: calc(88vh - 24px);
+  }
+
+  .quickview-image-wrap {
+    max-height: 220px;
+    aspect-ratio: 16 / 10;
+  }
+
+  .quickview-title {
+    font-size: 1.15rem;
+  }
+
+  .quickview-price-now {
+    font-size: 1.2rem;
+  }
+
+  .quickview-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .quickview-actions .qty-stepper {
+    align-self: flex-start;
+  }
+
+  .quickview-add-btn {
+    width: 100%;
+  }
+
+  .quickview-details-link {
+    justify-content: center;
+    padding-top: 6px;
+  }
+}
+
+@media (max-width: 360px) {
+  .quickview-grid {
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 12px));
+    gap: 12px;
+  }
+
+  .quickview-image-wrap {
+    max-height: 180px;
+  }
+
+  .quickview-title {
+    font-size: 1.05rem;
+  }
+
+  .quickview-price-block {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .quickview-price-now {
+    font-size: 1.1rem;
+  }
+}

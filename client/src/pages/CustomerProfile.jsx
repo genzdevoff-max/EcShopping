@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getCustomerOrders, updateCustomerProfile } from '../utils/storage';
 import api from '../utils/api';
+import { statusBadgeClass, statusLabel } from '../utils/orderStatus';
 import {
   User,
   Package,
@@ -441,15 +442,19 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                               {order.date || order.createdAt ? new Date(order.date || order.createdAt).toLocaleDateString() : ''}
                             </span>
                           </div>
-                          <span className={`status-badge status-${statusStr}`}>
-                            {order.status || 'Processing'}
+                          <span className={statusBadgeClass(order.status)}>
+                            {statusLabel(order.status)}
                           </span>
                         </div>
 
                         <div className="order-items">
                           {(order.items || []).map((item, idx) => (
                             <div className="order-item" key={idx}>
-                              <img src={item.image || '/placeholder.png'} alt={item.title || item.name} />
+                              <img
+                                src={item.image || '/placeholder.png'}
+                                alt={item.title || item.name}
+                                onError={(e) => { e.currentTarget.src = '/placeholder.png'; }}
+                              />
                               <div className="item-details">
                                 <h4>{item.title || item.name}</h4>
                                 <p>Qty: {item.quantity} {item.variant ? `(${item.variant})` : ''}</p>

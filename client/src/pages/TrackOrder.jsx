@@ -10,6 +10,7 @@ import { EmptyState } from '../components/ui/States';
 import {
   formatOrderDate,
   statusBadgeClass,
+  statusLabel,
   getTimeline,
   PAYMENT_STATUS_LABELS
 } from '../utils/orderStatus';
@@ -156,7 +157,7 @@ export default function TrackOrder({ loggedInCustomer, onOpenLogin }) {
                 <span> · Placed {formatOrderDate(result.date)} · {paymentStatusDisplay(result, PAYMENT_STATUS_LABELS)}</span>
               </div>
               <span className={statusBadgeClass(result.status)}>
-                {(result.status || 'confirmed').replace(/_/g, ' ')}
+                {statusLabel(result.status)}
               </span>
             </div>
 
@@ -166,7 +167,7 @@ export default function TrackOrder({ loggedInCustomer, onOpenLogin }) {
                   <span className="timeline-dot" />
                   <div className="timeline-body">
                     <h4>{step.label}</h4>
-                    {step.current && <p>Current status — updates as the seller and courier progress the order.</p>}
+                    {step.current && <p>{step.description || 'Current stage — in progress.'}</p>}
                     {step.done && <p>Completed.</p>}
                   </div>
                 </li>

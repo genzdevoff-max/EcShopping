@@ -2,7 +2,7 @@
 // products and orders. Reads stay synchronous (from the cache); writes
 // update the cache immediately and push to the server in the background.
 
-import api, { authSessions } from './api';
+import api, { authSessions } from './api.js';
 import { mergeOrderHistory } from './orderSync.js';
 
 const VENDORS_KEY = 'ecshopping_vendors';
@@ -186,7 +186,7 @@ export const updateProduct = (id, updatedData) => {
   return updated.find(p => p.id === id);
 };
 
-export const toggleProductStock = (id) => {
+export const toggleProductStock = async (id) => {
   const products = getProducts();
   const target = products.find(p => p.id === id);
   if (!target) return null;
@@ -194,7 +194,11 @@ export const toggleProductStock = (id) => {
   const newStatus = newInStock ? 'in_stock' : 'out_of_stock';
   const updated = products.map(p => p.id === id ? { ...p, inStock: newInStock, stockStatus: newStatus } : p);
   localStorage.setItem(PRODUCTS_KEY, JSON.stringify(updated));
-  pushToServer(() => api.updateProduct(id, { stockStatus: newStatus }));
+  try {
+    await api.updateProduct(id, { stockStatus: newStatus }, 'vendor');
+  } catch (err) {
+    console.warn('[api] toggleProductStock sync failed:', err.message);
+  }
   return { ...target, inStock: newInStock, stockStatus: newStatus };
 };
 

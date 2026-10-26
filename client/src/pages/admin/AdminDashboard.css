@@ -314,6 +314,12 @@
   }
 }
 
+@media (max-width: 640px) {
+  .admin-cat-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .cat-scope-badge {
   display: inline-flex;
   align-items: center;

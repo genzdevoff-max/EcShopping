@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Eye, EyeOff, LogIn, ShieldCheck, Mail, Lock, ArrowLeft } from 'lucide-react';
 import api, { authSessions } from '../../utils/api';
 import { saveAdminSession } from '../../utils/storage';
 import './AdminLogin.css';
@@ -20,8 +21,7 @@ export default function AdminLogin({ onLogin }) {
       const data = await api.adminLogin(email.trim(), password);
       if (data?.success && data?.user?.role === 'admin' && data?.token) {
         // Session token goes through api.js global state; the cached admin
-        // profile lets a page refresh restore the dashboard without a
-        // second login.
+        // profile lets a page refresh restore the dashboard without a second login.
         authSessions.set('admin', data.token);
         saveAdminSession(data.user, data.token);
         setError('');
@@ -39,55 +39,79 @@ export default function AdminLogin({ onLogin }) {
   return (
     <div className="admin-login-container">
       <div className="admin-login-card">
-        <div className="admin-login-header">
-          <h2>Admin Login</h2>
-          <p>Sign in to manage your store</p>
+        {/* Admin security identity badge */}
+        <div className="admin-badge-wrap">
+          <span className="admin-security-badge">
+            <ShieldCheck size={15} aria-hidden="true" />
+            Administrative Portal
+          </span>
         </div>
 
-        {error && <div className="admin-error-message">{error}</div>}
+        <div className="admin-login-header">
+          <h2>Admin Login</h2>
+          <p>Restricted access for authorized store administrators</p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="admin-login-form">
+        {error && (
+          <div className="admin-error-message" role="alert">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="admin-login-form" noValidate>
           <div className="form-group">
             <label htmlFor="admin-email">Email Address</label>
-            <input
-              type="email"
-              id="admin-email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@yourdomain.com"
-              required
-              autoComplete="username"
-            />
+            <div className="admin-input-wrap">
+              <Mail size={17} className="admin-input-icon" aria-hidden="true" />
+              <input
+                type="email"
+                id="admin-email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@ecshopping.local"
+                required
+                autoComplete="username"
+              />
+            </div>
           </div>
 
           <div className="form-group">
             <label htmlFor="admin-password">Password</label>
-            <div className="password-input-wrapper">
+            <div className="admin-input-wrap">
+              <Lock size={17} className="admin-input-icon" aria-hidden="true" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 id="admin-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder="Enter admin password"
                 required
                 autoComplete="current-password"
               />
               <button
                 type="button"
-                className="password-toggle-btn"
+                className="admin-password-toggle"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
                 title={showPassword ? 'Hide Password' : 'Show Password'}
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
               </button>
             </div>
           </div>
 
           <button type="submit" className="admin-login-btn" disabled={loading}>
-            <LogIn size={16} />
-            {loading ? 'Signing in…' : 'Login to Dashboard'}
+            <LogIn size={16} aria-hidden="true" />
+            <span>{loading ? 'Signing in…' : 'Login to Dashboard'}</span>
           </button>
         </form>
+
+        <div className="admin-footer-links">
+          <Link to="/" className="admin-return-link">
+            <ArrowLeft size={14} aria-hidden="true" />
+            <span>Return to storefront</span>
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -67,8 +67,15 @@
   gap: 18px;
 }
 
+.add-prod-row-3col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 18px;
+}
+
 @media (max-width: 640px) {
-  .add-prod-row-2col {
+  .add-prod-row-2col,
+  .add-prod-row-3col {
     grid-template-columns: 1fr;
   }
 }

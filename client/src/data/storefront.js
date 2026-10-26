@@ -33,7 +33,7 @@ export const fetchStorefrontCategories = ({ force = false } = {}) => {
               slug: categorySlugFromName(row.name),
               tagline: display.tagline || '',
               blurb: row.description || display.blurb || '',
-              image: display.image,
+              image: row.image || display.image,
               productsCount: Number(row.productsCount) || 0
             };
           });

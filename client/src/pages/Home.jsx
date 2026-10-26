@@ -8,6 +8,7 @@ import {
   CompactTrustBar,
   NewsletterCta
 } from '../components/home/HomeSections';
+import ShortsAndVideos from '../components/home/ShortsAndVideos';
 import { fetchStorefrontCategories, fetchStorefrontProducts } from '../data/storefront';
 
 const RAIL_POOL_LIMIT = 48;
@@ -147,7 +148,10 @@ export default function Home({ onAddToCart }) {
         onAddToCart={onAddToCart}
       />
 
-      {/* 8. Additional Category-Specific Product Rails & Genuine Offers */}
+      {/* 8. Shorts & Video Reviews — Real harvest moments and customer reels */}
+      <ShortsAndVideos />
+
+      {/* 9. Additional Category-Specific Product Rails & Genuine Offers */}
       <CategoryRails
         rails={state.rails}
         loading={loading && !listingsError && !categoriesError}

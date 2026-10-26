@@ -56,7 +56,8 @@ const upload = multer({
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Friendly root so opening http://localhost:5000/ doesn't return "Cannot GET /".
 app.get('/', (req, res) => {
@@ -845,7 +846,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
 app.get('/api/categories/public', async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT MIN(c.name) AS name, MAX(c.description) AS description, MAX(c.created_at) AS createdAt,
+      `SELECT MIN(c.name) AS name, MAX(c.description) AS description, MAX(c.image_url) AS image, MAX(c.created_at) AS createdAt,
               COUNT(DISTINCT p.id) AS productsCount
        FROM categories c
        LEFT JOIN products p ON p.status = 'approved' AND LOWER(p.category) = LOWER(c.name)
@@ -859,6 +860,7 @@ app.get('/api/categories/public', async (req, res) => {
       .map((r) => ({
         name: String(r.name),
         description: r.description ? String(r.description) : '',
+        image: r.image ? String(r.image) : null,
         productsCount: Number(r.productsCount) || 0,
         createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null
       }));
@@ -875,7 +877,7 @@ app.get('/api/categories', requireAuth('vendor', 'admin'), async (req, res) => {
 
   try {
     let query = `
-      SELECT c.id, c.vendor_id AS vendorId, c.name, c.description, c.status, c.created_at AS createdAt,
+      SELECT c.id, c.vendor_id AS vendorId, c.name, c.description, c.image_url AS image, c.status, c.created_at AS createdAt,
              (SELECT COUNT(*) FROM products p WHERE LOWER(p.category) = LOWER(c.name)) AS productsCount
       FROM categories c
     `;
@@ -916,7 +918,7 @@ app.get('/api/categories', requireAuth('vendor', 'admin'), async (req, res) => {
 
 // Create new category (Admin can create shared or vendor-scoped; Vendor creates own)
 app.post('/api/categories', requireAuth('vendor', 'admin'), async (req, res) => {
-  const { name, description, status = 'active', vendorId } = req.body || {};
+  const { name, description, status = 'active', vendorId, image, imageUrl } = req.body || {};
 
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, error: 'Category name is required' });
@@ -924,6 +926,7 @@ app.post('/api/categories', requireAuth('vendor', 'admin'), async (req, res) => 
 
   const cleanName = name.trim();
   const cleanDesc = description ? description.trim() : '';
+  const cleanImage = (image || imageUrl || '').trim() || null;
   const cleanStatus = status === 'inactive' ? 'inactive' : 'active';
 
   // Vendors always own what they create; admins may specify vendorId or default to null (shared).
@@ -951,8 +954,8 @@ app.post('/api/categories', requireAuth('vendor', 'admin'), async (req, res) => 
     const categoryId = 'cat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
 
     await pool.query(
-      'INSERT INTO categories (id, vendor_id, name, description, status) VALUES (?, ?, ?, ?, ?)',
-      [categoryId, ownerVendorId, cleanName, cleanDesc, cleanStatus]
+      'INSERT INTO categories (id, vendor_id, name, description, image_url, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [categoryId, ownerVendorId, cleanName, cleanDesc, cleanImage, cleanStatus]
     );
 
     const newCategory = {
@@ -960,6 +963,7 @@ app.post('/api/categories', requireAuth('vendor', 'admin'), async (req, res) => 
       vendorId: ownerVendorId,
       name: cleanName,
       description: cleanDesc,
+      image: cleanImage,
       status: cleanStatus,
       productsCount: 0,
       createdAt: new Date().toISOString()
@@ -976,7 +980,7 @@ app.post('/api/categories', requireAuth('vendor', 'admin'), async (req, res) => 
 // Update category status or details (Admin can update any; Vendor only own)
 app.put('/api/categories/:id', requireAuth('vendor', 'admin'), async (req, res) => {
   const { id } = req.params;
-  const { name, description, status } = req.body || {};
+  const { name, description, status, image, imageUrl } = req.body || {};
 
   try {
     const [rows] = await pool.query('SELECT * FROM categories WHERE id = ?', [id]);
@@ -995,6 +999,7 @@ app.put('/api/categories/:id', requireAuth('vendor', 'admin'), async (req, res) 
 
     const updatedName = name !== undefined ? name.trim() : current.name;
     const updatedDesc = description !== undefined ? description.trim() : current.description;
+    const updatedImage = (image !== undefined || imageUrl !== undefined) ? ((image || imageUrl || '').trim() || null) : current.image_url;
     const updatedStatus = status !== undefined ? (status === 'inactive' ? 'inactive' : 'active') : current.status;
 
     if (!updatedName) {
@@ -1019,8 +1024,8 @@ app.put('/api/categories/:id', requireAuth('vendor', 'admin'), async (req, res) 
     }
 
     await pool.query(
-      'UPDATE categories SET name = ?, description = ?, status = ? WHERE id = ?',
-      [updatedName, updatedDesc, updatedStatus, id]
+      'UPDATE categories SET name = ?, description = ?, image_url = ?, status = ? WHERE id = ?',
+      [updatedName, updatedDesc, updatedImage, updatedStatus, id]
     );
 
     // If category name was renamed, update referenced products to preserve consistency
@@ -1335,11 +1340,14 @@ app.get('/api/products/:id/related', optionalAuth, async (req, res) => {
 // Vendor submits a new product — always enters as 'pending' for admin approval
 app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
   const {
-    id, vendorName, title, name, description,
+    id, vendorName, title: rawTitle, name: rawName, description,
     category, price, strikePrice, unit, image, stockStatus, stockQuantity
   } = req.body || {};
 
-  if (!title || !String(title).trim()) {
+  const title = (rawTitle || rawName || '').trim();
+  const name = (rawName || rawTitle || '').trim();
+
+  if (!title) {
     return res.status(400).json({ success: false, error: 'Product title is required' });
   }
 
@@ -1446,7 +1454,7 @@ app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
   }
 });
 
-// Update product fields (vendor edits own pending/rejected; admin edits any)
+// Update product fields (vendor edits own pending/rejected, or manages stock for approved; admin edits any)
 app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
   const { id } = req.params;
   const { title, name, description, category, price, strikePrice, unit, image, stockStatus, stockQuantity } = req.body || {};
@@ -1457,17 +1465,23 @@ app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
+    const current = rows[0];
+
     if (req.auth.role === 'vendor') {
-      if (String(rows[0].vendor_id) !== String(req.auth.vendorId)) {
+      if (String(current.vendor_id) !== String(req.auth.vendorId)) {
         return res.status(403).json({ success: false, error: 'You can only manage your own products' });
       }
-      // Vendors can only edit pending or rejected products (not approved ones)
-      if (!['pending', 'rejected'].includes(rows[0].status)) {
-        return res.status(403).json({ success: false, error: 'Approved products cannot be edited. Contact support if changes are needed.' });
+
+      const hasContentModifications = [title, name, description, category, price, strikePrice, unit, image].some(
+        (field) => field !== undefined
+      );
+
+      // Vendors can only edit content fields on pending or rejected products
+      if (hasContentModifications && !['pending', 'rejected'].includes(current.status)) {
+        return res.status(403).json({ success: false, error: 'Approved product details (pricing, title, description) cannot be edited directly. Contact support if revisions are needed.' });
       }
     }
 
-    const current = rows[0];
     const wasRejected = current.status === 'rejected';
 
     let resolvedQuantity = current.stock_quantity ?? 50;
@@ -1479,6 +1493,8 @@ app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
       resolvedQuantity = parsed;
     } else if (stockStatus === 'out_of_stock') {
       resolvedQuantity = 0;
+    } else if (stockStatus === 'in_stock' && resolvedQuantity <= 0) {
+      resolvedQuantity = 50;
     }
 
     const resolvedStockStatus = stockStatus !== undefined
@@ -2261,6 +2277,173 @@ app.post('/api/payments/phonepe/verify', requireCustomerOrAnon, paymentLimiter, 
       success: false,
       error: err?.message || 'Payment verification failed. The order stays in pending state until confirmed.'
     });
+  }
+});
+
+// ================= SHORTS & VIDEO REVIEWS (Homepage & Admin) =================
+
+// Public active videos for homepage shorts rail (joined with approved product details)
+app.get('/api/videos/public', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT v.id, v.title, v.description, v.video_url AS videoUrl, v.thumbnail_url AS thumbnailUrl,
+              v.product_id AS productId, v.status, v.display_order AS displayOrder, v.created_at AS createdAt,
+              p.title AS productTitle, p.name AS productName, p.price AS productPrice,
+              p.strike_price AS productStrikePrice, p.image AS productImage, p.category AS productCategory
+       FROM product_videos v
+       LEFT JOIN products p ON p.id = v.product_id
+       WHERE v.status = 'active' AND (p.status = 'approved' OR v.product_id IS NULL)
+       ORDER BY v.display_order ASC, v.created_at DESC
+       LIMIT 12`
+    );
+    return res.status(200).json({ success: true, videos: rows });
+  } catch (err) {
+    console.error('❌ Get public videos DB error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to load video reviews right now.' });
+  }
+});
+
+// Admin list all videos (active + inactive)
+app.get('/api/videos', requireAuth('admin'), async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT v.id, v.title, v.description, v.video_url AS videoUrl, v.thumbnail_url AS thumbnailUrl,
+              v.product_id AS productId, v.status, v.display_order AS displayOrder, v.created_at AS createdAt,
+              p.title AS productTitle, p.price AS productPrice, p.image AS productImage
+       FROM product_videos v
+       LEFT JOIN products p ON p.id = v.product_id
+       ORDER BY v.display_order ASC, v.created_at DESC`
+    );
+    return res.status(200).json({ success: true, videos: rows });
+  } catch (err) {
+    console.error('❌ Get admin videos DB error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to load videos.' });
+  }
+});
+
+// Admin create new video
+app.post('/api/videos', requireAuth('admin'), async (req, res) => {
+  const { title, description, videoUrl, thumbnailUrl, productId, status = 'active', displayOrder = 0 } = req.body || {};
+
+  if (!title || !title.trim()) {
+    return res.status(400).json({ success: false, error: 'Video title is required' });
+  }
+  if (!videoUrl || !videoUrl.trim()) {
+    return res.status(400).json({ success: false, error: 'Video URL is required' });
+  }
+  if (!productId || !productId.trim()) {
+    return res.status(400).json({ success: false, error: 'Associated product is required' });
+  }
+
+  const cleanUrl = videoUrl.trim();
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    return res.status(400).json({ success: false, error: 'A valid http(s) video URL is required' });
+  }
+
+  try {
+    const [prods] = await pool.query('SELECT id, title, price, image FROM products WHERE id = ?', [productId.trim()]);
+    if (prods.length === 0) {
+      return res.status(400).json({ success: false, error: 'Selected product does not exist' });
+    }
+
+    const id = 'vid_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    const cleanStatus = status === 'inactive' ? 'inactive' : 'active';
+    const orderNum = parseInt(displayOrder, 10) || 0;
+
+    await pool.query(
+      `INSERT INTO product_videos (id, title, description, video_url, thumbnail_url, product_id, status, display_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        title.trim(),
+        description ? description.trim() : '',
+        cleanUrl,
+        thumbnailUrl ? thumbnailUrl.trim() : (prods[0].image || null),
+        productId.trim(),
+        cleanStatus,
+        orderNum
+      ]
+    );
+
+    const newVideo = {
+      id,
+      title: title.trim(),
+      description: description ? description.trim() : '',
+      videoUrl: cleanUrl,
+      thumbnailUrl: thumbnailUrl ? thumbnailUrl.trim() : prods[0].image,
+      productId: productId.trim(),
+      productTitle: prods[0].title,
+      productPrice: prods[0].price,
+      productImage: prods[0].image,
+      status: cleanStatus,
+      displayOrder: orderNum,
+      createdAt: new Date().toISOString()
+    };
+
+    console.log(`✅ [TiDB] Video created: ${title.trim()} for product ${productId}`);
+    return res.status(201).json({ success: true, video: newVideo });
+  } catch (err) {
+    console.error('❌ Create video DB error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to save video right now.' });
+  }
+});
+
+// Admin update video
+app.put('/api/videos/:id', requireAuth('admin'), async (req, res) => {
+  const { id } = req.params;
+  const { title, description, videoUrl, thumbnailUrl, productId, status, displayOrder } = req.body || {};
+
+  try {
+    const [rows] = await pool.query('SELECT * FROM product_videos WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+
+    const current = rows[0];
+    const updatedTitle = title !== undefined ? title.trim() : current.title;
+    const updatedDesc = description !== undefined ? description.trim() : current.description;
+    const updatedUrl = videoUrl !== undefined ? videoUrl.trim() : current.video_url;
+    const updatedThumb = thumbnailUrl !== undefined ? (thumbnailUrl.trim() || null) : current.thumbnail_url;
+    const updatedProdId = productId !== undefined ? productId.trim() : current.product_id;
+    const updatedStatus = status !== undefined ? (status === 'inactive' ? 'inactive' : 'active') : current.status;
+    const updatedOrder = displayOrder !== undefined ? (parseInt(displayOrder, 10) || 0) : current.display_order;
+
+    if (!updatedTitle) {
+      return res.status(400).json({ success: false, error: 'Video title cannot be empty' });
+    }
+    if (!updatedUrl) {
+      return res.status(400).json({ success: false, error: 'Video URL cannot be empty' });
+    }
+
+    await pool.query(
+      `UPDATE product_videos
+       SET title = ?, description = ?, video_url = ?, thumbnail_url = ?, product_id = ?, status = ?, display_order = ?
+       WHERE id = ?`,
+      [updatedTitle, updatedDesc, updatedUrl, updatedThumb, updatedProdId, updatedStatus, updatedOrder, id]
+    );
+
+    console.log(`✅ [TiDB] Video updated: ${id} (${updatedStatus})`);
+    return res.status(200).json({ success: true, message: 'Video updated successfully' });
+  } catch (err) {
+    console.error('❌ Update video DB error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to update video.' });
+  }
+});
+
+// Admin delete video
+app.delete('/api/videos/:id', requireAuth('admin'), async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [result] = await pool.query('DELETE FROM product_videos WHERE id = ?', [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+    console.log(`✅ [TiDB] Video deleted: ${id}`);
+    return res.status(200).json({ success: true, message: 'Video deleted successfully' });
+  } catch (err) {
+    console.error('❌ Delete video DB error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to delete video.' });
   }
 });
 

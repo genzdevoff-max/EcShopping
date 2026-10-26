@@ -28,6 +28,25 @@ export default function Header({ cartCount = 0, loggedInCustomer, onCustomerLogo
   const [wishlistCount, setWishlistCount] = useState(0);
   const [scrolled, setScrolled] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
+  const shopTimeoutRef = useRef(null);
+
+  const handleShopMouseEnter = () => {
+    if (shopTimeoutRef.current) clearTimeout(shopTimeoutRef.current);
+    setShopOpen(true);
+  };
+
+  const handleShopMouseLeave = () => {
+    if (shopTimeoutRef.current) clearTimeout(shopTimeoutRef.current);
+    shopTimeoutRef.current = setTimeout(() => {
+      setShopOpen(false);
+    }, 150);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (shopTimeoutRef.current) clearTimeout(shopTimeoutRef.current);
+    };
+  }, []);
 
   const navigate = useNavigate();
   const searchInputRef = useRef(null);
@@ -199,8 +218,8 @@ export default function Header({ cartCount = 0, loggedInCustomer, onCustomerLogo
 
             <div
               className={`nav-dropdown ${shopOpen ? 'open' : ''}`}
-              onMouseEnter={() => setShopOpen(true)}
-              onMouseLeave={() => setShopOpen(false)}
+              onMouseEnter={handleShopMouseEnter}
+              onMouseLeave={handleShopMouseLeave}
             >
               <button
                 type="button"

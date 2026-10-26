@@ -234,3 +234,58 @@ test('Multi-Vendor Fulfillment: Single order containing items from multiple vend
   assert.equal(vAOrder.vendorItems.length, 1);
   assert.equal(vAOrder.vendorItems[0].productId, PROD_1_ID);
 });
+
+test('Vendor Inventory: Vendor can toggle stock on their own approved product without altering status', async () => {
+  // PROD_1_ID is approved and belongs to VENDOR_A_ID
+  const res = await request()
+    .put(`/api/products/${PROD_1_ID}`)
+    .set('Authorization', `Bearer ${VENDOR_A_TOKEN}`)
+    .send({ stockStatus: 'out_of_stock' });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.body.product.stockStatus, 'out_of_stock');
+  assert.equal(res.body.product.stockQuantity, 0);
+  assert.equal(res.body.product.status, 'approved'); // Status remains approved!
+
+  // Re-enable stock
+  const resIn = await request()
+    .put(`/api/products/${PROD_1_ID}`)
+    .set('Authorization', `Bearer ${VENDOR_A_TOKEN}`)
+    .send({ stockStatus: 'in_stock' });
+
+  assert.equal(resIn.status, 200);
+  assert.equal(resIn.body.product.stockStatus, 'in_stock');
+  assert.ok(resIn.body.product.stockQuantity > 0);
+  assert.equal(resIn.body.product.status, 'approved');
+});
+
+test('Vendor Anti-Tampering: Vendor cannot modify content fields on approved products', async () => {
+  // Attempting to change price on approved product PROD_1_ID
+  const priceRes = await request()
+    .put(`/api/products/${PROD_1_ID}`)
+    .set('Authorization', `Bearer ${VENDOR_A_TOKEN}`)
+    .send({ price: 999 });
+
+  assert.equal(priceRes.status, 403);
+  assert.ok(priceRes.body.error.includes('Approved product details'));
+
+  // Attempting to change title on approved product PROD_1_ID
+  const titleRes = await request()
+    .put(`/api/products/${PROD_1_ID}`)
+    .set('Authorization', `Bearer ${VENDOR_A_TOKEN}`)
+    .send({ title: 'Tampered Title' });
+
+  assert.equal(titleRes.status, 403);
+  assert.ok(titleRes.body.error.includes('Approved product details'));
+});
+
+test('Vendor Isolation: Vendor cannot modify inventory of another vendor product', async () => {
+  // Vendor A attempts to toggle stock on Vendor B's product PROD_MULTI_ID
+  const res = await request()
+    .put(`/api/products/${PROD_MULTI_ID}`)
+    .set('Authorization', `Bearer ${VENDOR_A_TOKEN}`)
+    .send({ stockStatus: 'out_of_stock' });
+
+  assert.equal(res.status, 403);
+  assert.ok(res.body.error.includes('You can only manage your own products'));
+});

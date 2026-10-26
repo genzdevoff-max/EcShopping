@@ -59,7 +59,33 @@ export default function AddProduct({ vendor }) {
   const [strikePrice, setStrikePrice] = useState('');
   const [unit, setUnit] = useState(UNIT_OPTIONS[2]); // Default 'Kilogram (KG)'
   const [stockStatus, setStockStatus] = useState('in_stock');
+  const [stockQuantity, setStockQuantity] = useState('50');
   const [categoriesList, setCategoriesList] = useState([]);
+  const [showNewCatInline, setShowNewCatInline] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [creatingCat, setCreatingCat] = useState(false);
+
+  // Quick inline category creation
+  const handleCreateCategoryInline = async () => {
+    if (!newCatName.trim()) return;
+    setCreatingCat(true);
+    try {
+      const res = await api.createCategory({ name: newCatName.trim() }, 'vendor');
+      if (res?.success && res.category) {
+        setCategoriesList((prev) => [res.category, ...prev]);
+        setCategory(res.category.name);
+        setNewCatName('');
+        setShowNewCatInline(false);
+        showToast(`Category "${res.category.name}" created and selected!`, 'success');
+      } else {
+        showToast(res?.error || 'Could not create category', 'error');
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to create category', 'error');
+    } finally {
+      setCreatingCat(false);
+    }
+  };
 
   // Cloudinary Upload state
   const [uploading, setUploading] = useState(false);
@@ -195,6 +221,8 @@ export default function AddProduct({ vendor }) {
       return;
     }
 
+    const parsedQty = stockStatus === 'out_of_stock' ? 0 : Math.max(0, parseInt(stockQuantity, 10) || 50);
+
     const newProdData = {
       title: name.trim(),
       name: name.trim(),
@@ -204,7 +232,8 @@ export default function AddProduct({ vendor }) {
       strikePrice: parsedStrike > 0 ? parsedStrike : null,
       unit: unit,
       image: image.trim(),
-      stockStatus: stockStatus
+      stockStatus: parsedQty > 0 ? stockStatus : 'out_of_stock',
+      stockQuantity: parsedQty
     };
 
     setSubmitting(true);
@@ -272,22 +301,66 @@ export default function AddProduct({ vendor }) {
 
               {/* Category Dropdown */}
               <div className="add-prod-field">
-                <label htmlFor="prod-cat-select" className="add-prod-label">
-                  <span>Category</span>
-                  <span className="req">*</span>
-                </label>
-                <select 
-                  id="prod-cat-select"
-                  className="add-prod-select"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Select category</option>
-                  {categoriesList.map(cat => (
-                    <option key={cat.id} value={cat.name}>{cat.name}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label htmlFor="prod-cat-select" className="add-prod-label">
+                    <span>Category</span>
+                    <span className="req">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCatInline(!showNewCatInline)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--brand, #0e5c4a)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: '2px 4px'
+                    }}
+                  >
+                    {showNewCatInline ? 'Cancel' : '+ Add New Category'}
+                  </button>
+                </div>
+                {!showNewCatInline ? (
+                  <select 
+                    id="prod-cat-select"
+                    className="add-prod-select"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Select category</option>
+                    {categoriesList.map(cat => (
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <input
+                        type="text"
+                        className="add-prod-input"
+                        placeholder="New category name (e.g. Toys & Games)"
+                        value={newCatName}
+                        onChange={(e) => setNewCatName(e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={creatingCat || !newCatName.trim()}
+                        onClick={handleCreateCategoryInline}
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
+                        {creatingCat ? 'Saving…' : 'Create'}
+                      </button>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>
+                      Creates a new category for your store. It will be immediately selected for this product.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Product Description */}
@@ -368,7 +441,7 @@ export default function AddProduct({ vendor }) {
                 <span>Unit & Inventory</span>
               </div>
 
-              <div className="add-prod-row-2col">
+              <div className="add-prod-row-3col">
                 {/* Unit Options Dropdown */}
                 <div className="add-prod-field">
                   <label htmlFor="prod-unit-select" className="add-prod-label">
@@ -405,6 +478,26 @@ export default function AddProduct({ vendor }) {
                     <option value="in_stock">In Stock</option>
                     <option value="out_of_stock">Out of Stock</option>
                   </select>
+                </div>
+
+                {/* Stock Quantity */}
+                <div className="add-prod-field">
+                  <label htmlFor="prod-stock-qty" className="add-prod-label">
+                    <span>Initial Stock Quantity</span>
+                    <span className="req">*</span>
+                  </label>
+                  <input 
+                    id="prod-stock-qty"
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="add-prod-input"
+                    placeholder="e.g. 50"
+                    value={stockQuantity}
+                    onChange={(e) => setStockQuantity(e.target.value)}
+                    required={stockStatus === 'in_stock'}
+                    disabled={stockStatus === 'out_of_stock'}
+                  />
                 </div>
               </div>
             </div>

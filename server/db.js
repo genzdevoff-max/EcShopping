@@ -254,6 +254,37 @@ export const initDatabase = async () => {
       console.log('✅ Added products.stock_quantity');
     }
 
+    // Additive migration: category thumbnail support
+    if (!(await columnExists(connection, 'categories', 'image_url'))) {
+      await connection.query('ALTER TABLE categories ADD COLUMN image_url VARCHAR(500) NULL');
+      console.log('✅ Added categories.image_url');
+    }
+
+    // Additive migration: widen image columns to MEDIUMTEXT to prevent payload truncation
+    try {
+      await connection.query('ALTER TABLE products MODIFY COLUMN image MEDIUMTEXT DEFAULT NULL');
+      await connection.query('ALTER TABLE order_items MODIFY COLUMN image MEDIUMTEXT DEFAULT NULL');
+    } catch {
+      // Non-fatal if already MEDIUMTEXT or unsupported
+    }
+
+    // Additive table: Homepage Shorts & Video Reviews
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS product_videos (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT DEFAULT NULL,
+        video_url VARCHAR(500) NOT NULL,
+        thumbnail_url VARCHAR(500) DEFAULT NULL,
+        product_id VARCHAR(64) NOT NULL,
+        status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+        display_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_videos_product (product_id),
+        INDEX idx_videos_status (status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     connection.release();
     console.log('✅ TiDB Cloud tables (users, vendors, categories, products, orders, order_items, reviews, admins, customer_addresses) ready & clean (no dummy data)!');
   } catch (error) {

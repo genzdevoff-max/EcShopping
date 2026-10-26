@@ -5,6 +5,7 @@ import { CartContext, lineKeyOf } from './context/CartContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
+import ScrollToTop from './components/ui/ScrollToTop';
 import Home from './pages/Home';
 import Shop from './pages/Shop';
 import Cart from './pages/Cart';
@@ -13,7 +14,6 @@ import OrderConfirmation from './pages/OrderConfirmation';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import VendorLogin from './pages/vendor/VendorLogin';
-import VendorRegister from './pages/vendor/VendorRegister';
 import VendorDashboard from './pages/vendor/VendorDashboard';
 import CustomerProfile from './pages/CustomerProfile';
 import Login from './pages/Login';
@@ -214,6 +214,7 @@ function App() {
 
   return (
     <Router>
+      <ScrollToTop />
       <CartContext.Provider value={cartContext}>
         <div className="app-wrapper">
           <Routes>

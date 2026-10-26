@@ -93,7 +93,7 @@ test('GET /api/categories/public is public, active-only, deduped and has approve
   for (const c of res.body.categories) {
     assert.deepEqual(
       Object.keys(c).sort(),
-      ['createdAt', 'description', 'name', 'productsCount'].sort(),
+      ['createdAt', 'description', 'image', 'name', 'productsCount'].sort(),
       'only restrained fields are exposed'
     );
     assert.equal(typeof c.productsCount, 'number');

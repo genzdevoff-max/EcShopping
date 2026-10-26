@@ -10,6 +10,7 @@ import { EmptyState } from '../components/ui/States';
 import {
   formatOrderDate,
   statusBadgeClass,
+  statusLabel,
   getTimeline,
   PAYMENT_STATUS_LABELS
 } from '../utils/orderStatus';
@@ -138,7 +139,7 @@ export default function OrderDetails({ loggedInCustomer }) {
           </div>
           <div className="od-head-badges">
             <span className={statusBadgeClass(order.status)}>
-              {(order.status || 'confirmed').replace(/_/g, ' ')}
+              {statusLabel(order.status)}
             </span>
             <span className="badge badge-soft">{order.paymentMethod === 'phonepe' ? 'PhonePe' : 'Cash on delivery'}</span>
           </div>
@@ -173,10 +174,17 @@ export default function OrderDetails({ loggedInCustomer }) {
                     <span className="timeline-dot" />
                     <div className="timeline-body">
                       <h4>{step.label}</h4>
+                      {step.description && <p className="tiny muted">{step.description}</p>}
                     </div>
                   </li>
                 ))}
               </ul>
+              {order.status?.toLowerCase() === 'cancelled' && (
+                <div className="notice notice-danger" style={{ marginTop: '14px' }}>
+                  <strong>Order Cancelled</strong>
+                  <p className="tiny">This order was cancelled and items were restored to inventory.</p>
+                </div>
+              )}
             </section>
 
             <section className="panel od-block">
