@@ -572,3 +572,26 @@
 .cat-toast-dismiss:hover {
   color: #0f172a;
 }
+
+
+/* Bounded table and sticky header overrides for Category Directory */
+.cat-table-responsive {
+  max-height: calc(100vh - 360px) !important;
+  min-height: 250px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  position: relative !important;
+}
+
+.cat-grid-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.cat-grid-table th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 5 !important;
+  background: #f8fafc !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+}

@@ -13,12 +13,15 @@ import {
   Layers
 } from 'lucide-react';
 import api from '../../utils/api';
+import Pagination from '../../components/ui/Pagination';
 import './CategoryManager.css';
 
 export default function CategoryManager({ vendor }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Form State
   const [name, setName] = useState('');
@@ -171,6 +174,15 @@ export default function CategoryManager({ vendor }) {
   const filteredCategories = categories.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     (c.description || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const paginatedCategories = filteredCategories.slice(
+    (page - 1) * pageSize,
+    page * pageSize
   );
 
   const activeCount = categories.filter(c => c.status === 'active').length;
@@ -358,9 +370,9 @@ export default function CategoryManager({ vendor }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredCategories.map((cat, idx) => (
+                {paginatedCategories.map((cat, idx) => (
                   <tr key={cat.id}>
-                    <td className="cat-col-num">{idx + 1}</td>
+                    <td className="cat-col-num">{(page - 1) * pageSize + idx + 1}</td>
                     <td className="cat-col-name">{cat.name}</td>
                     <td className="cat-col-desc" title={cat.description || ''}>
                       {cat.description || <span style={{ color: '#cbd5e1' }}>—</span>}
@@ -426,6 +438,18 @@ export default function CategoryManager({ vendor }) {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div style={{ padding: '14px 18px', borderTop: '1px solid #e2e8f0' }}>
+            <Pagination
+              currentPage={page}
+              totalPages={Math.ceil(filteredCategories.length / pageSize) || 1}
+              onPageChange={setPage}
+              totalItems={filteredCategories.length}
+              pageSize={pageSize}
+              onPageSizeChange={(sz) => { setPageSize(sz); setPage(1); }}
+              pageSizeOptions={[10, 25, 50]}
+            />
           </div>
         </div>
 

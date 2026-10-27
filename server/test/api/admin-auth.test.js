@@ -109,3 +109,61 @@ test('GET /api/users 200 with an admin token (restrained customer fields only)',
     assert.ok(!('password_hash' in u) && !('password' in u));
   }
 });
+
+test('GET /api/admin/payment-config 401 without an admin token', async () => {
+  const res = await request().get('/api/admin/payment-config');
+  assert.equal(res.status, 401);
+});
+
+test('GET /api/admin/payment-config 200 with admin token and never leaks raw secrets', async () => {
+  const token = signToken({ sub: TEST_ADMIN.id, role: 'admin', email: TEST_ADMIN.email, name: 'Tester' });
+  const res = await request().get('/api/admin/payment-config').set('Authorization', `Bearer ${token}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.success, true);
+  assert.ok('configured' in res.body);
+  assert.ok('environment' in res.body);
+  assert.ok('whitelistedDomains' in res.body);
+
+  // Crucial security checks: NEVER leak raw secrets or salt keys
+  const bodyStr = JSON.stringify(res.body);
+  if (process.env.PHONEPE_CLIENT_SECRET) {
+    assert.equal(bodyStr.includes(process.env.PHONEPE_CLIENT_SECRET), false, 'Client secret must never leak');
+  }
+  if (process.env.PHONEPE_SALT_KEY) {
+    assert.equal(bodyStr.includes(process.env.PHONEPE_SALT_KEY), false, 'Salt key must never leak');
+  }
+});
+
+test('PUT /api/admin/payment-config 401 without an admin token', async () => {
+  const res = await request().put('/api/admin/payment-config').send({ merchantId: 'TEST_MID' });
+  assert.equal(res.status, 401);
+});
+
+test('PUT /api/admin/payment-config 403 with a non-admin token', async () => {
+  const vendorToken = signToken({ sub: 'v-test', role: 'vendor', name: 'Vendor' });
+  const res = await request().put('/api/admin/payment-config')
+    .set('Authorization', `Bearer ${vendorToken}`)
+    .send({ merchantId: 'TEST_MID' });
+  assert.equal(res.status, 403);
+});
+
+test('PUT /api/admin/payment-config 200 updates configuration with valid admin token', async () => {
+  const token = signToken({ sub: TEST_ADMIN.id, role: 'admin', email: TEST_ADMIN.email, name: 'Tester' });
+  const origMid = process.env.PHONEPE_MERCHANT_ID;
+  const testMid = 'TEST_ADMIN_MID_' + Date.now();
+
+  try {
+    const res = await request().put('/api/admin/payment-config')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        merchantId: testMid,
+        environment: 'sandbox',
+        saltIndex: '1'
+      });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(process.env.PHONEPE_MERCHANT_ID, testMid);
+  } finally {
+    if (origMid) process.env.PHONEPE_MERCHANT_ID = origMid;
+  }
+});

@@ -16,11 +16,29 @@ import {
 } from '../utils/orderStatus';
 import './Orders.css';
 
-export default function OrderDetails({ loggedInCustomer }) {
+export default function OrderDetails({ loggedInCustomer, onOpenLogin }) {
   const { orderId } = useParams();
   const navigate = useNavigate();
 
   const [order, setOrder] = useState(() => {
+    // 1. Check last placed order in session/local storage
+    try {
+      const last = JSON.parse(localStorage.getItem('ecshopping_last_order') || 'null');
+      if (last && (String(last.id) === String(orderId) || String(last.orderNumber) === String(orderId))) {
+        if (
+          loggedInCustomer?.email &&
+          last.customerEmail &&
+          last.customerEmail.toLowerCase() !== loggedInCustomer.email.toLowerCase()
+        ) {
+          return { restricted: true };
+        }
+        return last;
+      }
+    } catch {
+      /* ignore parse error */
+    }
+
+    // 2. Check cached orders
     const all = getOrders();
     const found = all.find((o) => String(o.id) === String(orderId) || String(o.orderNumber) === String(orderId));
     if (!found) return null;
@@ -34,34 +52,51 @@ export default function OrderDetails({ loggedInCustomer }) {
     return found;
   });
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!order);
   const [cancelling, setCancelling] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('Changed my mind');
   const [cancelError, setCancelError] = useState(null);
+  const [cancelSuccess, setCancelSuccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    // If not found in local cache or needs server sync, fetch from API
-    if (!order || order.restricted === undefined) {
-      if (loggedInCustomer) {
-        setLoading(true);
-        api.getOrder(orderId, 'customer')
-          .then((res) => {
-            if (!cancelled && res?.success && res.order) {
-              setOrder(res.order);
+
+    // Fetch latest authoritative state from backend if logged in
+    if (loggedInCustomer && orderId) {
+      if (!order) setLoading(true);
+
+      api.getOrder(orderId, 'customer')
+        .then((res) => {
+          if (!cancelled && res?.success && res.order) {
+            setOrder(res.order);
+            // Sync locally so other tabs/views stay up-to-date
+            try {
+              const orders = getOrders();
+              const idx = orders.findIndex((o) => String(o.id) === String(res.order.id) || String(o.orderNumber) === String(res.order.id));
+              if (idx >= 0) {
+                orders[idx] = { ...orders[idx], ...res.order, serverVerified: true };
+                localStorage.setItem('ecshopping_orders', JSON.stringify(orders));
+              }
+            } catch {
+              /* ignore cache error */
             }
-          })
-          .catch(() => {
-            // Keep existing state or not found
-          })
-          .finally(() => {
-            if (!cancelled) setLoading(false);
-          });
-      }
+          }
+        })
+        .catch((err) => {
+          if (!cancelled && err?.status === 403) {
+            setOrder({ restricted: true });
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    } else {
+      setLoading(false);
     }
+
     return () => { cancelled = true; };
-  }, [orderId, loggedInCustomer, order]);
+  }, [orderId, loggedInCustomer?.email]);
 
   const handleCancelOrder = async () => {
     if (!order?.id) return;
@@ -72,6 +107,24 @@ export default function OrderDetails({ loggedInCustomer }) {
       const res = await api.cancelCustomerOrder(order.id, cancelReason);
       if (res?.success) {
         setOrder((prev) => ({ ...prev, status: 'Cancelled' }));
+        setCancelSuccess(true);
+        // Sync local storage
+        try {
+          const orders = getOrders();
+          const updated = orders.map((o) =>
+            String(o.id) === String(order.id) || String(o.orderNumber) === String(order.id)
+              ? { ...o, status: 'Cancelled' }
+              : o
+          );
+          localStorage.setItem('ecshopping_orders', JSON.stringify(updated));
+
+          const last = JSON.parse(localStorage.getItem('ecshopping_last_order') || 'null');
+          if (last && (String(last.id) === String(order.id) || String(last.orderNumber) === String(order.id))) {
+            localStorage.setItem('ecshopping_last_order', JSON.stringify({ ...last, status: 'Cancelled' }));
+          }
+        } catch {
+          /* ignore cache error */
+        }
         setCancelModalOpen(false);
       } else {
         setCancelError(res?.error || 'Unable to cancel order right now.');
@@ -121,7 +174,8 @@ export default function OrderDetails({ loggedInCustomer }) {
 
   const method = getDeliveryMethod(order.deliveryMethod || 'standard');
   const timeline = getTimeline(order);
-  const isCancellable = order.status && (order.status.toLowerCase() === 'processing' || order.status.toLowerCase() === 'confirmed');
+  const statusLower = (order.status || '').toLowerCase();
+  const isCancellable = statusLower === 'processing' || statusLower === 'pending' || statusLower === 'confirmed';
 
   return (
     <>
@@ -225,8 +279,15 @@ export default function OrderDetails({ loggedInCustomer }) {
             <button
               type="button"
               className="btn btn-outline"
-              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-              onClick={() => setCancelModalOpen(true)}
+              style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+              onClick={() => {
+                if (!loggedInCustomer) {
+                  onOpenLogin?.();
+                } else {
+                  setCancelModalOpen(true);
+                }
+              }}
+              title="Cancel this order"
             >
               <Ban size={16} /> Cancel Order
             </button>

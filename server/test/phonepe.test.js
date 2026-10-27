@@ -11,7 +11,7 @@ import supertest from 'supertest';
 
 const { default: app } = await import('../index.js');
 const { initDatabase, pool } = await import('../db.js');
-const { validatePhonePeConfig, mapPhonePeState, assertPaisa, resetTokenCache } = await import('../utils/phonepe.js');
+const { validatePhonePeConfig, mapPhonePeState, assertPaisa, resetTokenCache, sanitizeMerchantUserId } = await import('../utils/phonepe.js');
 
 // Ensure no payment credentials are present for this process so the
 // fail-closed assertions are deterministic (must run after index.js dotenv.config()).
@@ -109,4 +109,22 @@ test('Option A: mapPhonePeState maps v1 response codes accurately', () => {
   assert.equal(mapPhonePeState('PAYMENT_ERROR'), 'failed');
   assert.equal(mapPhonePeState('PAYMENT_DECLINED'), 'failed');
   assert.equal(mapPhonePeState('PAYMENT_PENDING'), 'pending');
+});
+
+test('sanitizeMerchantUserId strictly enforces PhonePe alphanumeric and length requirements', () => {
+  // Strips special characters like @ and . from emails
+  const user1 = sanitizeMerchantUserId('customer@example.com', 'ORD-123456');
+  assert.equal(/^[a-zA-Z0-9]{1,35}$/.test(user1), true);
+  assert.equal(user1.includes('@'), false);
+  assert.equal(user1.includes('.'), false);
+
+  // Fallback when raw ID is empty or invalid
+  const fallback = sanitizeMerchantUserId('', 'ORD-987654');
+  assert.equal(fallback, 'MUIDORD987654');
+  assert.equal(/^[a-zA-Z0-9]{1,35}$/.test(fallback), true);
+
+  // Length clamping to under 36 characters
+  const veryLong = sanitizeMerchantUserId('A'.repeat(50), 'ORD-1');
+  assert.equal(veryLong.length, 35);
+  assert.equal(/^[a-zA-Z0-9]{1,35}$/.test(veryLong), true);
 });

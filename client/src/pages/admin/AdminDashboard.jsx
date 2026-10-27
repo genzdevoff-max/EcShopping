@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
   LogOut, RefreshCw, CheckCircle, XCircle, Package, Users as UsersIcon,
-  ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Trash2, Video, Film
+  ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Trash2,
+  Menu, X, CreditCard, ShieldCheck, Globe, AlertTriangle, Save, Eye, EyeOff, Lock, CheckCircle2
 } from 'lucide-react';
 import api from '../../utils/api';
+import Pagination from '../../components/ui/Pagination';
+import VendorSelect from '../../components/admin/VendorSelect';
 import './AdminDashboard.css';
 
 const ORDER_STATUSES = ['Processing', 'Shipped', 'Delivered', 'Cancelled'];
@@ -14,8 +17,10 @@ const fmtINR = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
  * the server before the list is refreshed. */
 export default function AdminDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [state, setState] = useState({ loading: true, error: null, vendors: [], products: [], orders: [], users: [], categories: [], videos: [] });
   const [attempt, setAttempt] = useState(0);
+
   /* Per-row action bookkeeping: the in-flight action id and its latest error. */
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState({ id: null, message: '' });
@@ -45,9 +50,55 @@ export default function AdminDashboard({ onLogout }) {
   const [creatingVid, setCreatingVid] = useState(false);
   const [vidFormMsg, setVidFormMsg] = useState({ type: null, text: '' });
 
+  /* Category filters and pagination */
   const [catSearch, setCatSearch] = useState('');
   const [catScopeFilter, setCatScopeFilter] = useState('all');
   const [catStatusFilter, setCatStatusFilter] = useState('all');
+  const [catPage, setCatPage] = useState(1);
+  const [catPageSize, setCatPageSize] = useState(10);
+
+  /* Products filters and pagination */
+  const [prodSearch, setProdSearch] = useState('');
+  const [prodStatusFilter, setProdStatusFilter] = useState('all');
+  const [prodStockFilter, setProdStockFilter] = useState('all');
+  const [prodPage, setProdPage] = useState(1);
+  const [prodPageSize, setProdPageSize] = useState(10);
+
+  /* Vendors filters and pagination */
+  const [vendorSearch, setVendorSearch] = useState('');
+  const [vendorStatusFilter, setVendorStatusFilter] = useState('all');
+  const [vendorPage, setVendorPage] = useState(1);
+  const [vendorPageSize, setVendorPageSize] = useState(10);
+
+  /* Orders filters and pagination */
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState('all');
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderPageSize, setOrderPageSize] = useState(10);
+
+  /* Customers filters and pagination */
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerPage, setCustomerPage] = useState(1);
+  const [customerPageSize, setCustomerPageSize] = useState(10);
+
+  /* Videos filters and pagination */
+  const [videoSearch, setVideoSearch] = useState('');
+  const [videoPage, setVideoPage] = useState(1);
+  const [videoPageSize, setVideoPageSize] = useState(10);
+
+  /* Payment Gateway Configuration audit & edit state */
+  const [paymentConfig, setPaymentConfig] = useState({ loading: false, data: null, error: null });
+  const [paymentForm, setPaymentForm] = useState({
+    environment: 'production',
+    merchantId: '',
+    saltKey: '',
+    saltIndex: '1',
+    redirectUrl: '',
+    showSaltKey: false
+  });
+  const [savingPayment, setSavingPayment] = useState(false);
+  const [paymentSaveMsg, setPaymentSaveMsg] = useState({ type: null, text: '' });
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +138,69 @@ export default function AdminDashboard({ onLogout }) {
     })();
     return () => { cancelled = true; };
   }, [attempt, activeTab, onLogout]);
+
+  /* Fetch Payment Config when Payment Gateway tab is active */
+  useEffect(() => {
+    if (activeTab !== 'payment') return;
+    let cancelled = false;
+    setPaymentConfig({ loading: true, data: null, error: null });
+    api.getPaymentConfig()
+      .then((res) => {
+        if (!cancelled) {
+          setPaymentConfig({ loading: false, data: res, error: null });
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPaymentConfig({ loading: false, data: null, error: err.message || 'Failed to load payment configuration' });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [activeTab, attempt]);
+
+  /* Pre-fill payment settings form when paymentConfig loads */
+  useEffect(() => {
+    if (paymentConfig.data) {
+      setPaymentForm((prev) => ({
+        ...prev,
+        environment: paymentConfig.data.environment || 'production',
+        merchantId: paymentConfig.data.v1?.merchantId || '',
+        saltIndex: paymentConfig.data.v1?.saltIndex || '1',
+        redirectUrl: paymentConfig.data.redirectUrl || '',
+        saltKey: ''
+      }));
+    }
+  }, [paymentConfig.data]);
+
+  const handleSavePaymentConfig = async (e) => {
+    e.preventDefault();
+    setSavingPayment(true);
+    setPaymentSaveMsg({ type: null, text: '' });
+    try {
+      const payload = {
+        environment: paymentForm.environment,
+        merchantId: paymentForm.merchantId.trim(),
+        saltIndex: paymentForm.saltIndex.trim() || '1',
+        redirectUrl: paymentForm.redirectUrl.trim()
+      };
+      if (paymentForm.saltKey.trim()) {
+        payload.saltKey = paymentForm.saltKey.trim();
+      }
+      const res = await api.updatePaymentConfig(payload);
+      if (res?.success) {
+        setPaymentSaveMsg({ type: 'success', text: 'PhonePe gateway configuration saved and active immediately!' });
+        setPaymentForm((prev) => ({ ...prev, saltKey: '' }));
+        const refreshed = await api.getPaymentConfig();
+        setPaymentConfig({ loading: false, data: refreshed, error: null });
+      } else {
+        setPaymentSaveMsg({ type: 'error', text: res?.error || 'Failed to update payment settings' });
+      }
+    } catch (err) {
+      setPaymentSaveMsg({ type: 'error', text: err.message || 'Error saving payment settings' });
+    } finally {
+      setSavingPayment(false);
+    }
+  };
 
   const handleCreateCategory = async (e) => {
     e.preventDefault();
@@ -142,7 +256,6 @@ export default function AdminDashboard({ onLogout }) {
       setEditingCatId(null);
     }, 'Category update failed');
   };
-
 
   const handleCreateVideo = async (e) => {
     e.preventDefault();
@@ -205,6 +318,24 @@ export default function AdminDashboard({ onLogout }) {
     }, 'Failed to delete product');
   };
 
+  const runRowAction = async (id, action, failMessage) => {
+    setBusyId(id);
+    setActionError({ id: null, message: '' });
+    try {
+      await action();
+      setAttempt((n) => n + 1);
+    } catch (err) {
+      setActionError({ id, message: err?.message ? `${failMessage}: ${err.message}` : failMessage });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const retry = () => setAttempt((n) => n + 1);
+
+  /* ---------------- FILTERING LOGIC ---------------- */
+
+  // Categories
   const filteredCategories = state.categories.filter((cat) => {
     const matchesSearch = (cat.name || '').toLowerCase().includes(catSearch.toLowerCase()) ||
                           (cat.description || '').toLowerCase().includes(catSearch.toLowerCase());
@@ -218,20 +349,89 @@ export default function AdminDashboard({ onLogout }) {
     return matchesSearch && matchesScope && matchesStatus;
   });
 
-  const runRowAction = async (id, action, failMessage) => {
-    setBusyId(id);
-    setActionError({ id: null, message: '' });
-    try {
-      await action();
-      setAttempt((n) => n + 1); // single authoritative refresh from the server
-    } catch (err) {
-      setActionError({ id, message: err?.message ? `${failMessage}: ${err.message}` : failMessage });
-    } finally {
-      setBusyId(null);
-    }
-  };
+  const paginatedCategories = filteredCategories.slice(
+    (catPage - 1) * catPageSize,
+    catPage * catPageSize
+  );
 
-  const retry = () => setAttempt((n) => n + 1);
+  // Products
+  const filteredProducts = state.products.filter((prod) => {
+    const query = prodSearch.toLowerCase();
+    const matchesSearch = !prodSearch ||
+      (prod.title || '').toLowerCase().includes(query) ||
+      (prod.vendorName || '').toLowerCase().includes(query) ||
+      (prod.category || '').toLowerCase().includes(query);
+    const matchesStatus = prodStatusFilter === 'all' || prod.status === prodStatusFilter;
+    const matchesStock = prodStockFilter === 'all' ||
+      (prodStockFilter === 'in_stock' && prod.stockStatus !== 'out_of_stock') ||
+      (prodStockFilter === 'out_of_stock' && prod.stockStatus === 'out_of_stock');
+    return matchesSearch && matchesStatus && matchesStock;
+  });
+
+  const paginatedProducts = filteredProducts.slice(
+    (prodPage - 1) * prodPageSize,
+    prodPage * prodPageSize
+  );
+
+  // Vendors
+  const filteredVendors = state.vendors.filter((v) => {
+    const query = vendorSearch.toLowerCase();
+    const matchesSearch = !vendorSearch ||
+      (v.name || '').toLowerCase().includes(query) ||
+      (v.email || '').toLowerCase().includes(query);
+    const matchesStatus = vendorStatusFilter === 'all' || v.status === vendorStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const paginatedVendors = filteredVendors.slice(
+    (vendorPage - 1) * vendorPageSize,
+    vendorPage * vendorPageSize
+  );
+
+  // Orders
+  const filteredOrders = state.orders.filter((o) => {
+    const query = orderSearch.toLowerCase();
+    const matchesSearch = !orderSearch ||
+      (o.id || '').toLowerCase().includes(query) ||
+      (o.customerName || '').toLowerCase().includes(query) ||
+      (o.customerEmail || '').toLowerCase().includes(query) ||
+      (o.customerPhone || '').toLowerCase().includes(query);
+    const matchesStatus = orderStatusFilter === 'all' || (o.status || 'Processing') === orderStatusFilter;
+    const matchesPayment = orderPaymentFilter === 'all' || (o.paymentStatus || 'pending') === orderPaymentFilter;
+    return matchesSearch && matchesStatus && matchesPayment;
+  });
+
+  const paginatedOrders = filteredOrders.slice(
+    (orderPage - 1) * orderPageSize,
+    orderPage * orderPageSize
+  );
+
+  // Customers
+  const filteredUsers = state.users.filter((u) => {
+    const query = customerSearch.toLowerCase();
+    return !customerSearch ||
+      (u.name || '').toLowerCase().includes(query) ||
+      (u.email || '').toLowerCase().includes(query) ||
+      (u.phone || '').toLowerCase().includes(query);
+  });
+
+  const paginatedUsers = filteredUsers.slice(
+    (customerPage - 1) * customerPageSize,
+    customerPage * customerPageSize
+  );
+
+  // Videos
+  const filteredVideos = (state.videos || []).filter((v) => {
+    const query = videoSearch.toLowerCase();
+    return !videoSearch ||
+      (v.title || '').toLowerCase().includes(query) ||
+      (v.productTitle || '').toLowerCase().includes(query);
+  });
+
+  const paginatedVideos = filteredVideos.slice(
+    (videoPage - 1) * videoPageSize,
+    videoPage * videoPageSize
+  );
 
   const pendingProducts = state.products.filter((p) => p.status === 'pending');
   const pendingVendors = state.vendors.filter((v) => v.status === 'pending');
@@ -245,10 +445,26 @@ export default function AdminDashboard({ onLogout }) {
 
   return (
     <div className="admin-layout">
+      {/* Mobile Backdrop */}
+      {sidebarOpen && (
+        <div
+          className="admin-sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="admin-logo">
           <h2>EcShopping Admin</h2>
+          <button
+            type="button"
+            className="admin-menu-toggle"
+            style={{ display: sidebarOpen ? 'inline-flex' : 'none', background: 'transparent', border: 'none', color: '#cbd5e1' }}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X size={20} />
+          </button>
         </div>
         <nav className="admin-nav">
           {[
@@ -258,15 +474,21 @@ export default function AdminDashboard({ onLogout }) {
             ['vendors', 'Vendors', state.vendors.length],
             ['products', 'Products', state.products.length],
             ['videos', 'Video Reviews', (state.videos || []).length],
-            ['customers', 'Customers', state.users.length]
+            ['customers', 'Customers', state.users.length],
+            ['payment', 'Payment Gateway', null]
           ].map(([key, label, count]) => (
             <a
               key={key}
               href="#"
               className={activeTab === key ? 'active' : ''}
-              onClick={(e) => { e.preventDefault(); setActiveTab(key); }}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveTab(key);
+                setSidebarOpen(false);
+              }}
             >
-              {label}{count != null ? ` (${count})` : ''}
+              <span>{label}</span>
+              {count != null && <span style={{ opacity: 0.8, fontSize: 12 }}>({count})</span>}
             </a>
           ))}
         </nav>
@@ -278,15 +500,29 @@ export default function AdminDashboard({ onLogout }) {
 
       <main className="admin-main">
         <header className="admin-header">
-          <h1>
-            {activeTab === 'dashboard' && 'Dashboard overview'}
-            {activeTab === 'categories' && 'Category & Taxonomy Management'}
-            {activeTab === 'orders' && 'All customer orders'}
-            {activeTab === 'vendors' && 'Vendor management'}
-            {activeTab === 'products' && 'Product approvals'}
-            {activeTab === 'customers' && 'Customer accounts'}
-            {activeTab === 'videos' && 'Homepage Shorts & Video Reviews'}
-          </h1>
+          <div className="admin-header-title-wrap">
+            <button
+              type="button"
+              className="admin-menu-toggle"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              title="Toggle Menu"
+            >
+              <Menu size={20} />
+            </button>
+            <h1>
+              {activeTab === 'dashboard' && 'Dashboard overview'}
+              {activeTab === 'categories' && 'Category & Taxonomy Management'}
+              {activeTab === 'orders' && 'All customer orders'}
+              {activeTab === 'vendors' && 'Vendor management'}
+              {activeTab === 'products' && 'Product approvals'}
+              {activeTab === 'customers' && 'Customer accounts'}
+              {activeTab === 'videos' && 'Homepage Shorts & Video Reviews'}
+              {activeTab === 'payment' && 'Payment Gateway Configuration'}
+            </h1>
+          </div>
+          <div>
+            {refreshBtn}
+          </div>
         </header>
 
         {state.error && (
@@ -311,6 +547,7 @@ export default function AdminDashboard({ onLogout }) {
 
         {!state.loading && !state.error && (
           <div className="admin-content">
+            {/* ---------------- 1. DASHBOARD OVERVIEW ---------------- */}
             {activeTab === 'dashboard' && (
               <>
                 <div className="stat-cards">
@@ -333,7 +570,7 @@ export default function AdminDashboard({ onLogout }) {
                   </div>
                 </div>
 
-                <div className="admin-placeholder-box" style={{ background: '#fff', padding: '24px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
+                <div className="admin-placeholder-box">
                   <h3 style={{ margin: '0 0 10px 0', color: '#1e293b' }}>Quick actions</h3>
                   <p style={{ color: '#64748b', margin: '0 0 15px 0' }}>
                     {pendingProducts.length} product{pendingProducts.length === 1 ? '' : 's'} and{' '}
@@ -342,20 +579,23 @@ export default function AdminDashboard({ onLogout }) {
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {refreshBtn}
                     <button type="button" className="approve-btn" onClick={() => setActiveTab('products')}>
-                      <Package size={15} /> Review products
+                      <Package size={15} /> Review products ({pendingProducts.length})
                     </button>
                     <button type="button" className="approve-btn" onClick={() => setActiveTab('vendors')}>
-                      <UsersIcon size={15} /> Review vendors
+                      <UsersIcon size={15} /> Review vendors ({pendingVendors.length})
+                    </button>
+                    <button type="button" className="approve-btn" onClick={() => setActiveTab('payment')}>
+                      <CreditCard size={15} /> Payment Gateway Settings
                     </button>
                   </div>
                 </div>
               </>
             )}
 
-
+            {/* ---------------- 2. CATEGORIES TAB ---------------- */}
             {activeTab === 'categories' && (
               <div className="admin-cat-section-wrap">
-                {/* 1. Category Creation Form */}
+                {/* Category Creation Form with Searchable VendorSelect */}
                 <div className="admin-cat-form-card">
                   <h3 style={{ margin: '0 0 6px', fontSize: 16, color: '#0f172a' }}>
                     <Plus size={16} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6 }} />
@@ -380,14 +620,12 @@ export default function AdminDashboard({ onLogout }) {
                   )}
 
                   <form onSubmit={handleCreateCategory} className="admin-cat-form-grid">
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Category Name *
-                      </label>
+                    <div className="cat-form-field">
+                      <label>Category Name *</label>
                       <input
                         type="text"
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        style={{ width: '100%' }}
                         placeholder="e.g. Fresh Dairy"
                         value={newCatName}
                         onChange={(e) => setNewCatName(e.target.value)}
@@ -395,58 +633,45 @@ export default function AdminDashboard({ onLogout }) {
                       />
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Description
-                      </label>
+                    <div className="cat-form-field">
+                      <label>Description</label>
                       <input
                         type="text"
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        style={{ width: '100%' }}
                         placeholder="Short blurb for shoppers..."
                         value={newCatDesc}
                         onChange={(e) => setNewCatDesc(e.target.value)}
                       />
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Image URL
-                      </label>
+                    <div className="cat-form-field">
+                      <label>Image URL (Optional)</label>
                       <input
                         type="url"
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
-                        placeholder="https://... (Optional)"
+                        style={{ width: '100%' }}
+                        placeholder="https://..."
                         value={newCatImage}
                         onChange={(e) => setNewCatImage(e.target.value)}
                       />
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Scope / Owner
-                      </label>
-                      <select
-                        className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                    <div className="cat-form-field">
+                      <label>Scope / Owner</label>
+                      <VendorSelect
+                        vendors={state.vendors}
                         value={newCatVendor}
-                        onChange={(e) => setNewCatVendor(e.target.value)}
-                      >
-                        <option value="shared">Shared (Global)</option>
-                        {state.vendors.map((v) => (
-                          <option key={v.id} value={v.id}>Vendor: {v.name}</option>
-                        ))}
-                      </select>
+                        onChange={setNewCatVendor}
+                        includeShared={true}
+                      />
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Status
-                      </label>
+                    <div className="cat-form-field">
+                      <label>Status</label>
                       <select
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        style={{ width: '100%' }}
                         value={newCatStatus}
                         onChange={(e) => setNewCatStatus(e.target.value)}
                       >
@@ -460,7 +685,7 @@ export default function AdminDashboard({ onLogout }) {
                         type="submit"
                         className="approve-btn"
                         disabled={creatingCat}
-                        style={{ height: 36, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 6 }}
+                        style={{ height: 38, padding: '0 18px', display: 'flex', alignItems: 'center', gap: 6 }}
                       >
                         {creatingCat ? <Loader2 size={14} className="spin" /> : <Plus size={14} />}
                         <span>Add Category</span>
@@ -469,19 +694,19 @@ export default function AdminDashboard({ onLogout }) {
                   </form>
                 </div>
 
-                {/* 2. Filter & Search Toolbar */}
+                {/* Filter & Search Toolbar */}
                 <div className="admin-filter-bar">
                   <input
                     type="text"
                     className="admin-filter-input"
                     placeholder="Search categories..."
                     value={catSearch}
-                    onChange={(e) => setCatSearch(e.target.value)}
+                    onChange={(e) => { setCatSearch(e.target.value); setCatPage(1); }}
                   />
                   <select
                     className="admin-filter-input"
                     value={catScopeFilter}
-                    onChange={(e) => setCatScopeFilter(e.target.value)}
+                    onChange={(e) => { setCatScopeFilter(e.target.value); setCatPage(1); }}
                   >
                     <option value="all">All Scopes</option>
                     <option value="shared">Shared (Global) only</option>
@@ -490,18 +715,15 @@ export default function AdminDashboard({ onLogout }) {
                   <select
                     className="admin-filter-input"
                     value={catStatusFilter}
-                    onChange={(e) => setCatStatusFilter(e.target.value)}
+                    onChange={(e) => { setCatStatusFilter(e.target.value); setCatPage(1); }}
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Active only</option>
                     <option value="inactive">Inactive only</option>
                   </select>
-                  <span style={{ fontSize: 13, color: '#64748b', marginLeft: 'auto' }}>
-                    Showing {filteredCategories.length} of {state.categories.length} categories
-                  </span>
                 </div>
 
-                {/* 3. Categories Listing Table */}
+                {/* Categories Table */}
                 <div className="vendors-table-container">
                   <table className="vendors-table">
                     <thead>
@@ -515,7 +737,7 @@ export default function AdminDashboard({ onLogout }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredCategories.map((cat) => {
+                      {paginatedCategories.map((cat) => {
                         const isEditing = editingCatId === cat.id;
                         const ownerVendor = cat.vendorId ? state.vendors.find((v) => String(v.id) === String(cat.vendorId)) : null;
 
@@ -528,7 +750,7 @@ export default function AdminDashboard({ onLogout }) {
                                   className="admin-filter-input"
                                   value={editCatName}
                                   onChange={(e) => setEditCatName(e.target.value)}
-                                  style={{ width: '100%', boxSizing: 'border-box' }}
+                                  style={{ width: '100%' }}
                                   required
                                 />
                               </td>
@@ -543,7 +765,7 @@ export default function AdminDashboard({ onLogout }) {
                                   className="admin-filter-input"
                                   value={editCatDesc}
                                   onChange={(e) => setEditCatDesc(e.target.value)}
-                                  style={{ width: '100%', boxSizing: 'border-box' }}
+                                  style={{ width: '100%' }}
                                 />
                               </td>
                               <td>{cat.productsCount || 0} products</td>
@@ -658,14 +880,45 @@ export default function AdminDashboard({ onLogout }) {
                     </tbody>
                   </table>
                 </div>
+
+                <Pagination
+                  currentPage={catPage}
+                  totalPages={Math.ceil(filteredCategories.length / catPageSize) || 1}
+                  onPageChange={setCatPage}
+                  totalItems={filteredCategories.length}
+                  pageSize={catPageSize}
+                  onPageSizeChange={(sz) => { setCatPageSize(sz); setCatPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                />
               </div>
             )}
 
+            {/* ---------------- 3. VENDORS TAB ---------------- */}
             {activeTab === 'vendors' && (
               <div className="admin-vendors-section">
                 <div className="vendors-header">
                   <h2>Registered vendors</h2>
-                  <p>Approved, rejected and pending vendor accounts live in the database</p>
+                  <p>Approved, rejected and pending vendor accounts in the database</p>
+                </div>
+
+                <div className="admin-filter-bar">
+                  <input
+                    type="text"
+                    className="admin-filter-input"
+                    placeholder="Search by vendor name or email..."
+                    value={vendorSearch}
+                    onChange={(e) => { setVendorSearch(e.target.value); setVendorPage(1); }}
+                  />
+                  <select
+                    className="admin-filter-input"
+                    value={vendorStatusFilter}
+                    onChange={(e) => { setVendorStatusFilter(e.target.value); setVendorPage(1); }}
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="pending">Pending Approval</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
                 </div>
 
                 <div className="vendors-table-container">
@@ -676,7 +929,7 @@ export default function AdminDashboard({ onLogout }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {state.vendors.map((vendor) => (
+                      {paginatedVendors.map((vendor) => (
                         <tr key={vendor.id}>
                           <td>{vendor.name}{busyId === vendor.id && <Loader2 size={13} className="spin" style={{ marginLeft: 6 }} />}</td>
                           <td>{vendor.email}</td>
@@ -697,7 +950,7 @@ export default function AdminDashboard({ onLogout }) {
                                   disabled={busyId === vendor.id}
                                   onClick={() => runRowAction(vendor.id, () => api.updateVendorStatus(vendor.id, 'approved'), 'Vendor approval failed')}
                                 >
-                                  <CheckCircle size={17} /> Approve
+                                  <CheckCircle size={15} /> Approve
                                 </button>
                                 <button
                                   type="button"
@@ -705,7 +958,7 @@ export default function AdminDashboard({ onLogout }) {
                                   disabled={busyId === vendor.id}
                                   onClick={() => runRowAction(vendor.id, () => api.updateVendorStatus(vendor.id, 'rejected'), 'Vendor rejection failed')}
                                 >
-                                  <XCircle size={17} /> Reject
+                                  <XCircle size={15} /> Reject
                                 </button>
                               </div>
                             )}
@@ -731,47 +984,103 @@ export default function AdminDashboard({ onLogout }) {
                           </td>
                         </tr>
                       ))}
-                      {state.vendors.length === 0 && (
-                        <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>No vendor accounts exist yet.</td></tr>
+                      {filteredVendors.length === 0 && (
+                        <tr><td colSpan="5" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No vendor accounts match your filter.</td></tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+
+                <Pagination
+                  currentPage={vendorPage}
+                  totalPages={Math.ceil(filteredVendors.length / vendorPageSize) || 1}
+                  onPageChange={setVendorPage}
+                  totalItems={filteredVendors.length}
+                  pageSize={vendorPageSize}
+                  onPageSizeChange={(sz) => { setVendorPageSize(sz); setVendorPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                />
               </div>
             )}
 
+            {/* ---------------- 4. PRODUCTS TAB (ALL PRODUCTS SCREEN) ---------------- */}
             {activeTab === 'products' && (
               <div className="admin-vendors-section">
                 <div className="vendors-header">
-                  <h2>Product approvals</h2>
-                  <p>Vendor submissions from the database — approve to list, reject to keep hidden</p>
+                  <h2>Product approvals & catalog management</h2>
+                  <p>Vendor submissions from the database — review, approve or manage product visibility</p>
+                </div>
+
+                <div className="admin-filter-bar">
+                  <input
+                    type="text"
+                    className="admin-filter-input"
+                    placeholder="Search by product title, vendor, category..."
+                    value={prodSearch}
+                    onChange={(e) => { setProdSearch(e.target.value); setProdPage(1); }}
+                  />
+                  <select
+                    className="admin-filter-input"
+                    value={prodStatusFilter}
+                    onChange={(e) => { setProdStatusFilter(e.target.value); setProdPage(1); }}
+                  >
+                    <option value="all">All Statuses ({state.products.length})</option>
+                    <option value="pending">Pending Review ({pendingProducts.length})</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                  <select
+                    className="admin-filter-input"
+                    value={prodStockFilter}
+                    onChange={(e) => { setProdStockFilter(e.target.value); setProdPage(1); }}
+                  >
+                    <option value="all">All Inventory</option>
+                    <option value="in_stock">In Stock</option>
+                    <option value="out_of_stock">Out of Stock</option>
+                  </select>
                 </div>
 
                 <div className="vendors-table-container">
                   <table className="vendors-table">
                     <thead>
-                      <tr><th>Image</th><th>Title & vendor</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>
+                      <tr>
+                        <th style={{ width: 60 }}>Image</th>
+                        <th>Title & Vendor</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Approval Status</th>
+                        <th>Actions</th>
+                      </tr>
                     </thead>
                     <tbody>
-                      {state.products.map((product) => (
+                      {paginatedProducts.map((product) => (
                         <tr key={product.id}>
                           <td>
-                            {product.image
-                              ? <img src={product.image} alt="" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '5px' }} />
-                              : <span className="text-muted">No image</span>}
+                            {product.image ? (
+                              <img src={product.image} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0' }} />
+                            ) : (
+                              <span className="text-muted" style={{ fontSize: 11 }}>No img</span>
+                            )}
                           </td>
                           <td>
-                            <div style={{ fontWeight: 600 }}>{product.title}</div>
-                            <div style={{ fontSize: '12px', color: '#64748b' }}>
-                              {product.vendorName || 'Vendor name missing'}
+                            <div style={{ fontWeight: 600, color: '#0f172a' }}>{product.title}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: 2 }}>
+                              Vendor: {product.vendorName || 'Not specified'} | Category: {product.category || 'General'}
                             </div>
                           </td>
-                          <td>{fmtINR(product.price)}</td>
+                          <td>
+                            <strong>{fmtINR(product.price)}</strong>
+                            {product.strikePrice && Number(product.strikePrice) > Number(product.price) && (
+                              <span style={{ fontSize: 12, color: '#94a3b8', textDecoration: 'line-through', marginLeft: 6 }}>
+                                {fmtINR(product.strikePrice)}
+                              </span>
+                            )}
+                          </td>
                           <td style={{ fontSize: '13px' }}>
                             <span className={`status-badge status-${product.stockStatus === 'out_of_stock' ? 'rejected' : 'approved'}`}>
                               {product.stockStatus === 'out_of_stock' ? 'Out of stock' : 'In stock'}
                             </span>
-                            <div style={{ fontSize: '11px', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', marginTop: 3 }}>
                               {product.stockQuantity != null ? `${product.stockQuantity} units` : '—'}
                             </div>
                           </td>
@@ -781,7 +1090,7 @@ export default function AdminDashboard({ onLogout }) {
                             </span>
                           </td>
                           <td>
-                            <div className="action-buttons" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <div className="action-buttons">
                               {product.status === 'pending' ? (
                                 <>
                                   <button
@@ -808,59 +1117,89 @@ export default function AdminDashboard({ onLogout }) {
                                   disabled={busyId === product.id}
                                   onClick={() => runRowAction(product.id, () => api.updateProductStatus(product.id, 'pending'), 'Status reset failed')}
                                   title="Move back to pending for another review"
+                                  style={{ fontSize: 12 }}
                                 >
                                   Re-review
                                 </button>
                               )}
                               <button
                                 type="button"
-                                className="delete-btn"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '5px 10px',
-                                  background: '#fef2f2',
-                                  border: '1px solid #fecaca',
-                                  color: '#dc2626',
-                                  borderRadius: '6px',
-                                  fontSize: '12px',
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
+                                className="reject-btn"
+                                style={{ padding: '5px 8px', fontSize: 12 }}
                                 disabled={busyId === product.id}
                                 onClick={() => handleDeleteProduct(product)}
                                 title={`Delete product "${product.title}"`}
                               >
-                                <Trash2 size={13} /> Delete
+                                <Trash2 size={13} />
                               </button>
                             </div>
                           </td>
                         </tr>
                       ))}
-                      {state.products.length === 0 && (
-                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>No products have been submitted yet.</td></tr>
+                      {filteredProducts.length === 0 && (
+                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>No products match your search or filter.</td></tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+
+                <Pagination
+                  currentPage={prodPage}
+                  totalPages={Math.ceil(filteredProducts.length / prodPageSize) || 1}
+                  onPageChange={setProdPage}
+                  totalItems={filteredProducts.length}
+                  pageSize={prodPageSize}
+                  onPageSizeChange={(sz) => { setProdPageSize(sz); setProdPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                />
               </div>
             )}
 
+            {/* ---------------- 5. ORDERS TAB ---------------- */}
             {activeTab === 'orders' && (
               <div className="admin-vendors-section">
                 <div className="vendors-header">
-                  <h2>All orders placed</h2>
+                  <h2>All customer orders</h2>
                   <p>Server rows with per-vendor line items — update fulfilment status</p>
+                </div>
+
+                <div className="admin-filter-bar">
+                  <input
+                    type="text"
+                    className="admin-filter-input"
+                    placeholder="Search by order ID, customer name, email, phone..."
+                    value={orderSearch}
+                    onChange={(e) => { setOrderSearch(e.target.value); setOrderPage(1); }}
+                  />
+                  <select
+                    className="admin-filter-input"
+                    value={orderStatusFilter}
+                    onChange={(e) => { setOrderStatusFilter(e.target.value); setOrderPage(1); }}
+                  >
+                    <option value="all">All Fulfilment Statuses</option>
+                    {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <select
+                    className="admin-filter-input"
+                    value={orderPaymentFilter}
+                    onChange={(e) => { setOrderPaymentFilter(e.target.value); setOrderPage(1); }}
+                  >
+                    <option value="all">All Payment Statuses</option>
+                    <option value="paid">Paid</option>
+                    <option value="pending">Pending</option>
+                    <option value="failed">Failed</option>
+                  </select>
                 </div>
 
                 <div className="vendors-table-container">
                   <table className="vendors-table">
                     <thead>
-                      <tr><th>Order id</th><th>Date</th><th>Customer</th><th>Items & vendors</th><th>Total</th><th>Payment</th><th>Status</th><th>Actions</th></tr>
+                      <tr>
+                        <th>Order ID</th><th>Date</th><th>Customer</th><th>Items & Vendors</th><th>Total</th><th>Payment</th><th>Status</th><th>Actions</th>
+                      </tr>
                     </thead>
                     <tbody>
-                      {state.orders.map((order) => (
+                      {paginatedOrders.map((order) => (
                         <tr key={order.id}>
                           <td><strong>{order.id}</strong></td>
                           <td style={{ fontSize: '13px', color: '#64748b' }}>
@@ -872,12 +1211,12 @@ export default function AdminDashboard({ onLogout }) {
                             {order.customerPhone && <div style={{ fontSize: '12px', color: '#64748b' }}>{order.customerPhone}</div>}
                           </td>
                           <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                               {(order.items || []).map((it, idx) => (
-                                <div key={it.id || idx} style={{ fontSize: '13px' }}>
+                                <div key={it.id || idx} style={{ fontSize: '12.5px' }}>
                                   • <strong>{it.title}</strong> × {it.quantity}
-                                  <span style={{ color: '#059669', marginLeft: '6px', fontSize: '12px', background: '#ecfdf5', padding: '1px 6px', borderRadius: '4px' }}>
-                                    Vendor: {it.vendorName || 'Not recorded'}
+                                  <span style={{ color: '#059669', marginLeft: '6px', fontSize: '11.5px', background: '#ecfdf5', padding: '1px 6px', borderRadius: '4px' }}>
+                                    Vendor: {it.vendorName || 'General'}
                                   </span>
                                 </div>
                               ))}
@@ -889,7 +1228,7 @@ export default function AdminDashboard({ onLogout }) {
                             {order.paymentStatus
                               ? <span className={`status-badge status-payment-${order.paymentStatus}`}>{order.paymentStatus}</span>
                               : <span className="text-muted">Pending</span>}
-                            <div className="text-muted">{order.paymentMethod || 'unpaid'}</div>
+                            <div className="text-muted" style={{ marginTop: 2 }}>{order.paymentMethod || 'unpaid'}</div>
                           </td>
                           <td>
                             <span className={`status-badge status-${(order.status || 'processing').toLowerCase()}`}>
@@ -901,26 +1240,36 @@ export default function AdminDashboard({ onLogout }) {
                               value={order.status || 'Processing'}
                               disabled={busyId === order.id}
                               onChange={(e) => runRowAction(order.id, () => api.updateOrderStatus(order.id, e.target.value, 'admin'), 'Fulfilment update failed')}
-                              style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px' }}
                             >
                               {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                             </select>
                           </td>
                         </tr>
                       ))}
-                      {state.orders.length === 0 && (
-                        <tr><td colSpan="8" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No orders have been placed yet.</td></tr>
+                      {filteredOrders.length === 0 && (
+                        <tr><td colSpan="8" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No orders found matching your criteria.</td></tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+
+                <Pagination
+                  currentPage={orderPage}
+                  totalPages={Math.ceil(filteredOrders.length / orderPageSize) || 1}
+                  onPageChange={setOrderPage}
+                  totalItems={filteredOrders.length}
+                  pageSize={orderPageSize}
+                  onPageSizeChange={(sz) => { setOrderPageSize(sz); setOrderPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                />
               </div>
             )}
 
-            
+            {/* ---------------- 6. VIDEOS TAB ---------------- */}
             {activeTab === 'videos' && (
               <div className="admin-cat-section-wrap">
-                {/* 1. Add Video Review Form */}
+                {/* Add Video Review Form */}
                 <div className="admin-cat-form-card">
                   <h3 style={{ margin: '0 0 6px', fontSize: 16, color: '#0f172a' }}>
                     <Plus size={16} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6 }} />
@@ -944,15 +1293,13 @@ export default function AdminDashboard({ onLogout }) {
                     </div>
                   )}
 
-                  <form onSubmit={handleCreateVideo} className="admin-cat-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr)) auto' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Video Title *
-                      </label>
+                  <form onSubmit={handleCreateVideo} className="admin-cat-form-grid">
+                    <div className="cat-form-field">
+                      <label>Video Title *</label>
                       <input
                         type="text"
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        style={{ width: '100%' }}
                         placeholder="e.g. Traditional A2 Ghee Churning"
                         value={newVidTitle}
                         onChange={(e) => setNewVidTitle(e.target.value)}
@@ -960,14 +1307,12 @@ export default function AdminDashboard({ onLogout }) {
                       />
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Video URL (MP4 or YouTube) *
-                      </label>
+                    <div className="cat-form-field">
+                      <label>Video URL (MP4 or YouTube) *</label>
                       <input
                         type="url"
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        style={{ width: '100%' }}
                         placeholder="https://...mp4 or YouTube URL"
                         value={newVidUrl}
                         onChange={(e) => setNewVidUrl(e.target.value)}
@@ -975,27 +1320,23 @@ export default function AdminDashboard({ onLogout }) {
                       />
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Thumbnail Poster URL
-                      </label>
+                    <div className="cat-form-field">
+                      <label>Thumbnail Poster URL</label>
                       <input
                         type="url"
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        style={{ width: '100%' }}
                         placeholder="https://... (Optional for YouTube)"
                         value={newVidThumb}
                         onChange={(e) => setNewVidThumb(e.target.value)}
                       />
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Attached Product *
-                      </label>
+                    <div className="cat-form-field">
+                      <label>Attached Product *</label>
                       <select
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        style={{ width: '100%' }}
                         value={newVidProduct}
                         onChange={(e) => setNewVidProduct(e.target.value)}
                         required
@@ -1007,154 +1348,158 @@ export default function AdminDashboard({ onLogout }) {
                       </select>
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                        Display Order
-                      </label>
+                    <div className="cat-form-field">
+                      <label>Display Order</label>
                       <input
                         type="number"
                         min="0"
                         className="admin-filter-input"
-                        style={{ width: '100%', boxSizing: 'border-box' }}
+                        style={{ width: '100%' }}
                         value={newVidOrder}
                         onChange={(e) => setNewVidOrder(e.target.value)}
                       />
                     </div>
 
-                    <button
-                      type="submit"
-                      disabled={creatingVid}
-                      style={{
-                        padding: '9px 18px',
-                        background: '#0e5c4a',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: 6,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}
-                    >
-                      {creatingVid ? <Loader2 size={16} className="spin" /> : <Plus size={16} />}
-                      Add Video
-                    </button>
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={creatingVid}
+                        className="approve-btn"
+                        style={{ height: 38, padding: '0 18px', display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        {creatingVid ? <Loader2 size={15} className="spin" /> : <Plus size={15} />}
+                        <span>Add Video</span>
+                      </button>
+                    </div>
                   </form>
                 </div>
 
-                {/* 2. Video Reviews Table */}
-                <div className="admin-cat-section">
-                  <div className="admin-table-container">
-                    <table className="admin-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: 80 }}>Thumbnail</th>
-                          <th>Title</th>
-                          <th>Attached Product</th>
-                          <th>Order</th>
-                          <th>Status</th>
-                          <th style={{ textAlign: 'right' }}>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(state.videos || []).map((vid) => (
-                          <tr key={vid.id}>
-                            <td>
-                              <img
-                                src={vid.thumbnailUrl || '/placeholder.png'}
-                                alt=""
-                                style={{ width: 44, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }}
-                                onError={(e) => { e.currentTarget.src = '/placeholder.png'; }}
-                              />
-                            </td>
-                            <td>
-                              <strong>{vid.title}</strong>
-                              {vid.description && <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>{vid.description}</p>}
-                            </td>
-                            <td>
-                              {vid.productTitle ? (
-                                <span style={{ fontSize: 13, fontWeight: 600, color: '#0e5c4a' }}>
-                                  {vid.productTitle} (₹{vid.productPrice})
-                                </span>
-                              ) : (
-                                <span style={{ color: '#94a3b8' }}>None</span>
-                              )}
-                            </td>
-                            <td>{vid.displayOrder}</td>
-                            <td>
-                              <span style={{
-                                display: 'inline-block',
-                                padding: '3px 8px',
-                                borderRadius: 4,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                background: vid.status === 'active' ? '#dcfce7' : '#f1f5f9',
-                                color: vid.status === 'active' ? '#166534' : '#64748b'
-                              }}>
-                                {vid.status === 'active' ? 'Active' : 'Inactive'}
+                <div className="admin-filter-bar">
+                  <input
+                    type="text"
+                    className="admin-filter-input"
+                    placeholder="Search videos by title or product..."
+                    value={videoSearch}
+                    onChange={(e) => { setVideoSearch(e.target.value); setVideoPage(1); }}
+                  />
+                </div>
+
+                {/* Videos Table */}
+                <div className="vendors-table-container">
+                  <table className="vendors-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 80 }}>Thumbnail</th>
+                        <th>Title</th>
+                        <th>Attached Product</th>
+                        <th>Order</th>
+                        <th>Status</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedVideos.map((vid) => (
+                        <tr key={vid.id}>
+                          <td>
+                            <img
+                              src={vid.thumbnailUrl || '/placeholder.png'}
+                              alt=""
+                              style={{ width: 44, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }}
+                              onError={(e) => { e.currentTarget.src = '/placeholder.png'; }}
+                            />
+                          </td>
+                          <td>
+                            <strong>{vid.title}</strong>
+                            {vid.description && <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>{vid.description}</p>}
+                          </td>
+                          <td>
+                            {vid.productTitle ? (
+                              <span style={{ fontSize: 13, fontWeight: 600, color: '#0e5c4a' }}>
+                                {vid.productTitle} (₹{vid.productPrice})
                               </span>
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>None</span>
+                            )}
+                          </td>
+                          <td>{vid.displayOrder}</td>
+                          <td>
+                            <span className={`status-badge ${vid.status === 'active' ? 'status-approved' : 'status-rejected'}`}>
+                              {vid.status === 'active' ? 'ACTIVE' : 'INACTIVE'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                               <button
                                 type="button"
-                                className="approve-btn"
-                                style={{
-                                  background: vid.status === 'active' ? '#fef3c7' : '#dcfce7',
-                                  color: vid.status === 'active' ? '#92400e' : '#166534',
-                                  border: 'none',
-                                  padding: '5px 10px',
-                                  borderRadius: 4,
-                                  cursor: 'pointer',
-                                  marginRight: 8,
-                                  fontSize: 12,
-                                  fontWeight: 600
-                                }}
+                                className={vid.status === 'active' ? 'reject-btn' : 'approve-btn'}
+                                style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                                 disabled={busyId === vid.id}
                                 onClick={() => handleToggleVideoStatus(vid)}
+                                title={vid.status === 'active' ? 'Deactivate video' : 'Activate video'}
                               >
-                                {busyId === vid.id ? 'Saving...' : vid.status === 'active' ? 'Deactivate' : 'Activate'}
+                                {busyId === vid.id ? (
+                                  <Loader2 size={13} className="spin" />
+                                ) : vid.status === 'active' ? (
+                                  <XCircle size={13} />
+                                ) : (
+                                  <CheckCircle size={13} />
+                                )}
+                                <span>{busyId === vid.id ? 'Saving...' : vid.status === 'active' ? 'Deactivate' : 'Activate'}</span>
                               </button>
                               <button
                                 type="button"
                                 className="reject-btn"
-                                style={{
-                                  background: '#fee2e2',
-                                  color: '#991b1b',
-                                  border: 'none',
-                                  padding: '5px 10px',
-                                  borderRadius: 4,
-                                  cursor: 'pointer',
-                                  fontSize: 12,
-                                  fontWeight: 600
-                                }}
+                                style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                                 disabled={busyId === vid.id}
                                 onClick={() => handleDeleteVideo(vid.id)}
+                                title={`Delete video "${vid.title}"`}
+                                aria-label="Delete video"
                               >
-                                Delete
+                                <Trash2 size={14} />
                               </button>
-                            </td>
-                          </tr>
-                        ))}
-                        {(!state.videos || state.videos.length === 0) && (
-                          <tr>
-                            <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                              No video reviews or shorts added yet. Use the form above to add your first video!
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredVideos.length === 0 && (
+                        <tr>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                            No video reviews or shorts added yet. Use the form above to add your first video!
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
+
+                <Pagination
+                  currentPage={videoPage}
+                  totalPages={Math.ceil(filteredVideos.length / videoPageSize) || 1}
+                  onPageChange={setVideoPage}
+                  totalItems={filteredVideos.length}
+                  pageSize={videoPageSize}
+                  onPageSizeChange={(sz) => { setVideoPageSize(sz); setVideoPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                />
               </div>
             )}
 
+            {/* ---------------- 7. CUSTOMERS TAB ---------------- */}
             {activeTab === 'customers' && (
               <div className="admin-vendors-section">
                 <div className="vendors-header">
                   <h2>Registered customers</h2>
-                  <p>Accounts from the users table — credentials are never displayed</p>
+                  <p>Accounts from the users table — customer credentials and passwords are never displayed</p>
+                </div>
+
+                <div className="admin-filter-bar">
+                  <input
+                    type="text"
+                    className="admin-filter-input"
+                    placeholder="Search customers by name, email, phone..."
+                    value={customerSearch}
+                    onChange={(e) => { setCustomerSearch(e.target.value); setCustomerPage(1); }}
+                  />
                 </div>
 
                 <div className="vendors-table-container">
@@ -1163,7 +1508,7 @@ export default function AdminDashboard({ onLogout }) {
                       <tr><th>Name</th><th>Email</th><th>Phone</th><th>Registered on</th></tr>
                     </thead>
                     <tbody>
-                      {state.users.map((c) => (
+                      {paginatedUsers.map((c) => (
                         <tr key={c.id}>
                           <td><strong>{c.name}</strong></td>
                           <td>{c.email}</td>
@@ -1173,11 +1518,305 @@ export default function AdminDashboard({ onLogout }) {
                           </td>
                         </tr>
                       ))}
-                      {state.users.length === 0 && (
-                        <tr><td colSpan="4" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No registered customer accounts yet.</td></tr>
+                      {filteredUsers.length === 0 && (
+                        <tr><td colSpan="4" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No customer accounts match your search.</td></tr>
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                <Pagination
+                  currentPage={customerPage}
+                  totalPages={Math.ceil(filteredUsers.length / customerPageSize) || 1}
+                  onPageChange={setCustomerPage}
+                  totalItems={filteredUsers.length}
+                  pageSize={customerPageSize}
+                  onPageSizeChange={(sz) => { setCustomerPageSize(sz); setCustomerPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                />
+              </div>
+            )}
+
+            {/* ---------------- 8. PAYMENT GATEWAY CONFIGURATION & AUDIT ---------------- */}
+            {activeTab === 'payment' && (
+              <div className="payment-audit-container">
+                <div className="payment-card">
+                  <div className="payment-card-header">
+                    <div>
+                      <h3 className="payment-card-title">PhonePe Payment Gateway Status</h3>
+                      <p className="payment-card-subtitle">
+                        Runtime integration mode, credentials masking, and security perimeter audit
+                      </p>
+                    </div>
+                    {paymentConfig.data?.configured ? (
+                      <span className="status-badge status-approved" style={{ fontSize: 13, padding: '6px 14px' }}>
+                        <ShieldCheck size={16} style={{ marginRight: 6 }} /> Active & Configured
+                      </span>
+                    ) : (
+                      <span className="status-badge status-rejected" style={{ fontSize: 13, padding: '6px 14px' }}>
+                        <AlertTriangle size={16} style={{ marginRight: 6 }} /> Gateway Not Configured
+                      </span>
+                    )}
+                  </div>
+
+                  {paymentConfig.loading && (
+                    <p className="admin-loading-note">
+                      <Loader2 size={16} className="spin" /> Querying payment gateway status from backend…
+                    </p>
+                  )}
+
+                  {paymentConfig.error && (
+                    <div className="admin-error-box">
+                      <strong>Payment Gateway Error:</strong> {paymentConfig.error}
+                    </div>
+                  )}
+
+                  {paymentConfig.data && (
+                    <div className="payment-grid-2col">
+                      <div className="payment-kv-item">
+                        <span className="payment-kv-label">Environment Mode</span>
+                        <div className="payment-kv-value">
+                          <span className={`status-badge ${paymentConfig.data.environment === 'production' ? 'status-approved' : 'status-pending'}`}>
+                            {paymentConfig.data.environment === 'production' ? 'PRODUCTION (LIVE)' : 'SANDBOX (TEST)'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="payment-kv-item">
+                        <span className="payment-kv-label">Integration Protocol</span>
+                        <div className="payment-kv-value">
+                          {paymentConfig.data.mode === 'v2' && 'Option B — Standard Checkout v2 (OAuth 2.0)'}
+                          {paymentConfig.data.mode === 'v1' && 'Option A — Hermes PG v1 (SHA256 Checksum)'}
+                          {!paymentConfig.data.mode && 'None detected (Credentials missing)'}
+                        </div>
+                      </div>
+
+                      <div className="payment-kv-item">
+                        <span className="payment-kv-label">Host Endpoint</span>
+                        <div className="payment-kv-value">
+                          <code>{paymentConfig.data.endpointHost}</code>
+                        </div>
+                      </div>
+
+                      <div className="payment-kv-item">
+                        <span className="payment-kv-label">Return / Redirect URL</span>
+                        <div className="payment-kv-value">
+                          {paymentConfig.data.redirectUrl ? <code>{paymentConfig.data.redirectUrl}</code> : <span className="text-muted">Not specified in env</span>}
+                        </div>
+                      </div>
+
+                      {paymentConfig.data.mode === 'v2' && (
+                        <>
+                          <div className="payment-kv-item">
+                            <span className="payment-kv-label">Client ID (PHONEPE_CLIENT_ID)</span>
+                            <div className="payment-kv-value">
+                              {paymentConfig.data.v2.maskedClientId ? <code>{paymentConfig.data.v2.maskedClientId}</code> : <span className="text-muted">Not set</span>}
+                            </div>
+                          </div>
+                          <div className="payment-kv-item">
+                            <span className="payment-kv-label">Client Secret (PHONEPE_CLIENT_SECRET)</span>
+                            <div className="payment-kv-value">
+                              {paymentConfig.data.v2.hasClientSecret ? <code>•••••••••••••••• (Encrypted in env)</code> : <span className="text-muted">Missing</span>}
+                            </div>
+                          </div>
+                          <div className="payment-kv-item">
+                            <span className="payment-kv-label">Client Version</span>
+                            <div className="payment-kv-value">
+                              {paymentConfig.data.v2.clientVersion ? <code>v{paymentConfig.data.v2.clientVersion}</code> : '1'}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {paymentConfig.data.mode === 'v1' && (
+                        <>
+                          <div className="payment-kv-item">
+                            <span className="payment-kv-label">Merchant ID (PHONEPE_MERCHANT_ID)</span>
+                            <div className="payment-kv-value">
+                              {paymentConfig.data.v1.maskedMerchantId ? <code>{paymentConfig.data.v1.maskedMerchantId}</code> : <span className="text-muted">Not set</span>}
+                            </div>
+                          </div>
+                          <div className="payment-kv-item">
+                            <span className="payment-kv-label">Salt Key (PHONEPE_SALT_KEY)</span>
+                            <div className="payment-kv-value">
+                              {paymentConfig.data.v1.hasSaltKey ? <code>•••••••••••••••• (Encrypted in env)</code> : <span className="text-muted">Missing</span>}
+                            </div>
+                          </div>
+                          <div className="payment-kv-item">
+                            <span className="payment-kv-label">Salt Index</span>
+                            <div className="payment-kv-value">
+                              <code>{paymentConfig.data.v1.saltIndex || '1'}</code>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Admin Update PhonePe Credentials Card */}
+                <div className="payment-card">
+                  <div className="payment-card-header">
+                    <div>
+                      <h3 className="payment-card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Lock size={18} color="#0e5c4a" /> Update PhonePe Gateway Credentials
+                      </h3>
+                      <p className="payment-card-subtitle">
+                        Configure PhonePe Merchant ID and Salt Key. Only authorized administrators can view and modify these credentials.
+                      </p>
+                    </div>
+                  </div>
+
+                  {paymentSaveMsg.text && (
+                    <div className={`payment-feedback-banner ${paymentSaveMsg.type}`}>
+                      {paymentSaveMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+                      <span>{paymentSaveMsg.text}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSavePaymentConfig} className="payment-edit-form">
+                    <div className="payment-form-grid">
+                      <div className="payment-form-group">
+                        <label className="payment-label">Environment Mode</label>
+                        <select
+                          className="payment-select"
+                          value={paymentForm.environment}
+                          onChange={(e) => setPaymentForm({ ...paymentForm, environment: e.target.value })}
+                        >
+                          <option value="production">Production Live (https://api.phonepe.com)</option>
+                          <option value="sandbox">Sandbox Test (https://api-preprod.phonepe.com)</option>
+                        </select>
+                        <p className="payment-help-text">Select Production for live marketplace checkout.</p>
+                      </div>
+
+                      <div className="payment-form-group">
+                        <label className="payment-label">PhonePe Merchant ID (MID)</label>
+                        <input
+                          type="text"
+                          className="payment-input"
+                          placeholder="e.g. M22K4X0544GUAZ"
+                          value={paymentForm.merchantId}
+                          onChange={(e) => setPaymentForm({ ...paymentForm, merchantId: e.target.value })}
+                          required
+                        />
+                        <p className="payment-help-text">Unique merchant identifier provided by PhonePe.</p>
+                      </div>
+
+                      <div className="payment-form-group">
+                        <label className="payment-label">
+                          PhonePe Salt Key (Secret)
+                          {paymentConfig.data?.v1?.hasSaltKey ? (
+                            <span className="payment-key-status active">
+                              <CheckCircle2 size={13} /> Active in DB
+                            </span>
+                          ) : (
+                            <span className="payment-key-status missing">
+                              <AlertTriangle size={13} /> Missing
+                            </span>
+                          )}
+                        </label>
+                        <div className="payment-password-wrap">
+                          <input
+                            type={paymentForm.showSaltKey ? 'text' : 'password'}
+                            className="payment-input"
+                            placeholder={paymentConfig.data?.v1?.hasSaltKey ? '•••••••••••••••• (Leave blank to keep existing key)' : 'Enter PhonePe Salt Key'}
+                            value={paymentForm.saltKey}
+                            onChange={(e) => setPaymentForm({ ...paymentForm, saltKey: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            className="payment-toggle-visibility-btn"
+                            onClick={() => setPaymentForm({ ...paymentForm, showSaltKey: !paymentForm.showSaltKey })}
+                            title={paymentForm.showSaltKey ? 'Hide Salt Key' : 'Show Salt Key'}
+                          >
+                            {paymentForm.showSaltKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                        <p className="payment-help-text">
+                          {paymentConfig.data?.v1?.hasSaltKey
+                            ? 'Leave empty to preserve active salt key, or enter a new key to update.'
+                            : 'Enter the Salt Key provided by PhonePe onboarding team.'}
+                        </p>
+                      </div>
+
+                      <div className="payment-form-group">
+                        <label className="payment-label">Salt Index</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="99"
+                          className="payment-input"
+                          placeholder="1"
+                          value={paymentForm.saltIndex}
+                          onChange={(e) => setPaymentForm({ ...paymentForm, saltIndex: e.target.value })}
+                        />
+                        <p className="payment-help-text">Default is 1 (matches the key index in PhonePe).</p>
+                      </div>
+
+                      <div className="payment-form-group full-width">
+                        <label className="payment-label">Return / Redirect URL</label>
+                        <input
+                          type="text"
+                          className="payment-input"
+                          placeholder="https://ec-shopping.vercel.app/order-success"
+                          value={paymentForm.redirectUrl}
+                          onChange={(e) => setPaymentForm({ ...paymentForm, redirectUrl: e.target.value })}
+                        />
+                        <p className="payment-help-text">Customer redirect landing page after hosted checkout.</p>
+                      </div>
+                    </div>
+
+                    <div className="payment-form-actions">
+                      <button
+                        type="submit"
+                        className="payment-save-btn"
+                        disabled={savingPayment || paymentConfig.loading}
+                      >
+                        {savingPayment ? (
+                          <>
+                            <RefreshCw size={16} className="spin" /> Saving Settings...
+                          </>
+                        ) : (
+                          <>
+                            <Save size={16} /> Save Payment Configuration
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Whitelist and Security Perimeter Advice */}
+                <div className="payment-card">
+                  <h3 className="payment-card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Globe size={18} color="#0e5c4a" /> Whitelisted Origins & Domains Required
+                  </h3>
+                  <p className="payment-card-subtitle" style={{ marginBottom: 16 }}>
+                    PhonePe requires that all transaction initiating origins and redirect targets be registered in the merchant profile.
+                  </p>
+
+                  <div className="payment-callout info" style={{ marginBottom: 16 }}>
+                    <strong>Registered Production Domains:</strong>
+                    <ul style={{ margin: '8px 0 0 0', paddingLeft: 20 }}>
+                      <li>Frontend Storefront: <code>https://ec-shopping.vercel.app</code></li>
+                      <li>Backend API: <code>https://ec-shopping-three.vercel.app</code></li>
+                    </ul>
+                  </div>
+
+                  <div className="payment-callout warning">
+                    <strong>Notice on PhonePe Security Firewall (INTERNAL_SECURITY_BLOCK_1):</strong>
+                    <p style={{ margin: '6px 0 0' }}>
+                      The error <code>INTERNAL_SECURITY_BLOCK_1</code> received during hosted checkout UPI QR generation is enforced by PhonePe&apos;s internal fraud and risk firewall. It occurs when:
+                    </p>
+                    <ol style={{ margin: '6px 0 0', paddingLeft: 20 }}>
+                      <li>The production domain is not explicitly whitelisted in PhonePe Merchant Portal under <em>Developer Settings &gt; Whitelisted Domains</em>.</li>
+                      <li>The merchant account has incomplete KYC / compliance approval for dynamic QR issuance.</li>
+                      <li>Payment method <code>UPI_QR</code> has not been enabled on the MID by PhonePe operations.</li>
+                    </ol>
+                    <p style={{ margin: '8px 0 0' }}>
+                      <em>Adding payment configuration forms in this admin panel does NOT override PhonePe&apos;s server-side security checks. Please log in to the PhonePe Merchant Portal to submit domain whitelist requests and activate UPI QR.</em>
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

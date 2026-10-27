@@ -1,6 +1,7 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PackageSearch, Receipt, ArrowRight, MapPin } from 'lucide-react';
+import { PackageSearch, Receipt, ArrowRight, MapPin, Ban, X, AlertCircle } from 'lucide-react';
+import api from '../utils/api';
 import { getOrders, syncOrdersFromServerDetailed } from '../utils/storage';
 import { paymentStatusDisplay } from '../utils/orderSync';
 import { formatINR } from '../utils/pricing';
@@ -16,6 +17,10 @@ import './Orders.css';
 export default function Orders({ loggedInCustomer, onOpenLogin }) {
   const [, setVersion] = useState(0);
   const [sync, setSync] = useState({ loading: true, error: null });
+  const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [cancelReason, setCancelReason] = useState('Changed my mind');
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,6 +36,54 @@ export default function Orders({ loggedInCustomer, onOpenLogin }) {
     });
     return () => { cancelled = true; };
   }, [loggedInCustomer?.email]);
+
+  const isCancellable = (status) => {
+    const s = (status || '').toLowerCase();
+    return s === 'processing' || s === 'pending' || s === 'confirmed';
+  };
+
+  const handleOpenCancelModal = (order) => {
+    setCancellingOrder(order);
+    setCancelReason('Changed my mind');
+    setCancelError(null);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancellingOrder) return;
+    setCancelSubmitting(true);
+    setCancelError(null);
+
+    try {
+      const res = await api.cancelCustomerOrder(cancellingOrder.id, cancelReason);
+      if (res?.success) {
+        const stored = getOrders();
+        const updated = stored.map((o) =>
+          String(o.id) === String(cancellingOrder.id) || String(o.orderNumber) === String(cancellingOrder.id)
+            ? { ...o, status: 'Cancelled' }
+            : o
+        );
+        localStorage.setItem('ecshopping_orders', JSON.stringify(updated));
+
+        try {
+          const last = JSON.parse(localStorage.getItem('ecshopping_last_order') || 'null');
+          if (last && (String(last.id) === String(cancellingOrder.id) || String(last.orderNumber) === String(cancellingOrder.id))) {
+            localStorage.setItem('ecshopping_last_order', JSON.stringify({ ...last, status: 'Cancelled' }));
+          }
+        } catch {
+          /* ignore cache error */
+        }
+
+        setVersion((v) => v + 1);
+        setCancellingOrder(null);
+      } else {
+        setCancelError(res?.error || 'Unable to cancel order right now.');
+      }
+    } catch (err) {
+      setCancelError(err?.message || 'Unable to cancel order right now. Please try again.');
+    } finally {
+      setCancelSubmitting(false);
+    }
+  };
 
   if (!loggedInCustomer) {
     return (
@@ -157,6 +210,17 @@ export default function Orders({ loggedInCustomer, onOpenLogin }) {
                     <div className="order-actions">
                       <Link to={`/orders/${order.id}`} className="btn btn-sm btn-outline">View details</Link>
                       <Link to={`/track-order?id=${encodeURIComponent(order.id)}`} className="btn btn-sm btn-ghost">Track</Link>
+                      {isCancellable(order.status) && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline btn-cancel-order"
+                          style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+                          onClick={() => handleOpenCancelModal(order)}
+                          title="Cancel this order"
+                        >
+                          <Ban size={13} /> Cancel
+                        </button>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -169,6 +233,67 @@ export default function Orders({ loggedInCustomer, onOpenLogin }) {
           </>
         )}
       </div>
+
+      {/* Cancellation Modal */}
+      {cancellingOrder && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="orders-cancel-title">
+          <div className="modal-dialog">
+            <div className="modal-header">
+              <h3 id="orders-cancel-title">Cancel Order #{cancellingOrder.orderNumber || cancellingOrder.id}</h3>
+              <button type="button" className="close-btn" onClick={() => setCancellingOrder(null)} aria-label="Close">
+                <X size={20} />
+              </button>
+            </div>
+
+            {cancelError && (
+              <div className="alert-banner error" style={{ margin: '15px 20px 0' }}>
+                <AlertCircle size={18} /> {cancelError}
+              </div>
+            )}
+
+            <div style={{ padding: '20px' }}>
+              <p style={{ color: 'var(--muted)', fontSize: '14px', lineHeight: 1.5, margin: 0 }}>
+                Are you sure you want to cancel this order? Once cancelled, items are automatically restocked.
+                If you paid online via PhonePe, a refund will be processed back to your payment method.
+              </p>
+
+              <div style={{ marginTop: '16px' }}>
+                <label htmlFor="orders-cancel-reason-select" style={{ fontWeight: 600, fontSize: '13px', display: 'block', marginBottom: '6px' }}>
+                  Reason for Cancellation
+                </label>
+                <select
+                  id="orders-cancel-reason-select"
+                  className="input"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="Changed my mind">Changed my mind</option>
+                  <option value="Ordered by mistake">Ordered by mistake</option>
+                  <option value="Found a better price elsewhere">Found a better price elsewhere</option>
+                  <option value="Delivery taking too long">Delivery taking too long</option>
+                  <option value="Other">Other reason</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '16px 20px', borderTop: '1px solid var(--line)' }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setCancellingOrder(null)}>
+                Keep Order
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+                onClick={handleConfirmCancel}
+                disabled={cancelSubmitting}
+              >
+                {cancelSubmitting ? 'Cancelling...' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

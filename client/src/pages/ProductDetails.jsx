@@ -11,7 +11,10 @@ import {
   PackageSearch,
   BadgeCheck,
   Share2,
-  MapPin
+  MapPin,
+  Ban,
+  AlertCircle,
+  Check
 } from 'lucide-react';
 import { mapServerProduct } from '../data/mapProduct';
 import { fetchRelatedProducts } from '../data/storefront';
@@ -259,6 +262,9 @@ export default function ProductDetails({ onAddToCart }) {
           <div className="pdp-gallery">
             <div className="pdp-main-image">
               {off > 0 && <span className="badge badge-sale pdp-off-badge">{off}% off</span>}
+              {product.inStock === false && (
+                <span className="pdp-stock-badge out-of-stock">Out of stock</span>
+              )}
               <img
                 src={gallery[activeImage] || undefined}
                 alt={`${product.title} — image ${activeImage + 1}`}
@@ -353,6 +359,18 @@ export default function ProductDetails({ onAddToCart }) {
               <p className="tiny muted">Inclusive of all taxes · Shipping calculated at checkout</p>
             </div>
 
+            <div className="pdp-stock-status-bar">
+              {product.inStock === false ? (
+                <div className="pdp-stock-status out-of-stock">
+                  <Ban size={14} /> <span>Currently Out of Stock</span>
+                </div>
+              ) : (
+                <div className="pdp-stock-status in-stock">
+                  <Check size={14} /> <span>In Stock & Ready to Ship</span>
+                </div>
+              )}
+            </div>
+
             <p className="pdp-description">{product.description}</p>
 
             {product.variants && product.variants.length > 0 && (
@@ -379,27 +397,39 @@ export default function ProductDetails({ onAddToCart }) {
             )}
 
             <div className="pdp-buy-row">
-              <QuantityStepper value={quantity} onChange={setQuantity} label="quantity" max={10} />
+              <QuantityStepper value={quantity} onChange={setQuantity} label="quantity" max={10} disabled={product.inStock === false} />
               <button
                 type="button"
-                className="btn btn-primary btn-lg pdp-add-btn"
+                className={`btn btn-lg pdp-add-btn ${product.inStock === false ? 'btn-disabled pdp-btn-out-of-stock' : 'btn-primary'}`}
                 onClick={handleAdd}
                 disabled={product.inStock === false}
               >
-                <ShoppingCart size={17} /> {added ? 'Added to cart' : 'Add to cart'}
+                {product.inStock === false ? (
+                  <>
+                    <Ban size={17} /> Out of stock
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart size={17} /> {added ? 'Added to cart' : 'Add to cart'}
+                  </>
+                )}
               </button>
-              <button
-                type="button"
-                className="btn btn-dark btn-lg pdp-buy-btn"
-                onClick={handleBuyNow}
-                disabled={product.inStock === false}
-              >
-                <Zap size={17} /> Buy now
-              </button>
+              {product.inStock !== false && (
+                <button
+                  type="button"
+                  className="btn btn-dark btn-lg pdp-buy-btn"
+                  onClick={handleBuyNow}
+                >
+                  <Zap size={17} /> Buy now
+                </button>
+              )}
             </div>
 
             {product.inStock === false ? (
-              <p className="notice notice-danger pdp-stock-note">This item is currently out of stock.</p>
+              <div className="notice notice-danger pdp-stock-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                <span><strong>Currently Out of Stock:</strong> This item is unavailable right now and cannot be ordered.</span>
+              </div>
             ) : (
               <p className="notice notice-success pdp-stock-note">
                 <strong>In stock</strong> · Dispatched by {product.seller}.

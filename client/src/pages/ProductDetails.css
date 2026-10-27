@@ -278,3 +278,59 @@
   .pdp-buy-row .qty-stepper { width: 100%; justify-content: space-between; }
   .pdp-assurances { grid-template-columns: 1fr; }
 }
+
+/* ---------------- Out of Stock Indicators ---------------- */
+
+.pdp-stock-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: var(--r-xs);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+.pdp-stock-badge.out-of-stock {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.pdp-stock-status-bar {
+  margin: 12px 0 16px;
+}
+
+.pdp-stock-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.pdp-stock-status.out-of-stock {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.pdp-stock-status.in-stock {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.pdp-btn-out-of-stock {
+  background: #94a3b8 !important;
+  border-color: #94a3b8 !important;
+  color: #ffffff !important;
+  cursor: not-allowed !important;
+  opacity: 0.85;
+}

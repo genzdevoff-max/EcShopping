@@ -20,13 +20,16 @@ import {
   Check,
   AlertCircle,
   Star,
-  XCircle
+  XCircle,
+  Menu,
+  X
 } from 'lucide-react';
 import brandLogoWithBg from '../../assets/logo/logo.png';
 import CategoryManager from './CategoryManager';
 import AddProduct from './AddProduct';
 import AllProducts from './AllProducts';
 import EditProduct from './EditProduct';
+import Pagination from '../../components/ui/Pagination';
 import api, { authSessions } from '../../utils/api';
 import { 
   getProducts, 
@@ -63,6 +66,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
   const activeTab = getTabFromPath();
 
   const handleNavigate = (tabKey) => {
+    setSidebarOpen(false);
     switch (tabKey) {
       case 'dashboard':
         navigate('/vendor/dashboard');
@@ -110,6 +114,15 @@ export default function VendorDashboard({ vendor, onLogout }) {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Pagination states
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderPageSize, setOrderPageSize] = useState(10);
+  const [stockPage, setStockPage] = useState(1);
+  const [stockPageSize, setStockPageSize] = useState(10);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewPageSize, setReviewPageSize] = useState(10);
 
   // Add Product form state
   const [newProduct, setNewProduct] = useState({
@@ -166,6 +179,10 @@ export default function VendorDashboard({ vendor, onLogout }) {
     setEditingProductId(null);
     loadData();
   }, [vendor?.id, activeTab]);
+
+  useEffect(() => {
+    setOrderPage(1);
+  }, [orderFilter]);
 
   // Reviews are fetched from the server for this vendor's products only.
   useEffect(() => {
@@ -285,6 +302,21 @@ export default function VendorDashboard({ vendor, onLogout }) {
     return (o.status || 'Processing').toLowerCase() === orderFilter.toLowerCase();
   });
 
+  const paginatedOrders = filteredOrders.slice(
+    (orderPage - 1) * orderPageSize,
+    orderPage * orderPageSize
+  );
+
+  const paginatedStockProducts = products.slice(
+    (stockPage - 1) * stockPageSize,
+    stockPage * stockPageSize
+  );
+
+  const paginatedReviews = reviews.slice(
+    (reviewPage - 1) * reviewPageSize,
+    reviewPage * reviewPageSize
+  );
+
   const statusBadgeStyle = (status) => {
     const colors = {
       approved: { background: '#dcfce7', color: '#166534' },
@@ -371,8 +403,16 @@ export default function VendorDashboard({ vendor, onLogout }) {
 
   return (
     <div className="vendor-layout">
+      {/* Mobile Drawer Backdrop */}
+      {sidebarOpen && (
+        <div
+          className="vendor-sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* ================= SIDEBAR ================= */}
-      <aside className="vendor-sidebar">
+      <aside className={`vendor-sidebar ${sidebarOpen ? 'open' : ''}`}>
         {/* 1. Brand Logo */}
         <div className="vendor-sidebar-header">
           <Link to="/" className="vendor-brand-logo-link" title="Go to Storefront">
@@ -542,18 +582,28 @@ export default function VendorDashboard({ vendor, onLogout }) {
         {/* Top Header Bar */}
         <header className="vendor-top-header">
           <div className="vendor-header-left">
-            <h1>
-              {activeTab === 'dashboard' && 'Vendor Dashboard'}
-              {activeTab === 'products-category' && 'Product Categories'}
-              {activeTab === 'products-add' && 'Add New Product'}
-              {activeTab === 'products-all' && 'All Products'}
-              {activeTab === 'products-pending' && 'Products Received — Pending Approval'}
-              {activeTab === 'products-rejected' && 'Products Rejected by Admin'}
-              {activeTab === 'orders' && 'Orders Received'}
-              {activeTab === 'stocks' && 'Stock Management'}
-              {activeTab === 'reviews' && 'Customer Reviews'}
-              {activeTab === 'settings' && 'Vendor Settings'}
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                type="button"
+                className="vendor-menu-toggle"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                title="Toggle navigation"
+              >
+                <Menu size={20} />
+              </button>
+              <h1>
+                {activeTab === 'dashboard' && 'Vendor Dashboard'}
+                {activeTab === 'products-category' && 'Product Categories'}
+                {activeTab === 'products-add' && 'Add New Product'}
+                {activeTab === 'products-all' && 'All Products'}
+                {activeTab === 'products-pending' && 'Products Received — Pending Approval'}
+                {activeTab === 'products-rejected' && 'Products Rejected by Admin'}
+                {activeTab === 'orders' && 'Orders Received'}
+                {activeTab === 'stocks' && 'Stock Management'}
+                {activeTab === 'reviews' && 'Customer Reviews'}
+                {activeTab === 'settings' && 'Vendor Settings'}
+              </h1>
+            </div>
             <p>
               {activeTab === 'dashboard' && `Welcome back, ${vendor.name} — Here is your sales & catalog performance overview.`}
               {activeTab === 'products-category' && 'Browse categories and organize your catalog for customers.'}
@@ -758,7 +808,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((p) => {
+                  {paginatedStockProducts.map((p) => {
                     const inStock = p.stockStatus !== 'out_of_stock' && p.inStock !== false;
                     return (
                       <tr key={p.id}>
@@ -810,6 +860,18 @@ export default function VendorDashboard({ vendor, onLogout }) {
                   )}
                 </tbody>
               </table>
+
+              <div style={{ padding: '14px 18px', borderTop: '1px solid #e2e8f0' }}>
+                <Pagination
+                  currentPage={stockPage}
+                  totalPages={Math.ceil(products.length / stockPageSize) || 1}
+                  onPageChange={setStockPage}
+                  totalItems={products.length}
+                  pageSize={stockPageSize}
+                  onPageSizeChange={(sz) => { setStockPageSize(sz); setStockPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                />
+              </div>
             </div>
           )}
 
@@ -828,7 +890,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
                   <p style={{ margin: 0 }}>Customer reviews for your products will appear here.</p>
                 </div>
               )}
-              {!reviewsLoading && reviews.map((review) => (
+              {!reviewsLoading && paginatedReviews.map((review) => (
                 <article key={review.id} className="vendor-review-card">
                   <div className="vendor-review-head">
                     <div>
@@ -851,6 +913,19 @@ export default function VendorDashboard({ vendor, onLogout }) {
                   <p className="vendor-review-text">{review.comment}</p>
                 </article>
               ))}
+            </div>
+          )}
+          {activeTab === 'reviews' && reviews.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <Pagination
+                currentPage={reviewPage}
+                totalPages={Math.ceil(reviews.length / reviewPageSize) || 1}
+                onPageChange={setReviewPage}
+                totalItems={reviews.length}
+                pageSize={reviewPageSize}
+                onPageSizeChange={(sz) => { setReviewPageSize(sz); setReviewPage(1); }}
+                pageSizeOptions={[10, 25, 50]}
+              />
             </div>
           )}
 
@@ -899,7 +974,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map(order => {
+                  {paginatedOrders.map(order => {
                     const itemsForThisVendor = order.vendorItems || order.items || [];
                     const vendorSubtotal = itemsForThisVendor.reduce((sum, item) => {
                       const priceStr = (item.price || '0').toString().replace(/[^0-9.-]+/g, "");
@@ -963,6 +1038,18 @@ export default function VendorDashboard({ vendor, onLogout }) {
                   )}
                 </tbody>
               </table>
+
+              <div style={{ padding: '14px 18px', borderTop: '1px solid #e2e8f0' }}>
+                <Pagination
+                  currentPage={orderPage}
+                  totalPages={Math.ceil(filteredOrders.length / orderPageSize) || 1}
+                  onPageChange={setOrderPage}
+                  totalItems={filteredOrders.length}
+                  pageSize={orderPageSize}
+                  onPageSizeChange={(sz) => { setOrderPageSize(sz); setOrderPage(1); }}
+                  pageSizeOptions={[10, 25, 50]}
+                />
+              </div>
             </div>
           )}
 

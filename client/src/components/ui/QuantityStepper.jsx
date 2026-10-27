@@ -7,16 +7,17 @@ export default function QuantityStepper({
   min = 1,
   max = 99,
   small = false,
-  label = 'quantity'
+  label = 'quantity',
+  disabled = false
 }) {
   const clamp = (n) => Math.min(max, Math.max(min, n));
 
   return (
-    <div className={`qty-stepper ${small ? 'sm' : ''}`} role="group" aria-label={`Adjust ${label}`}>
+    <div className={`qty-stepper ${small ? 'sm' : ''} ${disabled ? 'disabled' : ''}`} role="group" aria-label={`Adjust ${label}`}>
       <button
         type="button"
-        onClick={() => onChange && onChange(clamp(value - 1))}
-        disabled={value <= min}
+        onClick={() => !disabled && onChange && onChange(clamp(value - 1))}
+        disabled={disabled || value <= min}
         aria-label={`Decrease ${label}`}
       >
         <Minus size={small ? 13 : 15} />
@@ -24,8 +25,8 @@ export default function QuantityStepper({
       <span className="qty-value" aria-live="polite">{value}</span>
       <button
         type="button"
-        onClick={() => onChange && onChange(clamp(value + 1))}
-        disabled={value >= max}
+        onClick={() => !disabled && onChange && onChange(clamp(value + 1))}
+        disabled={disabled || value >= max}
         aria-label={`Increase ${label}`}
       >
         <Plus size={small ? 13 : 15} />

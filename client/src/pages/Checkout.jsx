@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Truck, Banknote, Tag, ArrowRight, Lock, CheckCircle2, MapPin, Plus } from 'lucide-react';
+import { ShoppingBag, Truck, Banknote, Tag, ArrowRight, Lock, CheckCircle2, MapPin, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { addCustomer, saveCustomerSession } from '../utils/storage';
 import api from '../utils/api';
 import {
@@ -320,6 +320,19 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
     }
   };
 
+  const handleRemoveItem = (item) => {
+    const lineKey = ctx?.lineKeyOf ? ctx.lineKeyOf(item.id, item.variant) : `${item.id}::${item.variant || 'default'}`;
+    if (ctx?.remove) {
+      ctx.remove(lineKey);
+    } else if (ctx?.removeItem) {
+      ctx.removeItem(item.id);
+    }
+    // Clear submission error banner so user can re-submit with remaining items
+    if (errors.form) {
+      setErrors((prev) => ({ ...prev, form: null }));
+    }
+  };
+
   const fieldError = (key) => (errors[key] ? <p className="field-error" role="alert">{errors[key]}</p> : null);
 
   return (
@@ -332,7 +345,12 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
 
       <form className="container checkout-layout" onSubmit={placeOrder} noValidate>
         {errors.form && (
-          <p className="field-error" role="alert" style={{ marginBottom: '1rem' }}>{errors.form}</p>
+          <div className="notice notice-danger" role="alert" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}>
+            <AlertCircle size={20} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, fontSize: 14 }}>
+              <strong>Unable to place order:</strong> {errors.form}
+            </div>
+          </div>
         )}
         <div className="checkout-main">
           {/* 1 — Contact */}
@@ -608,17 +626,31 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
             <h2>Your order</h2>
 
             <ul className="co-items">
-              {items.map((item) => (
-                <li key={`${item.id}::${item.variant || 'default'}`}>
-                  <img src={item.image} alt="" width="48" height="48" />
-                  <span className="co-item-name">
-                    {item.title}
-                    {item.variant && <small> · {item.variant}</small>}
-                    <small>Qty {item.quantity}</small>
-                  </span>
-                  <span className="co-item-price">{formatINR((Number(item.price) || 0) * item.quantity)}</span>
-                </li>
-              ))}
+              {items.map((item) => {
+                const lineKey = ctx?.lineKeyOf ? ctx.lineKeyOf(item.id, item.variant) : `${item.id}::${item.variant || 'default'}`;
+                return (
+                  <li key={lineKey} className="co-item-row">
+                    <img src={item.image} alt="" width="48" height="48" />
+                    <span className="co-item-name">
+                      {item.title}
+                      {item.variant && <small> · {item.variant}</small>}
+                      <small>Qty {item.quantity}</small>
+                    </span>
+                    <div className="co-item-right">
+                      <span className="co-item-price">{formatINR((Number(item.price) || 0) * item.quantity)}</span>
+                      <button
+                        type="button"
+                        className="co-item-remove-btn"
+                        onClick={() => handleRemoveItem(item)}
+                        title={`Remove ${item.title} from checkout`}
+                        aria-label={`Remove ${item.title}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
 
             {/* Coupon */}

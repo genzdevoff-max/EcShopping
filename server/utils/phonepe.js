@@ -125,6 +125,21 @@ export const assertPaisa = (paisa) => Number.isInteger(Number(paisa))
 
 export const phonePeError = (status, message) => Object.assign(new Error(message), { status });
 
+/**
+ * Sanitizes merchantUserId to strictly adhere to PhonePe specifications:
+ * - Alphanumeric characters only [a-zA-Z0-9]
+ * - Length strictly between 1 and 35 characters (< 36)
+ * - Zero PII (never email or mobile number)
+ */
+export const sanitizeMerchantUserId = (rawUserId, fallbackOrderId) => {
+  const sanitized = String(rawUserId || '').replace(/[^a-zA-Z0-9]/g, '');
+  if (sanitized.length >= 3) {
+    return sanitized.slice(0, 35);
+  }
+  const cleanFallback = String(fallbackOrderId || '').replace(/[^a-zA-Z0-9]/g, '');
+  return ('MUID' + cleanFallback).slice(0, 35);
+};
+
 export async function createCheckoutPayment({ merchantOrderId, amountPaisa, redirectUrl, metaInfo, expireAfter }) {
   if (!assertPaisa(amountPaisa)) throw phonePeError(400, 'Payment amount is outside the gateway limits');
 
@@ -141,7 +156,10 @@ export async function createCheckoutPayment({ merchantOrderId, amountPaisa, redi
     const payload = {
       merchantId: optA.merchantId,
       merchantTransactionId: String(merchantOrderId),
-      merchantUserId: String(metaInfo?.udf2 || 'MUID_' + String(merchantOrderId).replace(/[^a-zA-Z0-9]/g, '')).slice(0, 36),
+      merchantUserId: sanitizeMerchantUserId(
+        metaInfo?.merchantUserId,
+        merchantOrderId
+      ),
       amount: Number(amountPaisa),
       redirectUrl: effectiveRedirect,
       redirectMode: 'REDIRECT',

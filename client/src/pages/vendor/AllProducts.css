@@ -1176,3 +1176,29 @@
 
 .modal-spin { animation: modal-spin-rot 0.9s linear infinite; }
 @keyframes modal-spin-rot { to { transform: rotate(360deg); } }
+
+
+/* Bounded data table container and sticky headers override */
+.table-responsive-wrapper {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  max-height: calc(100vh - 360px) !important;
+  min-height: 260px !important;
+  width: 100% !important;
+  position: relative !important;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.all-prod-table {
+  width: 100% !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.all-prod-table th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 5 !important;
+  background-color: #f8fafc !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+}

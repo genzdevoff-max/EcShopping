@@ -465,21 +465,23 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(12, 27, 22, 0.55);
-  backdrop-filter: blur(3px);
+  background: rgba(12, 27, 22, 0.58);
+  backdrop-filter: blur(4px);
   animation: auth-fade 0.18s var(--ease, ease);
 }
 
 .auth-modal {
   width: 100%;
-  max-width: 460px;
-  max-height: calc(100vh - 40px);
-  overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-xl);
-  box-shadow: var(--sh-lg);
+  max-width: 430px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: var(--r-xl, 16px);
+  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.15), 0 10px 12px -5px rgba(0, 0, 0, 0.08);
   animation: auth-pop 0.2s var(--ease, ease);
+  overflow: hidden;
 }
 
 .auth-modal-top {
@@ -487,16 +489,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 0;
-  background: var(--surface);
-  z-index: 1;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line, #e2e8f0);
+  background: var(--surface, #ffffff);
+  flex-shrink: 0;
 }
 
 .auth-modal-brand {
-  height: 30px;
+  height: 28px;
   width: auto;
   object-fit: contain;
 }
@@ -505,22 +505,100 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--line);
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line, #cbd5e1);
   border-radius: 50%;
-  background: var(--paper-2, var(--surface));
-  color: var(--ink-2, var(--ink));
+  background: var(--paper-2, #f8fafc);
+  color: var(--ink-2, #64748b);
   cursor: pointer;
-  transition: border-color 0.15s var(--ease, ease), color 0.15s var(--ease, ease);
+  transition: all 0.15s ease;
 }
 
-.auth-modal-close:hover { border-color: var(--brand-300, var(--brand)); color: var(--brand); }
+.auth-modal-close:hover {
+  border-color: var(--brand, #0e5c4a);
+  color: var(--brand, #0e5c4a);
+  background: #ffffff;
+}
 
-.auth-modal-body { padding: clamp(22px, 4vw, 32px); }
+.auth-modal-body {
+  padding: 20px 24px 22px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
 
-.auth-modal .auth-form-box { max-width: none; }
-.auth-modal .auth-form-header h1 { font-size: clamp(1.35rem, 4vw, 1.6rem); }
+.auth-modal .auth-form-box {
+  max-width: none;
+}
+
+.auth-modal .auth-form-header h1 {
+  font-size: 1.35rem;
+  margin-bottom: 6px;
+}
+
+/* Compact Auth Modal Tabs */
+.auth-compact-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 9px;
+  margin-bottom: 16px;
+}
+
+.auth-compact-tab {
+  padding: 7px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.auth-compact-tab.active {
+  background: #ffffff;
+  color: #0e5c4a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.compact-mode .field {
+  margin-bottom: 12px;
+}
+
+.compact-mode .auth-form {
+  gap: 11px;
+}
+
+.compact-mode .field-label {
+  font-size: 0.82rem;
+  margin-bottom: 3px;
+}
+
+.compact-mode .auth-input {
+  height: 40px;
+  font-size: 0.88rem;
+  padding-left: 36px;
+}
+
+.compact-mode .auth-actions-row {
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+.compact-mode .auth-buttons {
+  margin-top: 4px;
+}
+
+.compact-mode .auth-switch-mode {
+  margin-top: 12px;
+  padding-top: 10px;
+  font-size: 0.82rem;
+}
 
 @keyframes auth-fade {
   from { opacity: 0; }
@@ -538,12 +616,17 @@
 }
 
 @media (max-width: 480px) {
-  .auth-modal-overlay { padding: 0; align-items: flex-end; }
+  .auth-modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
   .auth-modal {
     max-width: none;
-    border-radius: var(--r-xl) var(--r-xl) 0 0;
-    max-height: 92vh;
+    border-radius: 20px 20px 0 0;
+    max-height: 88vh;
     padding-bottom: env(safe-area-inset-bottom, 16px);
   }
-  .auth-modal .auth-buttons { flex-direction: column; }
+  .auth-modal .auth-buttons {
+    flex-direction: column;
+  }
 }

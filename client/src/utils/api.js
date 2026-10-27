@@ -204,6 +204,12 @@ export const api = {
     request('/api/payments/phonepe/create-payment', { method: 'POST', body: { orderId }, role: 'customer' }),
   verifyPhonePePayment: (orderId) =>
     request('/api/payments/phonepe/verify', { method: 'POST', body: { orderId }, role: 'customer' }),
+
+  /* Payment Gateway configuration (Admin only — read and update) */
+  getPaymentConfig: () =>
+    request('/api/admin/payment-config', { role: 'admin' }),
+  updatePaymentConfig: (config) =>
+    request('/api/admin/payment-config', { method: 'PUT', body: config, role: 'admin' }),
 };
 
 export default api;

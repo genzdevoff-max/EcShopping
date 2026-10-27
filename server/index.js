@@ -2,6 +2,12 @@ import express from 'express';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import dns from 'node:dns';
+
+// Prefer IPv4 over IPv6 for external connections to avoid Gmail SMTP IPv6 ETIMEDOUT
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
 import { v2 as cloudinary } from 'cloudinary';
 import crypto, { randomInt } from 'node:crypto';
 import multer from 'multer';
@@ -30,7 +36,8 @@ import {
   getOrderStatus,
   mapPhonePeState,
   latestTransactionId,
-  validatePhonePeConfig
+  validatePhonePeConfig,
+  resetTokenCache
 } from './utils/phonepe.js';
 import { validateImageUpload, extractCloudinaryPublicId } from './utils/media.js';
 
@@ -76,8 +83,24 @@ app.get('/', (req, res) => {
   });
 });
 
-// Initialize TiDB Cloud Database tables (clean, no dummy data)
-initDatabase();
+// Initialize TiDB Cloud Database tables and hydrate runtime platform settings
+initDatabase()
+  .then(async () => {
+    try {
+      const [rows] = await pool.query('SELECT setting_key, setting_value FROM platform_settings');
+      for (const { setting_key, setting_value } of rows) {
+        if (setting_value !== null && setting_value !== undefined && setting_value !== '') {
+          process.env[setting_key] = setting_value;
+        }
+      }
+      if (rows.length > 0) {
+        console.log(`✅ Loaded ${rows.length} platform setting(s) from database`);
+      }
+    } catch {
+      /* platform_settings table will be created if not exists */
+    }
+  })
+  .catch((err) => console.error('Error hydrating platform settings:', err.message));
 
 const smtpPort = Number(process.env.SMTP_PORT) || 465;
 const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -1679,6 +1702,7 @@ app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
   // vendorId/vendorName for the owner are never trusted.
   const ownVendorId = req.auth.role === 'vendor' ? req.auth.vendorId : null;
   const ownVendorName = req.auth.role === 'vendor' ? req.auth.name : (vendorName || '');
+  let ownVendorEmail = req.auth.role === 'vendor' ? (req.auth.email || '') : '';
 
   try {
     const productId = id || ('p' + Date.now());
@@ -1723,13 +1747,29 @@ app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
     const [rows] = await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products WHERE id = ?`, [productId]);
     console.log(`✅ [TiDB] Product submitted (pending approval): ${title} by ${ownVendorName || ownVendorId}`);
 
+    if (ownVendorId && !ownVendorEmail) {
+      try {
+        const [vRows] = await pool.query('SELECT email FROM vendors WHERE id = ?', [ownVendorId]);
+        if (vRows.length > 0 && vRows[0].email) {
+          ownVendorEmail = vRows[0].email;
+        }
+      } catch {
+        /* ignore vendor lookup failure */
+      }
+    }
+
     // Notify the admin that a vendor submitted a product for approval.
     const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
     if (adminEmail && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
       const senderName = process.env.SENDER_NAME || 'EcShopping';
+      const senderFrom = ownVendorEmail
+        ? `"${ownVendorName || 'Vendor'}" <${ownVendorEmail}>`
+        : `"${senderName}" <${process.env.SMTP_EMAIL}>`;
+
       transporter.sendMail({
-        from: `"${senderName}" <${process.env.SMTP_EMAIL}>`,
+        from: senderFrom,
         to: adminEmail,
+        replyTo: ownVendorEmail || undefined,
         subject: `New product awaiting approval: ${String(title).trim()}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
@@ -1738,6 +1778,7 @@ app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
             <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
               <tr><td style="padding: 6px 0;"><strong>Product:</strong></td><td>${escapeHtml(title)}</td></tr>
               <tr><td style="padding: 6px 0;"><strong>Vendor:</strong></td><td>${escapeHtml(ownVendorName || ownVendorId || 'Unknown')}</td></tr>
+              ${ownVendorEmail ? `<tr><td style="padding: 6px 0;"><strong>Vendor Email:</strong></td><td>${escapeHtml(ownVendorEmail)}</td></tr>` : ''}
               <tr><td style="padding: 6px 0;"><strong>Category:</strong></td><td>${escapeHtml(category || 'General')}</td></tr>
               <tr><td style="padding: 6px 0;"><strong>Price:</strong></td><td>₹${escapeHtml(numericPrice)}</td></tr>
             </table>
@@ -2128,19 +2169,20 @@ app.post('/api/orders', optionalAuth, async (req, res) => {
 
     for (const line of lines) {
       const product = productById.get(line.productId);
+      const itemTitle = product ? (product.title || product.name || line.title || 'Product') : (line.title || 'Product');
       if (!product) {
-        return fail(res, 400, 'One or more items are unavailable: unknown product');
+        return fail(res, 400, `One or more items are unavailable: unknown product (${itemTitle})`);
       }
       if (product.status !== 'approved') {
-        return fail(res, 400, 'One or more items are not currently available in the store');
+        return fail(res, 400, `"${itemTitle}" is not currently available in the store. Please remove it from your order to proceed.`);
       }
       const availableQty = product.stock_quantity != null ? product.stock_quantity : (product.stock_status === 'out_of_stock' ? 0 : 50);
       if (product.stock_status === 'out_of_stock' || availableQty < line.quantity) {
-        return fail(res, 400, `One or more items have insufficient stock (available: ${availableQty})`);
+        return fail(res, 400, `"${itemTitle}" has insufficient stock (available: ${availableQty}). Please remove or adjust quantity.`);
       }
       const unitPrice = Number(product.price);
       if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-        return fail(res, 400, 'One or more items could not be priced. Please contact support.');
+        return fail(res, 400, `Item "${itemTitle}" could not be priced. Please contact support.`);
       }
       line.title = product.title || product.name || 'Product';
       line.unitPrice = round2(unitPrice);
@@ -2749,6 +2791,181 @@ app.delete('/api/videos/:id', requireAuth('admin'), async (req, res) => {
   } catch (err) {
     console.error('❌ Delete video DB error:', err);
     return res.status(500).json({ success: false, error: 'Unable to delete video.' });
+  }
+});
+
+// ================= PAYMENT GATEWAY CONFIG (ADMIN READ & UPDATE) =================
+// Strictly admin-only; reports runtime gateway mode, sandbox/production status,
+// masked credentials, and whitelist guidance. NEVER returns secret keys or raw salts.
+app.get('/api/admin/payment-config', requireAuth('admin'), (req, res) => {
+  const config = validatePhonePeConfig();
+  const envType = String(process.env.PHONEPE_ENV || 'sandbox').toLowerCase();
+  const isProd = envType === 'prod' || envType === 'production';
+
+  // Option B: OAuth v2
+  const clientId = String(process.env.PHONEPE_CLIENT_ID || '').trim();
+  const maskedClientId = clientId ? (clientId.length > 8 ? `${clientId.slice(0, 4)}••••${clientId.slice(-4)}` : '••••••••') : null;
+  const hasClientSecret = Boolean(String(process.env.PHONEPE_CLIENT_SECRET || '').trim());
+  const clientVersion = String(process.env.PHONEPE_CLIENT_VERSION || '').trim();
+
+  // Option A: Hermes v1
+  const merchantId = String(process.env.PHONEPE_MERCHANT_ID || '').trim();
+  const maskedMerchantId = merchantId ? (merchantId.length > 8 ? `${merchantId.slice(0, 4)}••••${merchantId.slice(-4)}` : '••••••••') : null;
+  const hasSaltKey = Boolean(String(process.env.PHONEPE_SALT_KEY || '').trim());
+  const saltIndex = String(process.env.PHONEPE_SALT_INDEX || '1').trim();
+
+  const redirectUrl = String(process.env.PHONEPE_REDIRECT_URL || '').trim();
+
+  return res.status(200).json({
+    success: true,
+    configured: config.ok,
+    mode: config.mode,
+    environment: isProd ? 'production' : 'sandbox',
+    endpointHost: isProd ? 'https://api.phonepe.com/apis/pg' : 'https://api-preprod.phonepe.com/apis/pg-sandbox',
+    v2: {
+      hasClientId: Boolean(clientId),
+      clientId: clientId || '',
+      maskedClientId,
+      clientVersion: clientVersion || null,
+      hasClientSecret
+    },
+    v1: {
+      hasMerchantId: Boolean(merchantId),
+      merchantId: merchantId || '',
+      maskedMerchantId,
+      hasSaltKey,
+      saltIndex
+    },
+    redirectUrl: redirectUrl || null,
+    whitelistedDomains: [
+      'https://ec-shopping.vercel.app',
+      'https://ec-shopping-three.vercel.app'
+    ],
+    notes: [
+      'PhonePe credentials must be configured strictly in environment variables (Vercel Project Settings) and are never exposed in browser bundles.',
+      'Origins and return URLs must be registered and whitelisted in the PhonePe Merchant Portal under Developer Settings.',
+      'Hosted checkout security block (INTERNAL_SECURITY_BLOCK_1) is governed by PhonePe risk rules and account activation.'
+    ]
+  });
+});
+
+// Admin update payment gateway credentials (stored securely in platform_settings and memory)
+app.put('/api/admin/payment-config', requireAuth('admin'), async (req, res) => {
+  try {
+    const {
+      environment,
+      merchantId,
+      saltKey,
+      saltIndex,
+      redirectUrl,
+      clientId,
+      clientSecret,
+      clientVersion
+    } = req.body || {};
+
+    const updates = [];
+
+    const setSetting = async (key, val) => {
+      if (val === null || val === undefined) return;
+      const str = String(val).trim();
+      await pool.query(
+        'INSERT INTO platform_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
+        [key, str]
+      );
+      process.env[key] = str;
+    };
+
+    if (environment !== undefined) {
+      const cleanEnv = String(environment).trim().toLowerCase();
+      if (!['production', 'prod', 'sandbox'].includes(cleanEnv)) {
+        return res.status(400).json({ success: false, error: 'Environment must be either "production" or "sandbox"' });
+      }
+      const standardEnv = cleanEnv === 'prod' ? 'production' : cleanEnv;
+      await setSetting('PHONEPE_ENV', standardEnv);
+      updates.push('environment');
+    }
+
+    if (merchantId !== undefined) {
+      const cleanMid = String(merchantId).trim();
+      if (cleanMid) {
+        if (!/^[a-zA-Z0-9_-]+$/.test(cleanMid)) {
+          return res.status(400).json({ success: false, error: 'Merchant ID must contain only alphanumeric characters, underscores or hyphens' });
+        }
+        await setSetting('PHONEPE_MERCHANT_ID', cleanMid);
+        updates.push('merchantId');
+      }
+    }
+
+    if (saltKey !== undefined) {
+      const cleanSalt = String(saltKey).trim();
+      if (cleanSalt) {
+        await setSetting('PHONEPE_SALT_KEY', cleanSalt);
+        updates.push('saltKey');
+      }
+    }
+
+    if (saltIndex !== undefined) {
+      const cleanIdx = String(saltIndex).trim();
+      if (cleanIdx) {
+        if (!/^\d+$/.test(cleanIdx)) {
+          return res.status(400).json({ success: false, error: 'Salt Index must be a positive integer' });
+        }
+        await setSetting('PHONEPE_SALT_INDEX', cleanIdx);
+        updates.push('saltIndex');
+      }
+    }
+
+    if (redirectUrl !== undefined) {
+      const cleanUrl = String(redirectUrl).trim();
+      if (cleanUrl) {
+        await setSetting('PHONEPE_REDIRECT_URL', cleanUrl);
+        updates.push('redirectUrl');
+      }
+    }
+
+    if (clientId !== undefined) {
+      const cleanCid = String(clientId).trim();
+      if (cleanCid) {
+        await setSetting('PHONEPE_CLIENT_ID', cleanCid);
+        updates.push('clientId');
+      }
+    }
+
+    if (clientSecret !== undefined) {
+      const cleanSecret = String(clientSecret).trim();
+      if (cleanSecret) {
+        await setSetting('PHONEPE_CLIENT_SECRET', cleanSecret);
+        updates.push('clientSecret');
+      }
+    }
+
+    if (clientVersion !== undefined) {
+      const cleanVer = String(clientVersion).trim();
+      if (cleanVer) {
+        await setSetting('PHONEPE_CLIENT_VERSION', cleanVer);
+        updates.push('clientVersion');
+      }
+    }
+
+    resetTokenCache();
+
+    console.log(`✅ [TiDB] Admin updated PhonePe configuration (${updates.join(', ')})`);
+
+    const updatedConfig = validatePhonePeConfig();
+    const envType = String(process.env.PHONEPE_ENV || 'sandbox').toLowerCase();
+    const isProd = envType === 'prod' || envType === 'production';
+
+    return res.status(200).json({
+      success: true,
+      message: 'PhonePe payment gateway configuration saved successfully',
+      configured: updatedConfig.ok,
+      mode: updatedConfig.mode,
+      environment: isProd ? 'production' : 'sandbox',
+      updatedFields: updates
+    });
+  } catch (err) {
+    console.error('❌ Failed to update payment config:', err);
+    return res.status(500).json({ success: false, error: 'Failed to update payment settings. Please try again.' });
   }
 });
 

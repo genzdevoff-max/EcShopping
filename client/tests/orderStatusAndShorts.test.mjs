@@ -106,3 +106,19 @@ test('ShortsAndVideos component is mounted on Home page and backed by API', () =
   assert.ok(apiSrc.includes('getVideos: () => request(\'/api/videos\', { role: \'admin\' })'));
   assert.ok(apiSrc.includes('createVideo: (data) => request(\'/api/videos\''));
 });
+
+test('OrderDetails and Orders prevent re-fetch loop and provide order cancellation', () => {
+  const odSrc = fs.readFileSync('src/pages/OrderDetails.jsx', 'utf8');
+  // Loop prevention: effect dependency array MUST NOT depend on `order`
+  assert.ok(!odSrc.includes('[orderId, loggedInCustomer, order]'), 'OrderDetails effect must not depend on mutable order');
+  assert.ok(odSrc.includes('[orderId, loggedInCustomer?.email]'), 'OrderDetails effect must depend only on identity keys');
+  // Order cancellation presence
+  assert.ok(odSrc.includes('handleCancelOrder'), 'OrderDetails must implement handleCancelOrder');
+  assert.ok(odSrc.includes('api.cancelCustomerOrder'), 'OrderDetails must call api.cancelCustomerOrder');
+  assert.ok(odSrc.includes('Cancel Order'), 'OrderDetails must display Cancel Order button');
+
+  const ordersSrc = fs.readFileSync('src/pages/Orders.jsx', 'utf8');
+  assert.ok(ordersSrc.includes('handleOpenCancelModal'), 'Orders must allow opening cancellation modal');
+  assert.ok(ordersSrc.includes('api.cancelCustomerOrder'), 'Orders must call api.cancelCustomerOrder');
+  assert.ok(ordersSrc.includes('btn-cancel-order'), 'Orders must have cancel button on cancellable order cards');
+});

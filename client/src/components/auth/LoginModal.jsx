@@ -71,6 +71,8 @@ export default function LoginModal({ open, onClose, onCustomerLogin, initialMode
             onCustomerLogin={onCustomerLogin}
             onSuccess={handleSuccess}
             initialMode={initialMode}
+            compact={true}
+            showVendorLink={false}
           />
         </div>
       </div>

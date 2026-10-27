@@ -1,6 +1,6 @@
-﻿import { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { CheckCircle2, PackageCheck, ArrowRight, Truck, Receipt, KeyRound } from 'lucide-react';
+import { CheckCircle2, PackageCheck, ArrowRight, Truck, Receipt, KeyRound, Ban } from 'lucide-react';
 import { getOrders } from '../utils/storage';
 import { formatINR, getDeliveryMethod } from '../utils/pricing';
 import { PageHero } from '../components/ui/PageHeader';
@@ -74,14 +74,17 @@ export default function OrderConfirmation({ loggedInCustomer }) {
           <div className="oc-hero-copy">
             <h2>Thank you{order.customerName ? `, ${order.customerName.split(' ')[0]}` : ''} — your order is in.</h2>
             <p>
-              A confirmation is stored with your account{loggedInCustomer ? ' and in your order history' : ''},
-              and we will notify you as your order moves through each stage.
+              A confirmation is stored with your account{loggedInCustomer ? ' and in your order history' : ''}.
+              You can view complete order details, track its status, or cancel this order from your order details page before it is dispatched.
             </p>
           </div>
 
           <div className="oc-hero-actions">
-            <Link to={`/orders/${order.id}`} className="btn btn-primary">Track this order <ArrowRight size={16} /></Link>
-            <Link to="/shop" className="btn btn-outline">Continue shopping</Link>
+            <Link to={`/orders/${order.id}`} className="btn btn-primary">Track & view order <ArrowRight size={16} /></Link>
+            <Link to={`/orders/${order.id}`} className="btn btn-outline" style={{ color: '#dc2626', borderColor: '#fca5a5' }}>
+              <Ban size={15} /> Cancel order
+            </Link>
+            <Link to="/shop" className="btn btn-ghost">Continue shopping</Link>
           </div>
         </section>
 

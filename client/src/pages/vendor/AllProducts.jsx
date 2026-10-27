@@ -32,6 +32,7 @@ import {
   updateProduct,
   syncProductsFromServer
 } from '../../utils/storage';
+import Pagination from '../../components/ui/Pagination';
 import './AllProducts.css';
 
 export default function AllProducts({ vendor, onProductsUpdated }) {
@@ -47,6 +48,8 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
   const [stockFilter, setStockFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Modals state
   const [previewProduct, setPreviewProduct] = useState(null);
@@ -223,6 +226,15 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
     // Default newest
     return (new Date(b.createdAt || 0)) - (new Date(a.createdAt || 0));
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, selectedCategory, stockFilter, sortBy]);
+
+  const paginatedProducts = filteredProducts.slice(
+    (page - 1) * pageSize,
+    page * pageSize
+  );
 
   // KPI counts
   const totalCount = products.length;
@@ -460,7 +472,7 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map(p => {
+                {paginatedProducts.map(p => {
                   const isInStock = p.stockStatus === 'in_stock' || p.inStock === true || p.inStock === undefined;
                   const price = parseFloat(p.price) || 0;
                   const strikePrice = parseFloat(p.strikePrice) || 0;
@@ -560,11 +572,23 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
               </tbody>
             </table>
           </div>
+          <div style={{ padding: '16px 20px' }}>
+            <Pagination
+              currentPage={page}
+              totalPages={Math.ceil(filteredProducts.length / pageSize) || 1}
+              onPageChange={setPage}
+              totalItems={filteredProducts.length}
+              pageSize={pageSize}
+              onPageSizeChange={(sz) => { setPageSize(sz); setPage(1); }}
+              pageSizeOptions={[10, 25, 50]}
+            />
+          </div>
         </div>
       ) : (
         /* GRID VIEW */
-        <div className="all-prod-cards-grid">
-          {filteredProducts.map(p => {
+        <div className="all-prod-grid-wrap">
+          <div className="all-prod-cards-grid">
+            {paginatedProducts.map(p => {
             const isInStock = p.stockStatus === 'in_stock' || p.inStock === true || p.inStock === undefined;
             const price = parseFloat(p.price) || 0;
             const strikePrice = parseFloat(p.strikePrice) || 0;
@@ -648,6 +672,18 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
               </div>
             );
           })}
+          </div>
+          <div style={{ marginTop: 20 }}>
+            <Pagination
+              currentPage={page}
+              totalPages={Math.ceil(filteredProducts.length / pageSize) || 1}
+              onPageChange={setPage}
+              totalItems={filteredProducts.length}
+              pageSize={pageSize}
+              onPageSizeChange={(sz) => { setPageSize(sz); setPage(1); }}
+              pageSizeOptions={[10, 25, 50]}
+            />
+          </div>
         </div>
       )}
 

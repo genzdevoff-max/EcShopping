@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, PackageCheck, MapPin, Clock, ArrowRight } from 'lucide-react';
+import { Search, PackageCheck, MapPin, Clock, ArrowRight, Ban } from 'lucide-react';
 import api from '../utils/api';
 import { getOrders } from '../utils/storage';
 import { paymentStatusDisplay } from '../utils/orderSync';
@@ -192,6 +192,11 @@ export default function TrackOrder({ loggedInCustomer, onOpenLogin }) {
 
             <div className="od-actions to-actions">
               <Link to={`/orders/${result.id}`} className="btn btn-outline">Order details</Link>
+              {(result.status?.toLowerCase() === 'processing' || result.status?.toLowerCase() === 'pending' || result.status?.toLowerCase() === 'confirmed') && (
+                <Link to={`/orders/${result.id}`} className="btn btn-outline" style={{ color: '#dc2626', borderColor: '#fca5a5' }}>
+                  <Ban size={15} /> Cancel order
+                </Link>
+              )}
               <Link to="/orders" className="btn btn-ghost">All orders</Link>
             </div>
           </section>

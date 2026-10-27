@@ -270,3 +270,84 @@
   .to-form { flex-direction: column; }
   .to-form .btn { width: 100%; }
 }
+
+/* ---------------- Order Cancellation Modal & Button ---------------- */
+
+.btn-cancel-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+  transition: all 0.2s var(--ease);
+}
+
+.btn-cancel-order:hover {
+  background-color: #fef2f2 !important;
+  border-color: #dc2626 !important;
+  color: #b91c1c !important;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 16px;
+}
+
+.modal-dialog {
+  background: var(--surface, #ffffff);
+  border-radius: var(--r-lg, 12px);
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--line, #e2e8f0);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line, #f1f5f9);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-family: var(--font-display, 'Fraunces', serif);
+  font-size: 1.2rem;
+  color: var(--brand-900, #0e5c4a);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--muted, #94a3b8);
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xs, 6px);
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background-color: var(--brand-50, #f1f5f9);
+  color: var(--ink, #0f172a);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--line, #f1f5f9);
+}

@@ -777,6 +777,13 @@ p { color: var(--ink-2); }
 .qty-stepper.sm button { width: 30px; height: 32px; }
 .qty-stepper.sm .qty-value { min-width: 26px; font-size: 0.85rem; }
 
+.qty-stepper.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--paper, #f8faf9);
+}
+
 /* ---------- Price ---------- */
 
 .price {

@@ -10,7 +10,7 @@ import { saveCustomerSession, addCustomer } from '../../utils/storage';
  * Credentials are verified server-side (bcrypt in TiDB) — there is no
  * local credential store, so this flow works only with a running API.
  */
-export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'login', showVendorLink = true }) {
+export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'login', showVendorLink = true, compact = false }) {
   const navigate = useNavigate();
   const [isSignUp, setIsSignUp] = useState(initialMode === 'signup');
   const [isForgot, setIsForgot] = useState(false);
@@ -122,23 +122,44 @@ export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'lo
   };
 
   return (
-    <div className="auth-form-box">
-      <header className="auth-form-header">
-        <h1>
-          {isForgot
-            ? 'Reset your password'
-            : isSignUp
-            ? 'Create your account'
-            : 'Welcome back'}
-        </h1>
-        <p>
-          {isForgot
-            ? "Enter your email address and we'll send you a link to reset your password."
-            : isSignUp
-            ? 'Join EcShopping to order fresh goods and track every delivery.'
-            : 'Log in with your email to continue to your orders and wishlist.'}
-        </p>
-      </header>
+    <div className={`auth-form-box ${compact ? 'compact-mode' : ''}`}>
+      {compact && !isForgot ? (
+        <div className="auth-compact-tabs">
+          <button
+            type="button"
+            className={`auth-compact-tab ${!isSignUp ? 'active' : ''}`}
+            onClick={() => { setIsSignUp(false); setError(''); setSuccessMsg(''); }}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            className={`auth-compact-tab ${isSignUp ? 'active' : ''}`}
+            onClick={() => { setIsSignUp(true); setError(''); setSuccessMsg(''); }}
+          >
+            Create Account
+          </button>
+        </div>
+      ) : (
+        <header className="auth-form-header">
+          <h1>
+            {isForgot
+              ? 'Reset your password'
+              : isSignUp
+              ? 'Create your account'
+              : 'Welcome back'}
+          </h1>
+          {!compact && (
+            <p>
+              {isForgot
+                ? "Enter your email address and we'll send you a link to reset your password."
+                : isSignUp
+                ? 'Join EcShopping to order fresh goods and track every delivery.'
+                : 'Log in with your email to continue to your orders and wishlist.'}
+            </p>
+          )}
+        </header>
+      )}
 
       {error && (
         <div className="auth-alert auth-alert-error" role="alert">

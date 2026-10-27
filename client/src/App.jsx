@@ -311,7 +311,7 @@ function App() {
                         element={<ResetPassword />}
                       />
                       <Route path="/orders" element={<Orders loggedInCustomer={loggedInCustomer} onOpenLogin={() => setLoginOpen(true)} />} />
-                      <Route path="/orders/:orderId" element={<OrderDetails loggedInCustomer={loggedInCustomer} />} />
+                      <Route path="/orders/:orderId" element={<OrderDetails loggedInCustomer={loggedInCustomer} onOpenLogin={() => setLoginOpen(true)} />} />
                       <Route path="/track-order" element={<TrackOrder loggedInCustomer={loggedInCustomer} onOpenLogin={() => setLoginOpen(true)} />} />
                       <Route path="/wishlist" element={<Wishlist onAddToCart={addToCart} />} />
                       <Route path="/about" element={<AboutUs />} />
