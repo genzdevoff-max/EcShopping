@@ -1665,11 +1665,15 @@ app.get('/api/products/:id/related', optionalAuth, async (req, res) => {
   }
 });
 
-// Vendor submits a new product — always enters as 'pending' for admin approval
-app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
+// Product creation handler: Vendors submit pending listings; Admins can create approved or pending listings
+const handleCreateProduct = async (req, res, isAdminEndpoint = false) => {
+  if (isAdminEndpoint && req.auth?.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Admin privileges required' });
+  }
+
   const {
-    id, vendorName, title: rawTitle, name: rawName, description,
-    category, price, strikePrice, unit, image, stockStatus, stockQuantity
+    id, vendorId: rawVendorId, vendor_id: rawVendor_id, vendorName, title: rawTitle, name: rawName, description,
+    category, price, strikePrice, unit, image, stockStatus, stockQuantity, status
   } = req.body || {};
 
   const title = (rawTitle || rawName || '').trim();
@@ -1679,30 +1683,79 @@ app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Product title is required' });
   }
 
+  if (price === undefined || price === null || price === '') {
+    return res.status(400).json({ success: false, error: 'A valid selling price is required' });
+  }
+
   const numericPrice = Number(price);
   if (!Number.isFinite(numericPrice) || numericPrice < 0) {
     return res.status(400).json({ success: false, error: 'A valid selling price is required' });
   }
 
+  // Strike price validation
+  let strike = null;
+  if (strikePrice !== undefined && strikePrice !== null && strikePrice !== '') {
+    const parsedStrike = Number(strikePrice);
+    if (!Number.isFinite(parsedStrike) || parsedStrike < 0) {
+      return res.status(400).json({ success: false, error: 'Strike price must be a valid non-negative number' });
+    }
+    strike = parsedStrike;
+  }
+
+  // Category validation
+  if (category !== undefined) {
+    if (typeof category !== 'string' || !category.trim() || category.trim().length > 255) {
+      return res.status(400).json({ success: false, error: 'Invalid product category' });
+    }
+  }
+  const finalCategory = (category && String(category).trim()) || 'General';
+
   // Numerical stock quantity validation
   let quantity = 50; // default initial stock
   if (stockQuantity !== undefined && stockQuantity !== null && stockQuantity !== '') {
-    const parsedQty = parseInt(stockQuantity, 10);
-    if (!Number.isInteger(parsedQty) || parsedQty < 0) {
+    const numQty = Number(stockQuantity);
+    if (!Number.isInteger(numQty) || numQty < 0) {
       return res.status(400).json({ success: false, error: 'Stock quantity must be a non-negative whole number' });
     }
-    quantity = parsedQty;
+    quantity = numQty;
   } else if (stockStatus === 'out_of_stock') {
     quantity = 0;
   }
 
   const derivedStockStatus = quantity > 0 ? (stockStatus === 'out_of_stock' ? 'out_of_stock' : 'in_stock') : 'out_of_stock';
 
-  // Vendor identity always comes from the auth token; client-supplied
-  // vendorId/vendorName for the owner are never trusted.
-  const ownVendorId = req.auth.role === 'vendor' ? req.auth.vendorId : null;
-  const ownVendorName = req.auth.role === 'vendor' ? req.auth.name : (vendorName || '');
-  let ownVendorEmail = req.auth.role === 'vendor' ? (req.auth.email || '') : '';
+  // Vendor ownership & approval status based on authenticated role
+  let ownVendorId = null;
+  let ownVendorName = '';
+  let finalStatus = 'pending';
+
+  if (req.auth.role === 'vendor') {
+    // Vendor identity strictly comes from auth token; vendors cannot assign arbitrary ownership
+    ownVendorId = req.auth.vendorId;
+    ownVendorName = req.auth.name || '';
+    // Vendor submissions ALWAYS enter as pending for admin approval
+    finalStatus = 'pending';
+  } else if (req.auth.role === 'admin') {
+    // Admin can choose status, defaulting to approved
+    if (status && !['approved', 'pending', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Status must be pending, approved or rejected' });
+    }
+    finalStatus = (status && ['approved', 'pending', 'rejected'].includes(status)) ? status : 'approved';
+
+    // Admin can assign to an existing approved vendor or create as platform listing (vendor_id = null)
+    const targetVendorId = rawVendorId || rawVendor_id;
+    if (targetVendorId && targetVendorId !== 'shared' && targetVendorId !== 'null' && targetVendorId !== 'none' && targetVendorId !== 'admin') {
+      const [vRows] = await pool.query('SELECT id, name FROM vendors WHERE id = ?', [String(targetVendorId).trim()]);
+      if (vRows.length === 0) {
+        return res.status(400).json({ success: false, error: 'Selected vendor does not exist' });
+      }
+      ownVendorId = vRows[0].id;
+      ownVendorName = vRows[0].name;
+    } else {
+      ownVendorId = null;
+      ownVendorName = (vendorName && String(vendorName).trim()) ? String(vendorName).trim() : 'Platform Direct';
+    }
+  }
 
   try {
     const productId = id || ('p' + Date.now());
@@ -1714,19 +1767,16 @@ app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
       }
     }
 
-    const strike = strikePrice !== undefined && strikePrice !== null && strikePrice !== ''
-      ? Number(strikePrice)
-      : null;
-
     await pool.query(
       `INSERT INTO products
         (id, vendor_id, vendor_name, title, name, description, category, price, strike_price, unit, image, stock_status, stock_quantity, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          vendor_id = VALUES(vendor_id), vendor_name = VALUES(vendor_name), title = VALUES(title),
          name = VALUES(name), description = VALUES(description), category = VALUES(category),
          price = VALUES(price), strike_price = VALUES(strike_price), unit = VALUES(unit),
-         image = VALUES(image), stock_status = VALUES(stock_status), stock_quantity = VALUES(stock_quantity)`,
+         image = VALUES(image), stock_status = VALUES(stock_status), stock_quantity = VALUES(stock_quantity),
+         status = VALUES(status)`,
       [
         productId,
         ownVendorId,
@@ -1734,63 +1784,67 @@ app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
         String(title).trim(),
         name ? String(name).trim() : String(title).trim(),
         description || '',
-        category || 'General',
+        finalCategory,
         numericPrice,
         strike,
         unit || '',
         image || '',
         derivedStockStatus,
-        quantity
+        quantity,
+        finalStatus
       ]
     );
 
     const [rows] = await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products WHERE id = ?`, [productId]);
-    console.log(`✅ [TiDB] Product submitted (pending approval): ${title} by ${ownVendorName || ownVendorId}`);
+    console.log(`✅ [TiDB] Product created (${finalStatus}): ${title} by ${ownVendorName || ownVendorId || 'Admin'}`);
 
-    if (ownVendorId && !ownVendorEmail) {
-      try {
-        const [vRows] = await pool.query('SELECT email FROM vendors WHERE id = ?', [ownVendorId]);
-        if (vRows.length > 0 && vRows[0].email) {
-          ownVendorEmail = vRows[0].email;
+    // If submitted by a vendor, notify the admin that a vendor submitted a product for approval.
+    if (req.auth.role === 'vendor') {
+      let ownVendorEmail = req.auth.email || '';
+      if (ownVendorId && !ownVendorEmail) {
+        try {
+          const [vRows] = await pool.query('SELECT email FROM vendors WHERE id = ?', [ownVendorId]);
+          if (vRows.length > 0 && vRows[0].email) {
+            ownVendorEmail = vRows[0].email;
+          }
+        } catch {
+          /* ignore vendor lookup failure */
         }
-      } catch {
-        /* ignore vendor lookup failure */
       }
-    }
 
-    // Notify the admin that a vendor submitted a product for approval.
-    const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
-    if (adminEmail && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      const senderName = process.env.SENDER_NAME || 'EcShopping';
-      const senderFrom = ownVendorEmail
-        ? `"${ownVendorName || 'Vendor'}" <${ownVendorEmail}>`
-        : `"${senderName}" <${process.env.SMTP_EMAIL}>`;
+      const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
+      if (adminEmail && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
+        const senderName = process.env.SENDER_NAME || 'EcShopping';
+        const senderFrom = ownVendorEmail
+          ? `"${ownVendorName || 'Vendor'}" <${ownVendorEmail}>`
+          : `"${senderName}" <${process.env.SMTP_EMAIL}>`;
 
-      transporter.sendMail({
-        from: senderFrom,
-        to: adminEmail,
-        replyTo: ownVendorEmail || undefined,
-        subject: `New product awaiting approval: ${String(title).trim()}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-            <h2 style="color: #0e5c4a;">New product awaiting approval</h2>
-            <p>A vendor has submitted a new product on ${senderName}.</p>
-            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-              <tr><td style="padding: 6px 0;"><strong>Product:</strong></td><td>${escapeHtml(title)}</td></tr>
-              <tr><td style="padding: 6px 0;"><strong>Vendor:</strong></td><td>${escapeHtml(ownVendorName || ownVendorId || 'Unknown')}</td></tr>
-              ${ownVendorEmail ? `<tr><td style="padding: 6px 0;"><strong>Vendor Email:</strong></td><td>${escapeHtml(ownVendorEmail)}</td></tr>` : ''}
-              <tr><td style="padding: 6px 0;"><strong>Category:</strong></td><td>${escapeHtml(category || 'General')}</td></tr>
-              <tr><td style="padding: 6px 0;"><strong>Price:</strong></td><td>₹${escapeHtml(numericPrice)}</td></tr>
-            </table>
-            <p>Log in to the admin dashboard to approve or reject this listing.</p>
-            <p style="color: #64748b; font-size: 13px;">Product ID: ${escapeHtml(productId)}</p>
-          </div>
-        `
-      })
-        .then(() => console.log(`📧 Admin approval email sent to: ${adminEmail}`))
-        .catch((err) => console.error('⚠️ Admin approval email failed:', err.message));
-    } else {
-      console.warn('⚠️ Admin approval email skipped: set SMTP_EMAIL, SMTP_PASSWORD and ADMIN_EMAIL.');
+        transporter.sendMail({
+          from: senderFrom,
+          to: adminEmail,
+          replyTo: ownVendorEmail || undefined,
+          subject: `New product awaiting approval: ${String(title).trim()}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+              <h2 style="color: #0e5c4a;">New product awaiting approval</h2>
+              <p>A vendor has submitted a new product on ${senderName}.</p>
+              <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                <tr><td style="padding: 6px 0;"><strong>Product:</strong></td><td>${escapeHtml(title)}</td></tr>
+                <tr><td style="padding: 6px 0;"><strong>Vendor:</strong></td><td>${escapeHtml(ownVendorName || ownVendorId || 'Unknown')}</td></tr>
+                ${ownVendorEmail ? `<tr><td style="padding: 6px 0;"><strong>Vendor Email:</strong></td><td>${escapeHtml(ownVendorEmail)}</td></tr>` : ''}
+                <tr><td style="padding: 6px 0;"><strong>Category:</strong></td><td>${escapeHtml(finalCategory)}</td></tr>
+                <tr><td style="padding: 6px 0;"><strong>Price:</strong></td><td>₹${escapeHtml(numericPrice)}</td></tr>
+              </table>
+              <p>Log in to the admin dashboard to approve or reject this listing.</p>
+              <p style="color: #64748b; font-size: 13px;">Product ID: ${escapeHtml(productId)}</p>
+            </div>
+          `
+        })
+          .then(() => console.log(`📧 Admin approval email sent to: ${adminEmail}`))
+          .catch((err) => console.error('⚠️ Admin approval email failed:', err.message));
+      } else {
+        console.warn('⚠️ Admin approval email skipped: set SMTP_EMAIL, SMTP_PASSWORD and ADMIN_EMAIL.');
+      }
     }
 
     return res.status(201).json({ success: true, product: rows[0] });
@@ -1798,7 +1852,13 @@ app.post('/api/products', requireVendorOrAdmin, async (req, res) => {
     console.error('❌ Create product DB error:', err);
     return res.status(500).json({ success: false, error: 'Unable to save the product right now. Please try again.' });
   }
-});
+};
+
+// Create product (Vendors create pending listings; Admins can create approved/pending listings)
+app.post('/api/products', requireVendorOrAdmin, (req, res) => handleCreateProduct(req, res, false));
+
+// Admin-specific product creation endpoint (strictly requireAdmin)
+app.post('/api/admin/products', requireAdmin, (req, res) => handleCreateProduct(req, res, true));
 
 // Update product fields (vendor edits own pending/rejected, or manages stock for approved; admin edits any)
 app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {

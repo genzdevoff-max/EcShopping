@@ -241,7 +241,7 @@
 
 .section-toolbar h2 {
   margin: 0;
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display, 'Poppins', sans-serif);
   font-size: 1.5rem;
   color: #0e5c4a;
 }
@@ -428,7 +428,7 @@
 /* ---------------- TAB 2: SAVED ADDRESSES ---------------- */
 .addresses-section h2 {
   margin: 0 0 4px;
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display, 'Poppins', sans-serif);
   font-size: 1.5rem;
   color: #0e5c4a;
 }
@@ -606,7 +606,7 @@
 }
 
 .settings-box h2 {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display, 'Poppins', sans-serif);
   font-size: 1.4rem;
   color: #0e5c4a;
   margin: 0 0 6px 0;
@@ -699,7 +699,7 @@
   width: 100%;
   min-height: 44px;
   padding: 10px 14px 10px 42px;
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   font-size: 0.94rem;
   color: #0f172a;
   background: transparent;
@@ -738,7 +738,7 @@
   justify-content: center;
   background-color: #0e5c4a;
   color: #ffffff;
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: inherit;
   font-size: 0.92rem;
   font-weight: 600;
   padding: 12px 26px;
@@ -798,7 +798,7 @@
 
 .modal-header h3 {
   margin: 0;
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display, 'Poppins', sans-serif);
   font-size: 1.25rem;
   color: #0e5c4a;
 }

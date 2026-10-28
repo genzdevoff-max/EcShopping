@@ -321,7 +321,7 @@
 
 .modal-header h3 {
   margin: 0;
-  font-family: var(--font-display, 'Fraunces', serif);
+  font-family: var(--font-display, 'Poppins', sans-serif);
   font-size: 1.2rem;
   color: var(--brand-900, #0e5c4a);
 }

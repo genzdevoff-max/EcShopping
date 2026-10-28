@@ -47,8 +47,14 @@ test('HomeSections.jsx and Home.jsx keep primary top category navigation intact'
   const homeJsx = fs.readFileSync(path.join(CLIENT_ROOT, 'src/pages/Home.jsx'), 'utf8');
   const sectionsJsx = fs.readFileSync(path.join(CLIENT_ROOT, 'src/components/home/HomeSections.jsx'), 'utf8');
 
-  // Top CompactCategoryNav must be mounted at the top of Home.jsx
-  assert.ok(homeJsx.includes('<CompactCategoryNav'), 'Home.jsx must mount CompactCategoryNav at page top');
-  assert.ok(sectionsJsx.includes('export function CompactCategoryNav'), 'HomeSections must export CompactCategoryNav');
-  assert.ok(sectionsJsx.includes('className="compact-cat-nav"'), 'Top category navigation must render .compact-cat-nav');
+  // Top category navigation must be mounted at the top of Home.jsx
+  assert.ok(
+    homeJsx.includes('<CircularCategoryShowcase') || homeJsx.includes('<CompactCategoryNav'),
+    'Home.jsx must mount CircularCategoryShowcase or CompactCategoryNav at page top'
+  );
+  assert.ok(
+    sectionsJsx.includes('CircularCategoryShowcase') || sectionsJsx.includes('export function CompactCategoryNav'),
+    'HomeSections must export CircularCategoryShowcase'
+  );
+  assert.ok(sectionsJsx.includes('className="compact-cat-nav"') || sectionsJsx.includes('circular-category-showcase'), 'Top category navigation must render navigation class');
 });

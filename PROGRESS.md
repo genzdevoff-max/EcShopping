@@ -1,10 +1,78 @@
 # EcShopping — Progress & Session Handover Log
 
-**Current Date:** 2026-10-27  
+**Current Date:** 2026-10-28  
 **Current Phase:** PHASE 18: PRODUCTION READINESS, VIDEO REVIEWS & SYSTEM POLISH (Audit Verified)  
-**Last Completed Task:** `TASK-P18-09` (Final Feature Verification, Fixes & Deployment Readiness Audit)
+**Last Completed Task:** `TASK-P18-12` (Change Entire E-commerce Website Font to Poppins)
 
-1. **Final Feature Verification, Fixes & Deployment Readiness Audit (`TASK-P18-09`):**
+1. **Global Typography Migration to Poppins (`TASK-P18-12`):**
+   - **Unified Typography System (COMPLETED & VERIFIED):**
+     - **Font Loading Configuration:** Replaced Google Fonts stylesheet in `client/index.html` with Poppins covering weights 300, 400, 500, 600, 700 with italic styles (`family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&display=swap`). Included `preconnect` hints to Google Fonts domains to eliminate render-blocking and layout shifts.
+     - **Tailwind CSS v4 & Global Token Integration:** Configured Tailwind v4 `@theme` block in `client/src/index.css` defining `--font-sans` and `--font-display`. Updated `:root` design tokens (`--font-ui`, `--font-display`, `--font-sans`) to `'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`. Set `body` to `font-family: var(--font-ui)` and ensured form controls (`button, input, select, textarea`) inherit typography globally.
+     - **Hierarchy & Weight Distribution:** Maintained established e-commerce hierarchy: Headings (`h1-h3`) at 600/700, product names at 500/600, product prices at 600, navigation/buttons at 500/600, form labels at 500/600, and body/descriptions at 400.
+   - **Elimination of Conflicting Declarations (COMPLETED & VERIFIED):**
+     - Replaced hardcoded font declarations across `CustomerProfile.css`, `CircularCategoryShowcase.css`, `PromotionalBanner.css`, `ResetPassword.css`, and `Orders.css` with CSS custom properties or `inherit`.
+     - Preserved necessary monospace font families for order transaction IDs and tracking hashes (`ui-monospace, monospace`).
+     - SVG iconography (`lucide-react`) verified fully preserved and unaffected.
+   - **Comprehensive Automated Verification (COMPLETED & VERIFIED):**
+     - Automated AST/regex codebase scan confirmed 0 remaining occurrences of `Fraunces` or `Plus Jakarta Sans` across `client/src`.
+     - Client automated tests: 71/71 passed (100%).
+     - Server automated tests: 138/138 passed (100%).
+     - Client linter (`oxlint`): 0 errors.
+     - Client production build (`vite build`): Succeeded in 4.70s with zero errors.
+     - Comprehensive report created in `POPPINS_FONT_UPDATE_REPORT.md`.
+
+2. **Add Promotional Banner and Circular Category Showcase (`TASK-P18-11`):**
+   - **Wide Promotional Homepage Banner (COMPLETED & VERIFIED):**
+     - **Marketplace Aesthetics & Responsive Layout:** Added `PromotionalBanner.jsx` and `PromotionalBanner.css` mounted directly below the main header on `Home.jsx`. Styled with desktop aspect ratio around 4.2:1 (`min-height: 240px; max-height: 330px`), adapting gracefully down through tablet (3.4:1 / 220px) to mobile (205px / 185px / 175px on 320px). Zero layout shift (CLS = 0) with eager loading and high fetch priority on initial slide.
+     - **EcShopping Theme & Visual Design:** Built on Pine Green `#0e5c4a` (`--brand`) and Terracotta `#d9663d` (`--accent`) theme tokens, featuring Fraunces headings, Plus Jakarta Sans body typography, and multi-layer dark gradient overlay ensuring WCAG AAA high contrast (>7:1) over rich organic campaign harvest imagery.
+     - **Curated Authentic Campaign Slides:** Configured 3 campaign slides relevant to actual database products: (1) "Pure Organic Produce & Farm Harvests" linking to `/shop` and `/collection/deals`; (2) "Authentic Wood-Pressed Oils & Pure Desi Ghee" linking to `/category/pantry-staples` and `/shop`; (3) "Save on Daily Essentials & Farm Bundles" linking to `/collection/deals` and `/shop`. Zero placeholder links (`href="#"` completely eliminated).
+     - **Interactive Controls & Accessibility:** Supports 6-second auto-advancing slides with pause-on-hover and pause-on-focus, accessible previous/next chevron buttons (`aria-label`), and interactive pagination dot indicators (`role="tablist"`).
+   - **Circular Category Showcase (COMPLETED & VERIFIED):**
+     - **Positioning & Product-First Hierarchy:** Positioned `CircularCategoryShowcase.jsx` and `CircularCategoryShowcase.css` directly underneath the promotional banner and above product rails, maintaining immediate access to product browsing without oversized whitespace.
+     - **Circular Crop & Balanced Typography:** Renders active categories fetched from live database API (`/api/categories/public`), with non-storefront categories (`test`, `organic`) filtered out. Each category displays a circular frame (`border-radius: 50%`, `border: 2px solid var(--brand-100)`) with smooth hover elevation (`translateY(-3px)`, shadow, and Pine Green border highlight) and 2-line clamped Plus Jakarta Sans labels (`.circular-cat-label`).
+     - **Graceful Fallbacks & Skeleton Loading:** Built-in `DEFAULT_CATEGORY_IMAGE` fallback and image `onError` handler prevent broken image icons; shimmer skeleton loading (`.skeleton-track`, 7 circular skeleton items) displays during initial category fetch.
+   - **Show More / View All vs Arrow Scroll Behavior (COMPLETED & VERIFIED):**
+     - **Clear Separation of Actions:**
+       1. **Horizontal Scroll Arrows:** Left and right chevron buttons (`.circular-cat-arrow`) scroll the category track smoothly horizontally (`scrollBy`), disabled at boundaries, and never navigate away from the page.
+       2. **"Show more" Action:** Prominent pill link in the section header with `ArrowRight` icon navigates to the canonical all-products page `/shop`.
+       3. **End-Cap Circular Tile:** A circular "All Products" tile at the end of the scroll track provides an additional touch-friendly route to `/shop`.
+       4. **Category Item Navigation:** Clicking any circular category item navigates strictly to its filtered catalog listing at `/category/:slug`.
+   - **Multi-Viewport Headless Chrome CDP Verification (COMPLETED & VERIFIED):**
+     - Automated headless Chrome testing across 7 viewports (1920px, 1366px, 768px, 430px, 390px, 360px, 320px) verified:
+       - **Zero horizontal page overflow** across all screen sizes.
+       - Promotional banner and circular category showcase render properly at all breakpoints.
+       - In-browser navigation tests confirmed: Banner CTA navigates to `/shop`, Category click navigates to `/category/:slug`, Showcase "Show more" navigates to `/shop`, and scroll arrow buttons scroll the track without navigating.
+       - Captured screenshot evidence saved in `scratch/screenshots/` and recorded in `scratch/screenshots/viewport-qa-summary.json`.
+   - **Quality & Regression Metrics:**
+     - Client tests: 71/71 passed (100%), including 8 new tests in `client/tests/promotionalBannerAndCategoryShowcase.test.mjs`.
+     - Server tests: 138/138 passed (100%).
+     - Client lint: 0 errors (62 style/hook warnings).
+     - Client production build: successful in 1.59s with zero errors.
+
+2. **Add Product Creation Capability to Admin Panel (`TASK-P18-10`):**
+   - **Admin Portal UI & Integration (COMPLETED & VERIFIED):**
+     - **Prominent Add Product Action:** Added a prominent, pine green `+ Add Product` button on the All Products screen in `AdminDashboard.jsx`, accompanied by quick action triggers in the Admin sidebar navigation (`admin-sidebar-add-btn`) and the Dashboard overview tab (`admin-quick-add-btn`).
+     - **Accessible Responsive Modal Dialog:** Integrated an accessible modal dialog (`.admin-modal-overlay`, `.admin-modal-dialog`) featuring a backdrop with blur (`.admin-modal-backdrop`), keyboard `Escape` dismissal, focus capture, clean close button, and independent scrollable container (`.admin-modal-body`) with `overscroll-behavior: contain`. Prevents unwanted whole-page scrolling and guarantees zero clipping of dropdowns across desktop, tablet, and mobile (down to 320px).
+     - **Real-Time Catalog Refresh & Confirmation Banner:** On product creation, the admin product table is updated immediately in-place via local state unshift without full-page reload. Renders an alert confirmation banner (`.admin-created-banner`) showing the product title and its resulting approval status badge (`APPROVED`, `PENDING`, or `REJECTED`). Correctly updates pagination and filter counts.
+   - **Shared Product Form Component & Searchable Combobox (COMPLETED & VERIFIED):**
+     - **Unified `AddProduct.jsx` Component:** Reused and extended the vendor product creation form with `mode="admin"` and `mode="vendor"` support. Preserved vendor workflow, validation, and layout while adding admin-specific governance controls.
+     - **Searchable Category Selector (`CategorySelect.jsx` & `CategorySelect.css`):** Built a searchable combobox with live search filter, keyboard escape listener, click-outside dismissal, inline category creation (`+ Add New Category`), and high z-index positioning to prevent text or validation message overlap.
+     - **Admin Governance Fields:** Enabled administrators to assign product ownership to verified vendors via `VendorSelect` (or choose "Shared / Platform Direct" for in-house listings with `vendor_id = null`), and to select the initial approval status (`Approved` [default], `Pending`, or `Rejected`).
+     - **Dual-Column Storefront Preview:** Right-hand customer preview card reflects the live selling price, strike-out price, discount calculations, category, unit pill, status badge, and assigned store name.
+   - **Backend RBAC & API Hardening (COMPLETED & VERIFIED):**
+     - **Dedicated Admin Endpoint:** Added `POST /api/admin/products` strictly protected with `requireAdmin`. Unauthenticated requests yield HTTP 401; customers and vendors yield HTTP 403.
+     - **Shared Endpoint Protection (`POST /api/products`):** Protected with `requireVendorOrAdmin`. Vendors cannot forge `vendorId` or self-assign `approved` status (status is strictly forced to `'pending'`). Admins can choose status and assign ownership.
+     - **Data Integrity & Relational Safety:** If an admin assigns a product to a vendor, the server checks `SELECT id, name FROM vendors WHERE id = ?`; invalid/invented vendor IDs return HTTP 400 (`Selected vendor does not exist`). When no vendor is assigned, `vendor_id` is saved as `NULL` and `vendor_name` as `'Platform Direct'`.
+     - **Server-Side Validation:** Validates required `title`, positive numeric `price`, non-negative `strikePrice`, whole integer `stockQuantity`, and valid string `category`. Rejects invalid inputs with HTTP 400.
+     - **Selective Notifications:** Product submission email notifications to administrators are dispatched strictly for vendor submissions; admin-created products bypass self-notification.
+     - **Client API Integration:** Added `createAdminProduct` and parameterized `createProduct(product, role)` to `client/src/utils/api.js`.
+   - **Quality & Regression Metrics:**
+     - Client tests: 63/63 passed (100%), including 9 new tests in `client/tests/adminAddProduct.test.mjs`.
+     - Server tests: 138/138 passed (100%), including 12 new tests in `server/test/api/admin-product-creation.test.js`.
+     - Client lint: 0 errors (60 style/hook warnings).
+     - Client production build: successful in 2.53s with zero errors.
+
+2. **Final Feature Verification, Fixes & Deployment Readiness Audit (`TASK-P18-09`):**
    - **Feature A: Vendor Product Submission -> Admin Email Notification (COMPLETED & VERIFIED):**
      - Upgraded Nodemailer transport export in `server/index.js` (`export const transporter`).
      - Added automatic admin email dispatch upon successful vendor product creation (`POST /api/products`).

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  CompactCategoryNav,
-  CompactMarketplaceBanner,
-  CompactCategoryTiles,
+  PromotionalBanner,
+  CircularCategoryShowcase,
   ProductRail,
   CategoryRails,
   CompactTrustBar,
@@ -80,16 +79,16 @@ export default function Home({ onAddToCart }) {
 
   return (
     <>
-      {/* 3. Compact Horizontal Category Navigation (Amazon/Flipkart bar) */}
-      <CompactCategoryNav
+      {/* 1. Wide Promotional Campaign Banner directly below Header */}
+      <PromotionalBanner />
+
+      {/* 2. Circular Category Showcase directly below Banner with Show more action */}
+      <CircularCategoryShowcase
         categories={state.categories}
-        loading={state.loading}
+        loading={loading}
       />
 
-      {/* Restrained Marketplace Banner (Secondary to shopping; height <140px) */}
-      <CompactMarketplaceBanner />
-
-      {/* 4. Best Offers / Deals of the Day (First prominent content section) */}
+      {/* 3. Best Offers / Deals of the Day (First prominent product section) */}
       {hasDeals ? (
         <ProductRail
           eyebrow="⚡ Today's Special Values"
@@ -116,7 +115,7 @@ export default function Home({ onAddToCart }) {
         />
       )}
 
-      {/* 5. Best Sellers — Dense horizontal product rail */}
+      {/* 4. Best Sellers & Farm Staples */}
       <ProductRail
         eyebrow="Customer Favorites"
         title="Best Sellers & Farm Staples"
@@ -129,13 +128,7 @@ export default function Home({ onAddToCart }) {
         onAddToCart={onAddToCart}
       />
 
-      {/* 6. Shop by Category — Compact image tiles */}
-      <CompactCategoryTiles
-        categories={state.categories}
-        loading={loading}
-      />
-
-      {/* 7. New Arrivals — From live catalog */}
+      {/* 5. New Arrivals — From live catalog */}
       <ProductRail
         eyebrow="Freshly Listed"
         title="New Arrivals from Local Farms"

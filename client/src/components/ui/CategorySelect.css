@@ -1,0 +1,252 @@
+/* ===================================================
+   CATEGORY SELECT COMBOBOX - SEARCHABLE & ACCESSIBLE
+   =================================================== */
+
+.cat-select-container {
+  position: relative;
+  width: 100%;
+}
+
+.cat-select-container.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.cat-select-trigger {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background-color: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.cat-select-trigger:hover:not(:disabled) {
+  border-color: #94a3b8;
+}
+
+.cat-select-trigger:focus-visible,
+.cat-select-trigger.active {
+  outline: none;
+  border-color: #0e5c4a;
+  box-shadow: 0 0 0 3px rgba(14, 92, 74, 0.12);
+}
+
+.cat-select-val {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-badge-selected {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #0e5c4a;
+}
+
+.cat-icon-tag {
+  color: #0e5c4a;
+}
+
+.cat-placeholder {
+  color: #94a3b8;
+}
+
+.cat-select-chevron {
+  color: #64748b;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.cat-select-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Floating Dropdown */
+.cat-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: catDropdownFade 0.15s ease-out;
+}
+
+@keyframes catDropdownFade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cat-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.cat-search-icon {
+  color: #94a3b8;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.cat-search-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 13.5px;
+  color: #0f172a;
+  outline: none;
+  padding: 4px 0;
+}
+
+.cat-search-input::placeholder {
+  color: #94a3b8;
+}
+
+.cat-search-clear {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.cat-search-clear:hover {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.cat-select-options {
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+
+.cat-select-options::-webkit-scrollbar {
+  width: 5px;
+}
+
+.cat-select-options::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.cat-select-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  font-size: 13.5px;
+}
+
+.cat-select-opt:hover {
+  background-color: #f1f5f9;
+}
+
+.cat-select-opt.selected {
+  background-color: rgba(14, 92, 74, 0.08);
+}
+
+.cat-select-opt .opt-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.cat-select-opt .opt-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.cat-select-opt.selected .opt-title {
+  font-weight: 600;
+  color: #0e5c4a;
+}
+
+.cat-select-opt .opt-sub {
+  font-size: 11.5px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cat-select-opt .opt-check {
+  color: #0e5c4a;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.cat-select-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.cat-select-footer {
+  border-top: 1px solid #f1f5f9;
+  padding: 8px 12px;
+  background: #fafafa;
+}
+
+.cat-add-new-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: none;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0e5c4a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cat-add-new-btn:hover {
+  background: rgba(14, 92, 74, 0.06);
+  border-color: #0e5c4a;
+}

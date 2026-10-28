@@ -779,3 +779,321 @@
   border: 1px solid #fecaca;
   color: #991b1b;
 }
+
+
+/* ===================================================
+   ADMIN ADD PRODUCT - HEADER, BUTTONS & MODAL DIALOG
+   =================================================== */
+
+.admin-products-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-add-product-main-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: #0e5c4a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(14, 92, 74, 0.25);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.admin-add-product-main-btn:hover {
+  background-color: #094738;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(14, 92, 74, 0.3);
+}
+
+.admin-add-product-main-btn:active {
+  transform: translateY(0);
+}
+
+.admin-quick-add-btn {
+  background-color: #0e5c4a !important;
+  color: #ffffff !important;
+  border-color: #0e5c4a !important;
+}
+
+.admin-quick-add-btn:hover {
+  background-color: #094738 !important;
+}
+
+/* Sidebar Add Product Action */
+.admin-nav-cta-wrap {
+  padding: 12px 16px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.admin-sidebar-add-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 8px;
+  color: #34d399;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-sidebar-add-btn:hover {
+  background: rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+  border-color: #34d399;
+}
+
+/* Success Banner */
+.admin-created-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  background-color: #ecfdf5;
+  border: 1.5px solid #a7f3d0;
+  border-radius: 10px;
+  margin-top: 14px;
+  margin-bottom: 8px;
+  color: #065f46;
+  animation: bannerSlideDown 0.2s ease-out;
+}
+
+@keyframes bannerSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.admin-created-banner .banner-icon {
+  color: #059669;
+  flex-shrink: 0;
+}
+
+.admin-created-banner .banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13.5px;
+}
+
+.admin-created-banner .banner-content strong {
+  font-size: 14px;
+  color: #047857;
+}
+
+.admin-created-banner .banner-close {
+  background: none;
+  border: none;
+  color: #059669;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
+}
+
+.admin-created-banner .banner-close:hover {
+  opacity: 1;
+  background: rgba(5, 150, 105, 0.1);
+}
+
+/* Modal Overlay & Dialog */
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.admin-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: backdropFade 0.2s ease-out;
+}
+
+@keyframes backdropFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.admin-modal-dialog {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 1200px;
+  max-height: 92vh;
+  background-color: #f8fafc;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalScaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.admin-modal-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.admin-modal-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-modal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0e5c4a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-modal-header-text h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.admin-modal-header-text p {
+  margin: 0;
+  font-size: 13.5px;
+  color: #64748b;
+}
+
+.admin-modal-close-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.admin-modal-close-btn:hover {
+  color: #0f172a;
+  background-color: #f1f5f9;
+}
+
+.admin-modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 28px 48px;
+}
+
+.admin-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-modal-body::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+/* Tablet & Mobile Breakpoints */
+@media (max-width: 900px) {
+  .admin-modal-overlay {
+    padding: 10px;
+  }
+
+  .admin-modal-dialog {
+    max-height: 96vh;
+    border-radius: 12px;
+  }
+
+  .admin-modal-header {
+    padding: 16px 20px;
+  }
+
+  .admin-modal-body {
+    padding: 16px 20px 40px;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-products-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-add-product-main-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .admin-modal-overlay {
+    padding: 0;
+  }
+
+  .admin-modal-dialog {
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .admin-modal-header {
+    padding: 14px 16px;
+  }
+
+  .admin-modal-body {
+    padding: 14px 16px 36px;
+  }
+}

@@ -7,6 +7,7 @@ import {
 import api from '../../utils/api';
 import Pagination from '../../components/ui/Pagination';
 import VendorSelect from '../../components/admin/VendorSelect';
+import AddProduct from '../vendor/AddProduct';
 import './AdminDashboard.css';
 
 const ORDER_STATUSES = ['Processing', 'Shipped', 'Delivered', 'Cancelled'];
@@ -20,6 +21,10 @@ export default function AdminDashboard({ onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [state, setState] = useState({ loading: true, error: null, vendors: [], products: [], orders: [], users: [], categories: [], videos: [] });
   const [attempt, setAttempt] = useState(0);
+
+  /* Admin Add Product state */
+  const [addProductOpen, setAddProductOpen] = useState(false);
+  const [productCreatedMsg, setProductCreatedMsg] = useState(null);
 
   /* Per-row action bookkeeping: the in-flight action id and its latest error. */
   const [busyId, setBusyId] = useState(null);
@@ -232,6 +237,38 @@ export default function AdminDashboard({ onLogout }) {
     } finally {
       setCreatingCat(false);
     }
+  };
+
+  /* Keyboard Escape to dismiss Add Product modal */
+  useEffect(() => {
+    if (!addProductOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setAddProductOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [addProductOpen]);
+
+  /* Handle product created by admin */
+  const handleAdminProductCreated = (newProduct) => {
+    setState((prev) => {
+      const list = prev.products || [];
+      const idx = list.findIndex((p) => String(p.id) === String(newProduct.id));
+      let next;
+      if (idx >= 0) {
+        next = [...list];
+        next[idx] = newProduct;
+      } else {
+        next = [newProduct, ...list];
+      }
+      return { ...prev, products: next };
+    });
+    setProductCreatedMsg({
+      title: newProduct.title || newProduct.name,
+      status: newProduct.status || 'approved'
+    });
+    setAddProductOpen(false);
+    setActiveTab('products');
   };
 
   const handleStartEditCategory = (cat) => {
@@ -491,6 +528,20 @@ export default function AdminDashboard({ onLogout }) {
               {count != null && <span style={{ opacity: 0.8, fontSize: 12 }}>({count})</span>}
             </a>
           ))}
+
+          <div className="admin-nav-cta-wrap">
+            <button
+              type="button"
+              className="admin-sidebar-add-btn"
+              onClick={() => {
+                setActiveTab('products');
+                setAddProductOpen(true);
+                setSidebarOpen(false);
+              }}
+            >
+              <Plus size={15} /> Add Product
+            </button>
+          </div>
         </nav>
         <button className="admin-logout-btn" onClick={onLogout}>
           <LogOut size={18} />
@@ -578,6 +629,13 @@ export default function AdminDashboard({ onLogout }) {
                   </p>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {refreshBtn}
+                    <button
+                      type="button"
+                      className="approve-btn admin-quick-add-btn"
+                      onClick={() => { setActiveTab('products'); setAddProductOpen(true); }}
+                    >
+                      <Plus size={15} /> Add product
+                    </button>
                     <button type="button" className="approve-btn" onClick={() => setActiveTab('products')}>
                       <Package size={15} /> Review products ({pendingProducts.length})
                     </button>
@@ -1006,10 +1064,39 @@ export default function AdminDashboard({ onLogout }) {
             {/* ---------------- 4. PRODUCTS TAB (ALL PRODUCTS SCREEN) ---------------- */}
             {activeTab === 'products' && (
               <div className="admin-vendors-section">
-                <div className="vendors-header">
-                  <h2>Product approvals & catalog management</h2>
-                  <p>Vendor submissions from the database — review, approve or manage product visibility</p>
+                <div className="vendors-header admin-products-header">
+                  <div className="vendors-header-titles">
+                    <h2>Product approvals & catalog management</h2>
+                    <p>Vendor submissions from the database — review, approve or manage product visibility</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-add-product-main-btn"
+                    onClick={() => setAddProductOpen(true)}
+                  >
+                    <Plus size={16} /> Add Product
+                  </button>
                 </div>
+
+                {productCreatedMsg && (
+                  <div className="admin-created-banner" role="status">
+                    <CheckCircle2 size={18} className="banner-icon" />
+                    <div className="banner-content">
+                      <strong>Product Created Successfully!</strong>
+                      <span>
+                        &ldquo;{productCreatedMsg.title}&rdquo; has been saved with status <strong>{productCreatedMsg.status.toUpperCase()}</strong>.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="banner-close"
+                      onClick={() => setProductCreatedMsg(null)}
+                      aria-label="Dismiss message"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                )}
 
                 <div className="admin-filter-bar">
                   <input
@@ -1829,6 +1916,40 @@ export default function AdminDashboard({ onLogout }) {
               <strong>{actionError.message}</strong>
               <br />
               <small>Nothing changed — the server rejected the update. Try again once the issue is resolved.</small>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- ADD PRODUCT MODAL DIALOG / DRAWER ---------------- */}
+        {addProductOpen && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-add-prod-modal-title">
+            <div className="admin-modal-backdrop" onClick={() => setAddProductOpen(false)} />
+            <div className="admin-modal-dialog">
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge">
+                    <ShieldCheck size={14} /> Catalog Administration
+                  </div>
+                  <h2 id="admin-add-prod-modal-title">Add New Product</h2>
+                  <p>Create a verified product listing for the platform catalog or assign to a vendor.</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  onClick={() => setAddProductOpen(false)}
+                  aria-label="Close dialog"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="admin-modal-body">
+                <AddProduct
+                  mode="admin"
+                  vendors={state.vendors}
+                  onProductCreated={handleAdminProductCreated}
+                  onCancel={() => setAddProductOpen(false)}
+                />
+              </div>
             </div>
           </div>
         )}

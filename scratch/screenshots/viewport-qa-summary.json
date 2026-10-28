@@ -1,0 +1,335 @@
+[
+  {
+    "viewport": "desktop-1920",
+    "innerWidth": 1920,
+    "docScrollWidth": 1905,
+    "hasHorizontalOverflow": false,
+    "bannerPresent": true,
+    "bannerTitle": "Pure Organic Produce & Farm Harvests",
+    "primaryCta": "/shop",
+    "secondaryCta": "/collection/deals",
+    "showcasePresent": true,
+    "showcaseTitle": "Shop by Category",
+    "categoryCount": 7,
+    "categories": [
+      {
+        "href": null,
+        "isAll": false
+      },
+      {
+        "href": null,
+        "isAll": false
+      },
+      {
+        "href": null,
+        "isAll": false
+      },
+      {
+        "href": null,
+        "isAll": false
+      },
+      {
+        "href": null,
+        "isAll": false
+      },
+      {
+        "href": null,
+        "isAll": false
+      },
+      {
+        "href": null,
+        "isAll": false
+      }
+    ],
+    "imagesLoaded": 0,
+    "totalImages": 0
+  },
+  {
+    "viewport": "desktop-1366",
+    "innerWidth": 1366,
+    "docScrollWidth": 1351,
+    "hasHorizontalOverflow": false,
+    "bannerPresent": true,
+    "bannerTitle": "Pure Organic Produce & Farm Harvests",
+    "primaryCta": "/shop",
+    "secondaryCta": "/collection/deals",
+    "showcasePresent": true,
+    "showcaseTitle": "Shop by Category",
+    "showMoreLink": "/shop",
+    "categoryCount": 6,
+    "categories": [
+      {
+        "label": "Dairy & Eggs",
+        "href": "/category/dairy-eggs",
+        "isAll": false
+      },
+      {
+        "label": "Fresh Produce",
+        "href": "/category/fresh-produce",
+        "isAll": false
+      },
+      {
+        "label": "Honey & Sweeteners",
+        "href": "/category/honey-sweeteners",
+        "isAll": false
+      },
+      {
+        "label": "Pantry Staples",
+        "href": "/category/pantry-staples",
+        "isAll": false
+      },
+      {
+        "label": "toys",
+        "href": "/category/toys",
+        "isAll": false
+      },
+      {
+        "label": "All Products",
+        "href": "/shop",
+        "isAll": true
+      }
+    ],
+    "imagesLoaded": 5,
+    "totalImages": 5
+  },
+  {
+    "viewport": "tablet-768",
+    "innerWidth": 768,
+    "docScrollWidth": 753,
+    "hasHorizontalOverflow": false,
+    "bannerPresent": true,
+    "bannerTitle": "Pure Organic Produce & Farm Harvests",
+    "primaryCta": "/shop",
+    "secondaryCta": "/collection/deals",
+    "showcasePresent": true,
+    "showcaseTitle": "Shop by Category",
+    "showMoreLink": "/shop",
+    "categoryCount": 6,
+    "categories": [
+      {
+        "label": "Dairy & Eggs",
+        "href": "/category/dairy-eggs",
+        "isAll": false
+      },
+      {
+        "label": "Fresh Produce",
+        "href": "/category/fresh-produce",
+        "isAll": false
+      },
+      {
+        "label": "Honey & Sweeteners",
+        "href": "/category/honey-sweeteners",
+        "isAll": false
+      },
+      {
+        "label": "Pantry Staples",
+        "href": "/category/pantry-staples",
+        "isAll": false
+      },
+      {
+        "label": "toys",
+        "href": "/category/toys",
+        "isAll": false
+      },
+      {
+        "label": "All Products",
+        "href": "/shop",
+        "isAll": true
+      }
+    ],
+    "imagesLoaded": 5,
+    "totalImages": 5
+  },
+  {
+    "viewport": "mobile-430",
+    "innerWidth": 430,
+    "docScrollWidth": 430,
+    "hasHorizontalOverflow": false,
+    "bannerPresent": true,
+    "bannerTitle": "Pure Organic Produce & Farm Harvests",
+    "primaryCta": "/shop",
+    "secondaryCta": "/collection/deals",
+    "showcasePresent": true,
+    "showcaseTitle": "Shop by Category",
+    "showMoreLink": "/shop",
+    "categoryCount": 6,
+    "categories": [
+      {
+        "label": "Dairy & Eggs",
+        "href": "/category/dairy-eggs",
+        "isAll": false
+      },
+      {
+        "label": "Fresh Produce",
+        "href": "/category/fresh-produce",
+        "isAll": false
+      },
+      {
+        "label": "Honey & Sweeteners",
+        "href": "/category/honey-sweeteners",
+        "isAll": false
+      },
+      {
+        "label": "Pantry Staples",
+        "href": "/category/pantry-staples",
+        "isAll": false
+      },
+      {
+        "label": "toys",
+        "href": "/category/toys",
+        "isAll": false
+      },
+      {
+        "label": "All Products",
+        "href": "/shop",
+        "isAll": true
+      }
+    ],
+    "imagesLoaded": 5,
+    "totalImages": 5
+  },
+  {
+    "viewport": "mobile-390",
+    "innerWidth": 390,
+    "docScrollWidth": 390,
+    "hasHorizontalOverflow": false,
+    "bannerPresent": true,
+    "bannerTitle": "Pure Organic Produce & Farm Harvests",
+    "primaryCta": "/shop",
+    "secondaryCta": "/collection/deals",
+    "showcasePresent": true,
+    "showcaseTitle": "Shop by Category",
+    "showMoreLink": "/shop",
+    "categoryCount": 6,
+    "categories": [
+      {
+        "label": "Dairy & Eggs",
+        "href": "/category/dairy-eggs",
+        "isAll": false
+      },
+      {
+        "label": "Fresh Produce",
+        "href": "/category/fresh-produce",
+        "isAll": false
+      },
+      {
+        "label": "Honey & Sweeteners",
+        "href": "/category/honey-sweeteners",
+        "isAll": false
+      },
+      {
+        "label": "Pantry Staples",
+        "href": "/category/pantry-staples",
+        "isAll": false
+      },
+      {
+        "label": "toys",
+        "href": "/category/toys",
+        "isAll": false
+      },
+      {
+        "label": "All Products",
+        "href": "/shop",
+        "isAll": true
+      }
+    ],
+    "imagesLoaded": 5,
+    "totalImages": 5
+  },
+  {
+    "viewport": "mobile-360",
+    "innerWidth": 360,
+    "docScrollWidth": 360,
+    "hasHorizontalOverflow": false,
+    "bannerPresent": true,
+    "bannerTitle": "Pure Organic Produce & Farm Harvests",
+    "primaryCta": "/shop",
+    "secondaryCta": "/collection/deals",
+    "showcasePresent": true,
+    "showcaseTitle": "Shop by Category",
+    "showMoreLink": "/shop",
+    "categoryCount": 6,
+    "categories": [
+      {
+        "label": "Dairy & Eggs",
+        "href": "/category/dairy-eggs",
+        "isAll": false
+      },
+      {
+        "label": "Fresh Produce",
+        "href": "/category/fresh-produce",
+        "isAll": false
+      },
+      {
+        "label": "Honey & Sweeteners",
+        "href": "/category/honey-sweeteners",
+        "isAll": false
+      },
+      {
+        "label": "Pantry Staples",
+        "href": "/category/pantry-staples",
+        "isAll": false
+      },
+      {
+        "label": "toys",
+        "href": "/category/toys",
+        "isAll": false
+      },
+      {
+        "label": "All Products",
+        "href": "/shop",
+        "isAll": true
+      }
+    ],
+    "imagesLoaded": 5,
+    "totalImages": 5
+  },
+  {
+    "viewport": "mobile-320",
+    "innerWidth": 320,
+    "docScrollWidth": 320,
+    "hasHorizontalOverflow": false,
+    "bannerPresent": true,
+    "bannerTitle": "Pure Organic Produce & Farm Harvests",
+    "primaryCta": "/shop",
+    "secondaryCta": "/collection/deals",
+    "showcasePresent": true,
+    "showcaseTitle": "Shop by Category",
+    "showMoreLink": "/shop",
+    "categoryCount": 6,
+    "categories": [
+      {
+        "label": "Dairy & Eggs",
+        "href": "/category/dairy-eggs",
+        "isAll": false
+      },
+      {
+        "label": "Fresh Produce",
+        "href": "/category/fresh-produce",
+        "isAll": false
+      },
+      {
+        "label": "Honey & Sweeteners",
+        "href": "/category/honey-sweeteners",
+        "isAll": false
+      },
+      {
+        "label": "Pantry Staples",
+        "href": "/category/pantry-staples",
+        "isAll": false
+      },
+      {
+        "label": "toys",
+        "href": "/category/toys",
+        "isAll": false
+      },
+      {
+        "label": "All Products",
+        "href": "/shop",
+        "isAll": true
+      }
+    ],
+    "imagesLoaded": 5,
+    "totalImages": 5
+  }
+]

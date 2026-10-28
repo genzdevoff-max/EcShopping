@@ -28,7 +28,11 @@ import {
 import ProductCard from '../ui/ProductCard';
 import SectionHead from '../ui/SectionHead';
 import { ErrorState } from '../ui/States';
+import PromotionalBanner from './PromotionalBanner';
+import CircularCategoryShowcase from './CircularCategoryShowcase';
 import './home.css';
+
+export { PromotionalBanner, CircularCategoryShowcase };
 
 /* ---------------------------------------------------------------
    1. Compact Horizontal Category Navigation (Amazon/Flipkart style)

@@ -17,13 +17,23 @@ import {
   Trash2,
   RefreshCw,
   Cloud,
-  Link as LinkIcon
+  Link as LinkIcon,
+  ShieldCheck,
+  Store
 } from 'lucide-react';
 import { createProductOnServer } from '../../utils/storage';
 import api from '../../utils/api';
+import CategorySelect from '../../components/ui/CategorySelect';
+import VendorSelect from '../../components/admin/VendorSelect';
 import './AddProduct.css';
 
-export default function AddProduct({ vendor }) {
+export default function AddProduct({
+  vendor = null,
+  mode = 'vendor', // 'vendor' | 'admin'
+  vendors = [], // passed in admin mode
+  onProductCreated = null,
+  onCancel = null
+}) {
   const navigate = useNavigate();
 
   // Unit Options explicitly defined by user
@@ -50,7 +60,7 @@ export default function AddProduct({ vendor }) {
     'Bag'
   ];
 
-  // Form State with common placeholders
+  // Form State
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -65,12 +75,21 @@ export default function AddProduct({ vendor }) {
   const [newCatName, setNewCatName] = useState('');
   const [creatingCat, setCreatingCat] = useState(false);
 
+  // Admin-specific state
+  const [selectedVendorId, setSelectedVendorId] = useState('shared');
+  const [status, setStatus] = useState('approved');
+
   // Quick inline category creation
   const handleCreateCategoryInline = async () => {
     if (!newCatName.trim()) return;
     setCreatingCat(true);
     try {
-      const res = await api.createCategory({ name: newCatName.trim() }, 'vendor');
+      const role = mode === 'admin' ? 'admin' : 'vendor';
+      const catVendorId = (mode === 'admin' && selectedVendorId !== 'shared' && selectedVendorId !== 'null')
+        ? selectedVendorId
+        : (vendor?.id || null);
+
+      const res = await api.createCategory({ name: newCatName.trim(), vendorId: catVendorId }, role);
       if (res?.success && res.category) {
         setCategoriesList((prev) => [res.category, ...prev]);
         setCategory(res.category.name);
@@ -113,25 +132,32 @@ export default function AddProduct({ vendor }) {
     { label: 'Cold-pressed Oil', url: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=600&q=80' }
   ];
 
-  // Fetch available categories from TiDB (vendor token attached by api.js)
+  // Fetch available categories from TiDB
   useEffect(() => {
+    let cancelled = false;
     const fetchCats = async () => {
       try {
-        const data = await api.getCategories({ vendorId: vendor?.id || '' });
+        const data = mode === 'admin'
+          ? await api.getCategories({}, 'admin')
+          : await api.getCategories({ vendorId: vendor?.id || '' });
+
+        if (cancelled) return;
         if (data?.success && Array.isArray(data.categories) && data.categories.length > 0) {
           setCategoriesList(data.categories);
-          setCategory(data.categories[0].name);
+          setCategory((prev) => prev || data.categories[0].name);
         } else {
           setCategoriesList([{ id: 'default', name: 'General' }]);
-          setCategory('General');
+          setCategory((prev) => prev || 'General');
         }
       } catch {
+        if (cancelled) return;
         setCategoriesList([{ id: 'default', name: 'General' }]);
-        setCategory('General');
+        setCategory((prev) => prev || 'General');
       }
     };
     fetchCats();
-  }, [vendor?.id]);
+    return () => { cancelled = true; };
+  }, [mode, vendor?.id]);
 
   // Discount Calculation
   const parsedSelling = parseFloat(sellingPrice) || 0;
@@ -156,9 +182,8 @@ export default function AddProduct({ vendor }) {
 
     setUploading(true);
     try {
-      // Vendor token is attached by api.js — the upload endpoint rejects
-      // anonymous or expired sessions.
-      const data = await api.uploadImage(file, 'vendor');
+      const uploadRole = mode === 'admin' ? 'admin' : 'vendor';
+      const data = await api.uploadImage(file, uploadRole);
       if (data && data.success && data.url) {
         setImage(data.url);
         if (data.isFallback) {
@@ -203,8 +228,7 @@ export default function AddProduct({ vendor }) {
     }
   };
 
-  // Form Submit Handler — server-authoritative: the product only exists once
-  // the API confirms it (status 'pending' until an admin approves).
+  // Form Submit Handler
   const [submitting, setSubmitting] = useState(false);
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -221,13 +245,18 @@ export default function AddProduct({ vendor }) {
       return;
     }
 
+    if (!category || !category.trim()) {
+      showToast('Please select a category', 'error');
+      return;
+    }
+
     const parsedQty = stockStatus === 'out_of_stock' ? 0 : Math.max(0, parseInt(stockQuantity, 10) || 50);
 
     const newProdData = {
       title: name.trim(),
       name: name.trim(),
       description: description.trim(),
-      category: category || 'General',
+      category: category.trim(),
       price: parsedSelling,
       strikePrice: parsedStrike > 0 ? parsedStrike : null,
       unit: unit,
@@ -237,18 +266,64 @@ export default function AddProduct({ vendor }) {
     };
 
     setSubmitting(true);
-    const result = await createProductOnServer(vendor, newProdData);
-    setSubmitting(false);
 
-    if (result.ok) {
-      showToast(`Product "${name}" submitted — waiting for admin approval`, 'success');
-      setTimeout(() => {
-        navigate('/vendor/products');
-      }, 1200);
+    if (mode === 'admin') {
+      try {
+        const adminPayload = {
+          ...newProdData,
+          status: status || 'approved',
+          vendorId: (selectedVendorId && selectedVendorId !== 'shared' && selectedVendorId !== 'null') ? selectedVendorId : null
+        };
+        const res = await api.createProduct(adminPayload, 'admin');
+        if (res?.success && res.product) {
+          showToast(`Product "${res.product.title}" created (${res.product.status.toUpperCase()})!`, 'success');
+          if (typeof onProductCreated === 'function') {
+            onProductCreated(res.product);
+          }
+        } else {
+          showToast(res?.error || 'Failed to create product', 'error');
+        }
+      } catch (err) {
+        showToast(err.message || 'Submission error', 'error');
+      } finally {
+        setSubmitting(false);
+      }
     } else {
-      showToast(result.error || 'Submission failed. Nothing was saved.', 'error');
+      // Vendor mode
+      const result = await createProductOnServer(vendor, newProdData);
+      setSubmitting(false);
+
+      if (result.ok) {
+        showToast(`Product "${name}" submitted — waiting for admin approval`, 'success');
+        if (typeof onProductCreated === 'function') {
+          onProductCreated(result.product);
+        } else {
+          setTimeout(() => {
+            navigate('/vendor/products');
+          }, 1200);
+        }
+      } else {
+        showToast(result.error || 'Submission failed. Nothing was saved.', 'error');
+      }
     }
   };
+
+  const handleCancel = () => {
+    if (typeof onCancel === 'function') {
+      onCancel();
+    } else {
+      navigate(mode === 'admin' ? '/admin' : '/vendor/products');
+    }
+  };
+
+  // Derive selected vendor display name for preview
+  const currentAssignedVendor = mode === 'admin'
+    ? vendors.find((v) => String(v.id) === String(selectedVendorId))
+    : vendor;
+
+  const previewSeller = mode === 'admin'
+    ? (selectedVendorId === 'shared' || !selectedVendorId ? 'Platform Direct' : (currentAssignedVendor?.name || 'Assigned Vendor'))
+    : (vendor?.name || 'My Store');
 
   return (
     <div className="add-prod-root">
@@ -263,6 +338,7 @@ export default function AddProduct({ vendor }) {
               type="button" 
               className="add-prod-toast-dismiss"
               onClick={() => setToast(null)}
+              aria-label="Dismiss toast"
             >
               <X size={15} />
             </button>
@@ -275,6 +351,58 @@ export default function AddProduct({ vendor }) {
         {/* ================= LEFT COLUMN: FORM ================= */}
         <div className="add-prod-form-card">
           <form onSubmit={handleSubmit}>
+            {/* 0. Admin Ownership & Governance (Admin Mode Only) */}
+            {mode === 'admin' && (
+              <div className="add-prod-section admin-governance-section">
+                <div className="add-prod-section-header">
+                  <ShieldCheck size={18} />
+                  <span>Admin Governance & Ownership</span>
+                </div>
+
+                <div className="add-prod-row-2col">
+                  {/* Vendor / Store Assignment */}
+                  <div className="add-prod-field">
+                    <label className="add-prod-label">
+                      <span>Product Owner / Vendor</span>
+                    </label>
+                    <VendorSelect
+                      vendors={vendors}
+                      value={selectedVendorId}
+                      onChange={(val) => setSelectedVendorId(val)}
+                      placeholder="Select vendor or shared platform…"
+                    />
+                    <span className="add-prod-field-hint">
+                      Choose a vendor to own this listing, or "Shared" for Platform Direct.
+                    </span>
+                  </div>
+
+                  {/* Initial Approval Status */}
+                  <div className="add-prod-field">
+                    <label htmlFor="prod-status-select" className="add-prod-label">
+                      <span>Approval Status</span>
+                      <span className="req">*</span>
+                    </label>
+                    <select
+                      id="prod-status-select"
+                      className="add-prod-select"
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                      required
+                    >
+                      <option value="approved">Approved (Live on storefront immediately)</option>
+                      <option value="pending">Pending Review (Draft / Approval queue)</option>
+                      <option value="rejected">Rejected (Unpublished listing)</option>
+                    </select>
+                    <span className="add-prod-field-hint">
+                      {status === 'approved' && '✅ Product will immediately appear in the public catalog.'}
+                      {status === 'pending' && '⏳ Product will stay queued in Pending Review.'}
+                      {status === 'rejected' && '⛔ Product will be marked rejected and kept hidden.'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 1. Basic Product Info */}
             <div className="add-prod-section">
               <div className="add-prod-section-header">
@@ -292,14 +420,14 @@ export default function AddProduct({ vendor }) {
                   id="prod-name-input"
                   type="text" 
                   className="add-prod-input"
-                  placeholder="Enter product name"
+                  placeholder="Enter product name (e.g. Organic Pure Honey 500g)"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
                 />
               </div>
 
-              {/* Category Dropdown */}
+              {/* Searchable Category Combobox */}
               <div className="add-prod-field">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label htmlFor="prod-cat-select" className="add-prod-label">
@@ -309,39 +437,28 @@ export default function AddProduct({ vendor }) {
                   <button
                     type="button"
                     onClick={() => setShowNewCatInline(!showNewCatInline)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--brand, #0e5c4a)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      padding: '2px 4px'
-                    }}
+                    className="add-prod-cat-toggle-btn"
                   >
                     {showNewCatInline ? 'Cancel' : '+ Add New Category'}
                   </button>
                 </div>
+
                 {!showNewCatInline ? (
-                  <select 
+                  <CategorySelect
                     id="prod-cat-select"
-                    className="add-prod-select"
+                    categories={categoriesList}
                     value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    required
-                  >
-                    <option value="" disabled>Select category</option>
-                    {categoriesList.map(cat => (
-                      <option key={cat.id} value={cat.name}>{cat.name}</option>
-                    ))}
-                  </select>
+                    onChange={(selectedName) => setCategory(selectedName)}
+                    onAddNew={() => setShowNewCatInline(true)}
+                    placeholder="Search or select category…"
+                  />
                 ) : (
-                  <div style={{ marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div className="add-prod-inline-cat-box">
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                       <input
                         type="text"
                         className="add-prod-input"
-                        placeholder="New category name (e.g. Toys & Games)"
+                        placeholder="New category name (e.g. Cold-Pressed Oils)"
                         value={newCatName}
                         onChange={(e) => setNewCatName(e.target.value)}
                         style={{ flex: 1 }}
@@ -357,7 +474,7 @@ export default function AddProduct({ vendor }) {
                       </button>
                     </div>
                     <span style={{ fontSize: '11px', color: '#64748b' }}>
-                      Creates a new category for your store. It will be immediately selected for this product.
+                      Creates a new category in the database and selects it immediately.
                     </span>
                   </div>
                 )}
@@ -372,9 +489,10 @@ export default function AddProduct({ vendor }) {
                 <textarea 
                   id="prod-desc-textarea"
                   className="add-prod-textarea"
-                  placeholder="Enter product description"
+                  placeholder="Enter detailed product description, ingredients, benefits or harvest origin…"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
                 ></textarea>
               </div>
             </div>
@@ -399,7 +517,7 @@ export default function AddProduct({ vendor }) {
                     step="0.01"
                     min="0"
                     className="add-prod-input"
-                    placeholder="Enter selling price"
+                    placeholder="e.g. 299"
                     value={sellingPrice}
                     onChange={(e) => setSellingPrice(e.target.value)}
                     required
@@ -418,7 +536,7 @@ export default function AddProduct({ vendor }) {
                     step="0.01"
                     min="0"
                     className="add-prod-input"
-                    placeholder="Enter strike out price"
+                    placeholder="e.g. 399"
                     value={strikePrice}
                     onChange={(e) => setStrikePrice(e.target.value)}
                   />
@@ -506,12 +624,12 @@ export default function AddProduct({ vendor }) {
             <div className="add-prod-section">
               <div className="add-prod-section-header">
                 <ImageIcon size={18} />
-                <span>Product Image (Cloudinary)</span>
+                <span>Product Image (Cloudinary CDN)</span>
               </div>
 
               {/* Hidden file input for Cloudinary upload */}
               <input 
-                type="file"
+                type="file" 
                 ref={fileInputRef}
                 onChange={handleFileInputChange}
                 accept="image/*"
@@ -532,8 +650,8 @@ export default function AddProduct({ vendor }) {
                     <div className="add-prod-upload-loading">
                       <Loader2 size={36} className="add-prod-spinner" />
                       <div className="upload-loading-text">
-                        <strong>Uploading to Cloudinary...</strong>
-                        <span>Storing securely on Cloudinary CDN</span>
+                        <strong>Uploading to Cloudinary CDN…</strong>
+                        <span>Sniffing magic bytes & validating format</span>
                       </div>
                     </div>
                   ) : (
@@ -636,12 +754,13 @@ export default function AddProduct({ vendor }) {
             <div className="add-prod-actions">
               <button type="submit" className="add-prod-submit-btn" disabled={submitting}>
                 {submitting ? <Loader2 size={18} className="add-prod-spinner" /> : <PlusCircle size={18} />}
-                <span>{submitting ? 'Submitting…' : 'Publish Product'}</span>
+                <span>{submitting ? 'Saving…' : (mode === 'admin' ? 'Create Product' : 'Publish Product')}</span>
               </button>
               <button 
                 type="button" 
                 className="add-prod-cancel-btn"
-                onClick={() => navigate('/vendor/products')}
+                onClick={handleCancel}
+                disabled={submitting}
               >
                 Cancel
               </button>
@@ -655,6 +774,18 @@ export default function AddProduct({ vendor }) {
             <h4>Live Storefront Preview</h4>
             <span className="add-prod-preview-badge">Customer View</span>
           </div>
+
+          {/* Mode-specific status badge */}
+          {mode === 'admin' && (
+            <div className="preview-admin-meta">
+              <span className={`preview-status-pill status-${status}`}>
+                Status: {status.toUpperCase()}
+              </span>
+              <span className="preview-seller-pill">
+                <Store size={12} /> {previewSeller}
+              </span>
+            </div>
+          )}
 
           {/* Mock Product Card identical to storefront */}
           <div className="mockup-product-card">
@@ -684,9 +815,14 @@ export default function AddProduct({ vendor }) {
 
             {/* Card Body */}
             <div className="mockup-card-body">
-              <span className="mockup-category-tag">
-                {category || 'CATEGORY'}
-              </span>
+              <div className="mockup-header-row">
+                <span className="mockup-category-tag">
+                  {category || 'CATEGORY'}
+                </span>
+                <span className="mockup-seller-tag">
+                  {previewSeller}
+                </span>
+              </div>
 
               <h4 className="mockup-title">
                 {name || 'Product Name'}

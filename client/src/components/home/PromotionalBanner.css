@@ -1,0 +1,397 @@
+/* ============================================================
+   Promotional Homepage Banner
+   Aspect ratio ~4:1 to 5:2 on desktop, adapting down to mobile.
+   Brand palette: Pine Green #0e5c4a & Terracotta #d9663d
+   ============================================================ */
+
+.promo-banner-section {
+  width: 100%;
+  position: relative;
+  background: var(--paper, #faf8f3);
+  padding-block: clamp(8px, 1.2vw, 14px);
+  overflow: hidden;
+}
+
+.promo-banner-container {
+  width: 100%;
+  max-width: var(--wrap, 1240px);
+  margin-inline: auto;
+  padding-inline: clamp(12px, 2.5vw, 24px);
+}
+
+.promo-banner-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4.2 / 1;
+  min-height: 240px;
+  max-height: 330px;
+  border-radius: var(--r-lg, 18px);
+  overflow: hidden;
+  background: linear-gradient(135deg, #07322a 0%, #0e5c4a 65%, #136a56 100%);
+  box-shadow: 0 4px 18px rgba(7, 50, 42, 0.12);
+}
+
+/* Individual Slide */
+.promo-banner-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.45s ease-in-out, visibility 0.45s ease-in-out;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.promo-banner-slide.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+/* Slide Background Media & Gradient Overlay */
+.promo-banner-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.promo-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center right;
+  transform: scale(1.02);
+  transition: transform 6s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.promo-banner-slide.active .promo-banner-img {
+  transform: scale(1);
+}
+
+.promo-banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(7, 50, 42, 0.94) 0%,
+    rgba(14, 92, 74, 0.88) 42%,
+    rgba(14, 92, 74, 0.5) 70%,
+    rgba(7, 50, 42, 0.2) 100%
+  );
+}
+
+/* Text & Content Layer */
+.promo-banner-content {
+  position: relative;
+  z-index: 3;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(16px, 3.5vw, 36px) clamp(20px, 4vw, 44px);
+  max-width: clamp(380px, 62%, 720px);
+  color: #ffffff;
+}
+
+.promo-banner-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: clamp(6px, 1vw, 10px);
+}
+
+.promo-banner-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: clamp(0.7rem, 0.95vw, 0.78rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: var(--r-pill, 999px);
+}
+
+.promo-tag-icon {
+  color: #f7d070;
+}
+
+.promo-banner-badge {
+  display: inline-flex;
+  font-size: clamp(0.7rem, 0.9vw, 0.76rem);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.promo-banner-title {
+  font-family: var(--font-display, 'Poppins', sans-serif);
+  font-size: clamp(1.28rem, 2.7vw, 2.15rem);
+  line-height: 1.16;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: -0.015em;
+  margin-bottom: clamp(6px, 1vw, 10px);
+  text-shadow: 0 1px 3px rgba(7, 50, 42, 0.4);
+}
+
+.promo-banner-sub {
+  font-family: var(--font-ui, 'Poppins', sans-serif);
+  font-size: clamp(0.82rem, 1.25vw, 0.95rem);
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.92);
+  margin-bottom: clamp(12px, 1.8vw, 18px);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Call to Action Buttons */
+.promo-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.promo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 8px 18px;
+  border-radius: var(--r-pill, 999px);
+  font-family: var(--font-ui, 'Poppins', sans-serif);
+  font-size: clamp(0.82rem, 1.1vw, 0.9rem);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.promo-btn-primary {
+  background: var(--accent, #d9663d);
+  color: #ffffff;
+  border: 1px solid var(--accent, #d9663d);
+  box-shadow: 0 2px 8px rgba(217, 102, 61, 0.32);
+}
+
+.promo-btn-primary:hover {
+  background: var(--accent-600, #bd5128);
+  border-color: var(--accent-600, #bd5128);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(217, 102, 61, 0.42);
+}
+
+.promo-btn-primary:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.promo-btn-secondary {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.promo-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+.promo-btn-secondary:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* Slider Controls: Arrows */
+.promo-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(7, 50, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.82;
+}
+
+.promo-arrow:hover {
+  background: rgba(7, 50, 42, 0.85);
+  border-color: rgba(255, 255, 255, 0.6);
+  opacity: 1;
+  transform: translateY(-50%) scale(1.06);
+}
+
+.promo-arrow:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+.promo-arrow-prev {
+  left: 12px;
+}
+
+.promo-arrow-next {
+  right: 12px;
+}
+
+/* Pagination Dots */
+.promo-dots {
+  position: absolute;
+  bottom: 12px;
+  right: 20px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.promo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill, 999px);
+  background: rgba(255, 255, 255, 0.4);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.promo-dot:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.promo-dot.active {
+  width: 22px;
+  background: var(--accent, #d9663d);
+  box-shadow: 0 0 6px rgba(217, 102, 61, 0.5);
+}
+
+.promo-dot:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Responsive Adaptations
+   ============================================================ */
+
+@media (max-width: 1024px) {
+  .promo-banner-viewport {
+    aspect-ratio: 3.4 / 1;
+    min-height: 220px;
+  }
+
+  .promo-banner-content {
+    max-width: 75%;
+    padding: clamp(16px, 3vw, 28px);
+  }
+}
+
+@media (max-width: 768px) {
+  .promo-banner-viewport {
+    aspect-ratio: auto;
+    min-height: 205px;
+    border-radius: var(--r-md, 14px);
+  }
+
+  .promo-banner-overlay {
+    background: linear-gradient(
+      100deg,
+      rgba(7, 50, 42, 0.95) 0%,
+      rgba(14, 92, 74, 0.9) 65%,
+      rgba(14, 92, 74, 0.6) 100%
+    );
+  }
+
+  .promo-banner-content {
+    max-width: 100%;
+    padding: 18px 20px;
+  }
+
+  .promo-arrow {
+    display: none; /* Mobile uses touch-friendly layout; dots retained */
+  }
+
+  .promo-dots {
+    bottom: 10px;
+    right: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .promo-banner-section {
+    padding-block: 6px;
+  }
+
+  .promo-banner-viewport {
+    min-height: 185px;
+    border-radius: var(--r-sm, 10px);
+  }
+
+  .promo-banner-content {
+    padding: 14px 16px;
+  }
+
+  .promo-banner-badge {
+    display: none; /* Keep header compact on small screens */
+  }
+
+  .promo-banner-sub {
+    -webkit-line-clamp: 2;
+    margin-bottom: 10px;
+  }
+
+  .promo-btn {
+    min-height: 38px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+  }
+
+  .promo-btn-secondary {
+    display: none; /* Prioritize primary CTA on very narrow screens */
+  }
+}
+
+@media (max-width: 360px) {
+  .promo-banner-viewport {
+    min-height: 175px;
+  }
+
+  .promo-banner-content {
+    padding: 12px 14px;
+  }
+
+  .promo-banner-title {
+    font-size: 1.12rem;
+  }
+}

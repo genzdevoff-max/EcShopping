@@ -1,9 +1,14 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 /* ============================================================
    EcShopping Design System
    Palette: pine green + terracotta accent on warm paper
-   Type:    Fraunces (display) + Plus Jakarta Sans (UI)
+   Type:    Poppins (Global Primary Typography)
    ============================================================ */
 
 :root {
@@ -63,8 +68,9 @@
   --sh-lg: 0 20px 48px -12px rgba(31, 42, 38, 0.22);
 
   /* Type */
-  --font-ui: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Fraunces', 'Georgia', serif;
+  --font-ui: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
 
   --wrap: 1240px;
