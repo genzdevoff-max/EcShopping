@@ -2,9 +2,27 @@
 
 **Current Date:** 2026-10-28  
 **Current Phase:** PHASE 18: PRODUCTION READINESS, VIDEO REVIEWS & SYSTEM POLISH (Audit Verified)  
-**Last Completed Task:** `TASK-P18-12` (Change Entire E-commerce Website Font to Poppins)
+**Last Completed Task:** `TASK-P18-13` (Deploy EcShopping Storefront to Hostinger `ecshopping.in`)
 
-1. **Global Typography Migration to Poppins (`TASK-P18-12`):**
+1. **Hostinger Production Storefront Deployment (`TASK-P18-13`):**
+   - **Infrastructure Discovery & Compatibility:**
+     - Inspected Hostinger host `195.35.44.99` running LiteSpeed Web Server with hPanel (account `u525835209.ecshopping.in`).
+     - Verified FTP server explicitly supports FTPS (AUTH TLS) on port 21; established chrooted document root directly in `/public_html`.
+     - Analyzed architecture: Hostinger shared hosting environment is optimized for static SPA hosting via LiteSpeed + `.htaccess`. Persistent Node.js/Express server is hosted on Vercel (`https://ec-shopping-three.vercel.app`) with TiDB Cloud serverless database backend. Decoupled hybrid architecture ensures high-performance edge asset delivery on Hostinger while maintaining reliable serverless API transactions.
+   - **Production Frontend Build & Routing:**
+     - Configured `client/.env.production` pointing `VITE_API_URL` to `https://ec-shopping-three.vercel.app`.
+     - Added `client/public/.htaccess` with HTTPS enforcement, security headers (`nosniff`, `SAMEORIGIN`, `strict-origin-when-cross-origin`), immutable asset caching, and SPA fallback rewrite rules (`RewriteRule . /index.html [L]`).
+     - Ran Vite 6 production build outputting to `client/dist` (11 files, 3.36 MB). Verified API URL embedded in JS bundle.
+   - **Encrypted FTPS Deployment & Security Compliance:**
+     - Automated upload of all 11 production assets via FTPS (`--ssl-reqd`) using in-memory credentials without storing secrets in scripts, logs, CLI args, reports, or Git.
+     - Remote backup baseline recorded (initial remote directory was empty).
+   - **Live System & Browser Verification:**
+     - Live HTTPS checks on `https://ecshopping.in`: Status 200 OK across `/`, `/shop`, `/category/:slug`, `/cart`, `/checkout`, `/login`, `/admin`, `/vendor`, `/order-confirmation/:id`, `/payment/phonepe/return`.
+     - Static assets verified: JS bundle, CSS stylesheet, SVG favicon, and placeholder image serving with correct MIME types and security headers.
+     - Real Headless Chrome CDP verification: Document title verified, promotional banner confirmed rendered, 6 circular category chips hydrated, 27 live product cards rendered from TiDB Cloud database, 0 console errors.
+     - Quality metrics: 71/71 client tests passed, 138/138 server tests passed, 0 lint errors.
+
+2. **Global Typography Migration to Poppins (`TASK-P18-12`):**
    - **Unified Typography System (COMPLETED & VERIFIED):**
      - **Font Loading Configuration:** Replaced Google Fonts stylesheet in `client/index.html` with Poppins covering weights 300, 400, 500, 600, 700 with italic styles (`family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&display=swap`). Included `preconnect` hints to Google Fonts domains to eliminate render-blocking and layout shifts.
      - **Tailwind CSS v4 & Global Token Integration:** Configured Tailwind v4 `@theme` block in `client/src/index.css` defining `--font-sans` and `--font-display`. Updated `:root` design tokens (`--font-ui`, `--font-display`, `--font-sans`) to `'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`. Set `body` to `font-family: var(--font-ui)` and ensured form controls (`button, input, select, textarea`) inherit typography globally.
