@@ -1845,7 +1845,7 @@ export default function AdminDashboard({ onLogout }) {
                         <input
                           type="text"
                           className="payment-input"
-                          placeholder="https://ec-shopping.vercel.app/order-success"
+                          placeholder="https://ecshopping.in/payment/phonepe/return"
                           value={paymentForm.redirectUrl}
                           onChange={(e) => setPaymentForm({ ...paymentForm, redirectUrl: e.target.value })}
                         />
@@ -1885,7 +1885,7 @@ export default function AdminDashboard({ onLogout }) {
                   <div className="payment-callout info" style={{ marginBottom: 16 }}>
                     <strong>Registered Production Domains:</strong>
                     <ul style={{ margin: '8px 0 0 0', paddingLeft: 20 }}>
-                      <li>Frontend Storefront: <code>https://ec-shopping.vercel.app</code></li>
+                      <li>Frontend Storefront: <code>https://ecshopping.in</code></li>
                       <li>Backend API: <code>https://ec-shopping-three.vercel.app</code></li>
                     </ul>
                   </div>

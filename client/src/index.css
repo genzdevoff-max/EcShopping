@@ -204,14 +204,14 @@ p { color: var(--ink-2); }
   width: 100%;
   max-width: var(--wrap);
   margin-inline: auto;
-  padding-inline: 20px;
+  padding-inline: clamp(10px, 3.5vw, 20px);
 }
 
 .container-narrow {
   width: 100%;
   max-width: var(--wrap-narrow);
   margin-inline: auto;
-  padding-inline: 20px;
+  padding-inline: clamp(10px, 3.5vw, 20px);
 }
 
 .section {

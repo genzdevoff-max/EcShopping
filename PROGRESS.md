@@ -1,10 +1,66 @@
 # EcShopping — Progress & Session Handover Log
 
-**Current Date:** 2026-10-28  
-**Current Phase:** PHASE 18: PRODUCTION READINESS, VIDEO REVIEWS & SYSTEM POLISH (Audit Verified)  
-**Last Completed Task:** `TASK-P18-13` (Deploy EcShopping Storefront to Hostinger `ecshopping.in`)
+**Current Date:** 2026-10-30  
+**Current Phase:** PHASE 19: PRODUCTION READINESS, MOBILE UI, PAYMENT RETURN & PERFORMANCE FIXES (Verified & Built)  
+**Last Completed Task:** `TASK-P19-08` (PhonePe Return Flow: Eliminate "Status Unavailable", Multi-Source Order Resolution, Bounded Retries, and Smooth Confirmation)
 
-1. **Hostinger Production Storefront Deployment (`TASK-P18-13`):**
+1. **PhonePe Payment Return URL & Webhook Isolation (`TASK-P19-01`):**
+   - Canonical Storefront Origin: Routed browser return flow to `https://ecshopping.in/payment/phonepe/return`.
+   - Dynamic Resolution: Added `getFrontendOrigin(env)` in `server/utils/phonepe.js` reading `FRONTEND_URL` (with fallback to `CLIENT_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, `VERCEL_URL`, or `http://localhost:5173`).
+   - Webhook Isolation: Preserved and separated server-to-server callback webhook at `https://ec-shopping-three.vercel.app/api/payments/phonepe/callback` with `X-VERIFY` HMAC checksum verification (`sha256(rawResponse + saltKey)###saltIndex`).
+   - Obsolete Domain Eradication: Replaced hardcoded occurrences of `ec-shopping.vercel.app` across `server/utils/phonepe.js`, `server/index.js`, `AdminDashboard.jsx`, and `server/.env.example`.
+   - Verified by automated unit tests 139–142 in `server/test/phonepe.test.js` (142/142 passing).
+
+2. **Homepage Banner and Circular Category Showcase Resizing (`TASK-P19-02`):**
+   - Promotional Banner: Height scaled independently across breakpoints: Desktop (1350–1440px) 300–340px (`clamp(300px, 23.5vw, 340px)`); Tablet (768–1024px) 220–280px (`clamp(220px, 26vw, 280px)`); Mobile (320–430px) 160–210px. Carousel navigation arrows visible and scaled without obscuring copy.
+   - Circular Categories: Item diameter scaled across breakpoints: Desktop 100–124px; Tablet 96px; Mobile 84–88px; Small Mobile (320–350px) 78px. Aspect ratio 1:1, border-radius 50%, `flex-shrink: 0`, and touch horizontal scroll track.
+   - Branding Preservation: Preserved Pine Green `#0e5c4a`, Terracotta `#d9663d`, and Poppins typography.
+
+3. **Storefront Mobile Overflow Audit & Elimination (`TASK-P19-03`):**
+   - Inspected and eliminated root causes of horizontal scroll: responsive padding on `.container`, scaled brand logo image, and compact header action icons down to 320px.
+   - Automated Headless Chrome CDP verification ran across all 9 target viewports (1440, 1366, 1024, 768, 430, 390, 375, 360, 320px) confirming `hasHorizontalOverflow = false` across 100% of screens.
+
+4. **Responsive Checkout with Collapsible Summary & Duplicate Submission Prevention (`TASK-P19-04`):**
+   - Single-Column Mobile Layout: On viewports <= 960px, checkout adapts to single-column with collapsible order summary disclosure (`co-summary-toggle-btn`) and total price badge.
+   - Reachable Mobile Submit Bar: Placed primary "Place order" button immediately following payment options on mobile.
+   - Duplicate Submit Prevention: Added `useRef` submission guard (`submittingRef`) discarding double-taps/clicks before server response, with button disabled state, spinner indicator, and recovery on errors.
+   - Accessibility & iOS Zoom: 44px min touch targets across inputs, buttons, and radio cards; `font-size: 16px` on mobile text inputs preventing iOS auto-zoom. Verified by `checkoutResponsiveAndDebounce.test.mjs`.
+
+5. **Configurable Social Media Links in Footer (`TASK-P19-05`):**
+   - Manageable Channels: Added configurable `socialLinks` array in `client/src/data/content.js` for Instagram, Facebook, and YouTube, supporting `VITE_*` environment variable overrides.
+   - Accessible & Secure: Rendered with `target="_blank" rel="noopener noreferrer"`, 44px touch targets, hover elevation, and `aria-label`/`title` tooltips.
+   - Zero Dead Links: Completely eradicated dead `#instagram`, `#facebook`, `#youtube` links; unconfigured links degrade gracefully. Verified by `footerSocialLinks.test.mjs`.
+
+6. **Admin vs Vendor Product Ownership Semantics Audit (`TASK-P19-06`):**
+   - Schema & Data Model: Products table has `vendor_id VARCHAR(64) DEFAULT NULL` and `vendor_name VARCHAR(255) DEFAULT ''`.
+   - Store-Owned Products: Created by Admin with vendor set to `'Platform Direct'`. In DB, `vendor_id = NULL`, `vendor_name = 'Platform Direct'`, and status defaults to `'approved'`.
+   - Vendor-Owned Products: Created by authenticated vendor. Server enforces `vendor_id = req.auth.vendorId`, `vendor_name = req.auth.name`, and status strictly defaults to `'pending'`.
+   - Governance & Isolation: Vendors cannot view or edit products with `vendor_id = NULL` or products owned by another vendor (enforced by `WHERE vendor_id = req.auth.vendorId`). Admins can reassign vendor ownership and delete products without breaking historical order line items.
+
+7. **Performance Optimization: Route Code-Splitting, Chunking & Query Consolidation (`TASK-P19-07`):**
+   - Route-Level Code Splitting: Converted secondary, vendor, and admin pages in `App.jsx` to `React.lazy()` wrapped in `<Suspense>`.
+   - Vite Rolldown Manual Chunking: Grouped `vendor-react` and `vendor-icons` in `client/vite.config.js`.
+   - Bundle Impact: Main bundle size dropped from 701.60 kB down to 144.35 kB (79.4% reduction); >500kB monolith warning eliminated; build time reduced to 3.27s.
+   - Server Query Optimization: Skipped redundant `SELECT COUNT(*)` on unpaginated `GET /api/products`; added `Cache-Control` header to `/api/categories/public`; added composite database indexes for `(status, category)` and `(customer_email, status)`. Verified by `codeSplittingAndPerformance.test.mjs`.
+
+8. **PhonePe Return Flow Enhancement & Warning Elimination (`TASK-P19-08`):**
+   - **Root Cause Analysis & Warning Elimination:**
+     - Eliminated alarming "Status unavailable" text and `ShieldAlert` warning icon across `PaymentStatus.jsx`, `PaymentStates.jsx`, and `OrderConfirmation.jsx`.
+     - Identified root cause of missing order ID: previous checkout creation did not append query parameters to the redirect URL, and mobile browser app-switching (e.g. from browser to PhonePe/UPI apps) periodically cleared `sessionStorage`.
+   - **Multi-Source Order ID Resolution:**
+     - Server: `getPhonePeRedirectUrl(process.env, order.id)` now automatically appends `?orderId=ORD-XXXXXX` to the return URL.
+     - Client Checkout: Saves `orderId` in BOTH `sessionStorage` and `localStorage` (`ecshopping_pending_payment` and `ecshopping_last_order`) before initiating the gateway redirect.
+     - Return Resolution Seam: Inspects query parameters (`orderId`, `merchantTransactionId`, `transactionId`, `merchantOrderId`, `id`), `sessionStorage`, `localStorage` pending marker, and `localStorage` last order.
+   - **Responsive Bounded Retries & Clear State Outcomes:**
+     - **Verified Success ('paid'):** On authoritative backend verification from `POST /api/payments/phonepe/verify`, `finalizePaid` persists the verified order to localStorage caches, clears cart and pending markers, and smoothly navigates to `/order-confirmation/:orderId` with `{ replace: true }`. Zero duplicate orders created.
+     - **Pending / Processing:** Replaced the 20-second initial freeze with a responsive 5-attempt retry sequence (`[2000, 3000, 4000, 5000, 5000]` ms, ~19s total). Displays neutral "Confirming your payment…" with spinner and progress note (`Attempt X of 5`). Once retries are exhausted without conclusive status, transitions to `pending_settling` ("Payment confirmation in progress") providing manual "Check payment status" and "View order details" actions without alarming warning badges.
+     - **Failed / Cancelled:** Displays clear, friendly explanation ("Payment did not complete. No amount was deducted.") with "Try paying again" action reusing the existing order ID (never minting duplicates) and "Back to cart".
+     - **Unresolved / Missing ID (Case D):** Renders neutral, reassuring "We’re checking your payment" status with links to "/orders", "/track-order", and "/shop" advising customers to check order history before paying again.
+   - **Design System & Testing:**
+     - Styled cards and buttons to match EcShopping Pine Green `#0e5c4a`, Terracotta `#d9663d`, and Poppins typography with 44px min-height touch targets.
+     - Verified by automated unit tests in `phonepeReturnFlow.test.mjs` (8/8 passing). Total suite: 88/88 client tests passing, 142/142 server tests passing, 0 oxlint errors, clean Vite production build in 4.55s.
+
+9. **Hostinger Production Storefront Deployment (`TASK-P18-13`):**
    - **Infrastructure Discovery & Compatibility:**
      - Inspected Hostinger host `195.35.44.99` running LiteSpeed Web Server with hPanel (account `u525835209.ecshopping.in`).
      - Verified FTP server explicitly supports FTPS (AUTH TLS) on port 21; established chrooted document root directly in `/public_html`.

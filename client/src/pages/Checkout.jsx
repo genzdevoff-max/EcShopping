@@ -1,6 +1,6 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Truck, Banknote, Tag, ArrowRight, Lock, CheckCircle2, MapPin, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { ShoppingBag, Truck, Banknote, Tag, ArrowRight, Lock, CheckCircle2, MapPin, Plus, Trash2, AlertCircle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { addCustomer, saveCustomerSession } from '../utils/storage';
 import api from '../utils/api';
 import {
@@ -99,6 +99,8 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
   const [payState, setPayState] = useState('idle');
   const [payInfo, setPayInfo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [summaryCollapsed, setSummaryCollapsed] = useState(true);
   const [errors, setErrors] = useState({});
 
   const totals = useMemo(
@@ -153,7 +155,8 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
   };
 
   const placeOrder = async (event) => {
-    event.preventDefault();
+    event?.preventDefault?.();
+    if (submitting || submittingRef.current) return;
     const found = validate();
     setErrors(found);
     if (Object.keys(found).length > 0) {
@@ -161,6 +164,7 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
@@ -244,6 +248,7 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
       }
     } catch (err) {
       setErrors({ form: err.message || 'Order could not be placed. Please try again.' });
+      submittingRef.current = false;
       setSubmitting(false);
       return;
     }
@@ -261,6 +266,7 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
         message: 'There is no server connection to confirm this order, so the PhonePe payment cannot be started. Please retry when back online or use Cash on Delivery.',
         missingConfig: false
       });
+      submittingRef.current = false;
       setSubmitting(false);
       return;
     }
@@ -270,9 +276,11 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
       try {
         const payRes = await createPhonePePayment(orderId);
         // payRes has { success, redirectUrl, state?, expireAt? }
-        // Save orderId in sessionStorage so the return page can verify
+        // Save orderId in sessionStorage and localStorage so the return page can verify
         try {
           sessionStorage.setItem('ecshopping_pending_payment', orderId);
+          localStorage.setItem('ecshopping_pending_payment', orderId);
+          localStorage.setItem('ecshopping_last_order', JSON.stringify(serverOrder));
         } catch { /* storage unavailable */ }
         // Redirect to PhonePe's hosted checkout page
         window.location.href = payRes.redirectUrl;
@@ -283,6 +291,7 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
         const isMissingConfig = err?.status === 503 || err?.message?.includes('not configured');
         setPayState('failed');
         setPayInfo({ message: err.message, missingConfig: isMissingConfig });
+        submittingRef.current = false;
         setSubmitting(false);
         // Keep the order in pending state — user can retry or switch to COD
         return;
@@ -308,6 +317,7 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
     } catch { /* storage unavailable */ }
 
     clearCart?.();
+    submittingRef.current = false;
     setSubmitting(false);
     navigate(`/order-confirmation/${orderId}`, { state: { order: serverOrder, autoCredentials } });
   };
@@ -317,6 +327,8 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
     if (method !== 'phonepe') {
       setPayState('idle');
       setPayInfo(null);
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -613,102 +625,158 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
                 onRetry={() => {
                   setPayState('idle');
                   setPayInfo(null);
+                  submittingRef.current = false;
+                  setSubmitting(false);
                 }}
-                onCancel={() => setPayment('cod')}
+                onCancel={() => {
+                  setPayment('cod');
+                  submittingRef.current = false;
+                  setSubmitting(false);
+                }}
               />
             )}
+
+            {/* Mobile submit button placed directly after payment options */}
+            <div className="co-main-submit-bar">
+              {errors.form && (
+                <div className="co-submit-error" role="alert">
+                  <AlertCircle size={16} />
+                  <span>{errors.form}</span>
+                </div>
+              )}
+              <button
+                type="submit"
+                className="btn btn-primary btn-lg btn-block co-place"
+                disabled={submitting}
+              >
+                {submitting && <Loader2 size={18} className="animate-spin mr-2" />}
+                {submitting
+                  ? (paymentMethod === 'phonepe' ? 'Processing payment…' : 'Placing order…')
+                  : `Place order · ${formatINR(totals.total)}`}
+              </button>
+              <p className="co-secure-note">
+                <Lock size={13} /> Your details are encrypted and used only to fulfil this order.
+              </p>
+            </div>
           </section>
         </div>
 
         {/* ---------- Summary ---------- */}
         <aside className="checkout-summary" aria-label="Order summary">
           <div className="panel co-summary-panel">
-            <h2>Your order</h2>
-
-            <ul className="co-items">
-              {items.map((item) => {
-                const lineKey = ctx?.lineKeyOf ? ctx.lineKeyOf(item.id, item.variant) : `${item.id}::${item.variant || 'default'}`;
-                return (
-                  <li key={lineKey} className="co-item-row">
-                    <img src={item.image} alt="" width="48" height="48" />
-                    <span className="co-item-name">
-                      {item.title}
-                      {item.variant && <small> · {item.variant}</small>}
-                      <small>Qty {item.quantity}</small>
-                    </span>
-                    <div className="co-item-right">
-                      <span className="co-item-price">{formatINR((Number(item.price) || 0) * item.quantity)}</span>
-                      <button
-                        type="button"
-                        className="co-item-remove-btn"
-                        onClick={() => handleRemoveItem(item)}
-                        title={`Remove ${item.title} from checkout`}
-                        aria-label={`Remove ${item.title}`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-
-            {/* Coupon */}
-            <div className="co-coupon">
-              <label className="sr-only" htmlFor="coupon-code">Coupon code</label>
-              <div className="co-coupon-row">
-                <Tag size={16} />
-                <input
-                  id="coupon-code"
-                  type="text"
-                  placeholder="Coupon code"
-                  value={couponInput}
-                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                  disabled={couponResult?.ok}
-                />
-                {couponResult?.ok ? (
-                  <button type="button" className="btn btn-sm btn-ghost" onClick={clearCoupon}>Remove</button>
-                ) : (
-                  <button type="button" className="btn btn-sm btn-outline" onClick={applyCoupon}>Apply</button>
-                )}
-              </div>
-              {couponResult && (
-                <p className={`co-coupon-msg ${couponResult.ok ? 'ok' : 'err'}`} role="status">
-                  {couponResult.message}
-                </p>
-              )}
-            </div>
-
-            <div className="summary-divider" />
-
-            <div className="summary-row">
-              <span>Subtotal</span>
-              <span>{formatINR(totals.subtotal)}</span>
-            </div>
-            {totals.discount > 0 && (
-              <div className="summary-row discount">
-                <span>Coupon ({couponResult?.coupon?.code})</span>
-                <span>−{formatINR(totals.discount)}</span>
-              </div>
-            )}
-            <div className="summary-row">
-              <span>Shipping · {DELIVERY_METHODS.find((m) => m.id === deliveryId)?.label}</span>
-              <span>{totals.shipping === 0 ? 'FREE' : formatINR(totals.shipping)}</span>
-            </div>
-            <div className="summary-row total">
-              <span>Total</span>
-              <span>{formatINR(totals.total)}</span>
-            </div>
-
-            <button type="submit" className="btn btn-primary btn-lg btn-block co-place" disabled={submitting}>
-              {submitting
-                ? (paymentMethod === 'phonepe' ? 'Processing payment…' : 'Placing order…')
-                : `Place order · ${formatINR(totals.total)}`}
+            {/* Mobile collapsible toggle header */}
+            <button
+              type="button"
+              className="co-summary-toggle-btn"
+              onClick={() => setSummaryCollapsed((prev) => !prev)}
+              aria-expanded={!summaryCollapsed}
+              aria-controls="co-summary-content"
+            >
+              <span className="co-summary-toggle-label">
+                <ShoppingBag size={18} />
+                <span>{summaryCollapsed ? 'Show order summary' : 'Hide order summary'}</span>
+                {summaryCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              </span>
+              <strong className="co-summary-toggle-price">{formatINR(totals.total)}</strong>
             </button>
 
-            <p className="co-secure-note">
-              <Lock size={13} /> Your details are encrypted and used only to fulfil this order.
-            </p>
+            <div id="co-summary-content" className={`co-summary-collapsible ${summaryCollapsed ? 'is-collapsed' : 'is-expanded'}`}>
+              <h2 className="co-summary-title">Your order</h2>
+
+              <ul className="co-items">
+                {items.map((item) => {
+                  const lineKey = ctx?.lineKeyOf ? ctx.lineKeyOf(item.id, item.variant) : `${item.id}::${item.variant || 'default'}`;
+                  return (
+                    <li key={lineKey} className="co-item-row">
+                      <img src={item.image} alt="" width="48" height="48" />
+                      <span className="co-item-name">
+                        {item.title}
+                        {item.variant && <small> · {item.variant}</small>}
+                        <small>Qty {item.quantity}</small>
+                      </span>
+                      <div className="co-item-right">
+                        <span className="co-item-price">{formatINR((Number(item.price) || 0) * item.quantity)}</span>
+                        <button
+                          type="button"
+                          className="co-item-remove-btn"
+                          onClick={() => handleRemoveItem(item)}
+                          title={`Remove ${item.title} from checkout`}
+                          aria-label={`Remove ${item.title}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/* Coupon */}
+              <div className="co-coupon">
+                <label className="sr-only" htmlFor="coupon-code">Coupon code</label>
+                <div className="co-coupon-row">
+                  <Tag size={16} />
+                  <input
+                    id="coupon-code"
+                    type="text"
+                    placeholder="Coupon code"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    disabled={couponResult?.ok}
+                  />
+                  {couponResult?.ok ? (
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={clearCoupon}>Remove</button>
+                  ) : (
+                    <button type="button" className="btn btn-sm btn-outline" onClick={applyCoupon}>Apply</button>
+                  )}
+                </div>
+                {couponResult && (
+                  <p className={`co-coupon-msg ${couponResult.ok ? 'ok' : 'err'}`} role="status">
+                    {couponResult.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="summary-divider" />
+
+              <div className="summary-row">
+                <span>Subtotal</span>
+                <span>{formatINR(totals.subtotal)}</span>
+              </div>
+              {totals.discount > 0 && (
+                <div className="summary-row discount">
+                  <span>Coupon ({couponResult?.coupon?.code})</span>
+                  <span>−{formatINR(totals.discount)}</span>
+                </div>
+              )}
+              <div className="summary-row">
+                <span>Shipping · {DELIVERY_METHODS.find((m) => m.id === deliveryId)?.label}</span>
+                <span>{totals.shipping === 0 ? 'FREE' : formatINR(totals.shipping)}</span>
+              </div>
+              <div className="summary-row total">
+                <span>Total</span>
+                <span>{formatINR(totals.total)}</span>
+              </div>
+            </div>
+
+            <div className="co-summary-submit-desktop">
+              {errors.form && (
+                <div className="co-submit-error" role="alert">
+                  <AlertCircle size={16} />
+                  <span>{errors.form}</span>
+                </div>
+              )}
+              <button type="submit" className="btn btn-primary btn-lg btn-block co-place" disabled={submitting}>
+                {submitting && <Loader2 size={18} className="animate-spin mr-2" />}
+                {submitting
+                  ? (paymentMethod === 'phonepe' ? 'Processing payment…' : 'Placing order…')
+                  : `Place order · ${formatINR(totals.total)}`}
+              </button>
+
+              <p className="co-secure-note">
+                <Lock size={13} /> Your details are encrypted and used only to fulfil this order.
+              </p>
+            </div>
           </div>
         </aside>
       </form>

@@ -37,7 +37,10 @@ import {
   mapPhonePeState,
   latestTransactionId,
   validatePhonePeConfig,
-  resetTokenCache
+  resetTokenCache,
+  getFrontendOrigin,
+  getPhonePeRedirectUrl,
+  getPhonePeCallbackUrl
 } from './utils/phonepe.js';
 import { validateImageUpload, extractCloudinaryPublicId } from './utils/media.js';
 
@@ -852,7 +855,7 @@ app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
       );
 
       // Construct reset URL safely
-      const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://ec-shopping.vercel.app' : 'http://localhost:5173');
+      const frontendUrl = getFrontendOrigin(process.env);
       const resetLink = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(rawToken)}&role=${encodeURIComponent(cleanRole)}`;
 
       // Dispatch reset email
@@ -1193,6 +1196,7 @@ app.get('/api/categories/public', async (req, res) => {
         createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null
       }));
 
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
     return res.status(200).json({ success: true, categories });
   } catch (err) {
     console.error('❌ Get public categories DB error:', err);
@@ -1566,8 +1570,13 @@ app.get('/api/products', optionalAuth, async (req, res) => {
       }
 
       const [rows] = await pool.query(sql, filterParams);
-      const [countRows] = await pool.query(`SELECT COUNT(*) AS total FROM products WHERE ${whereSql}`, filterParams);
-      const total = countRows.length > 0 ? Number(countRows[0].total) : 0;
+      let total;
+      if (built.limit === null) {
+        total = rows.length;
+      } else {
+        const [countRows] = await pool.query(`SELECT COUNT(*) AS total FROM products WHERE ${whereSql}`, filterParams);
+        total = countRows.length > 0 ? Number(countRows[0].total) : 0;
+      }
 
       return res.status(200).json({
         success: true,
@@ -2603,7 +2612,7 @@ app.post('/api/payments/phonepe/create-payment', requireCustomerOrAnon, paymentL
     const checkout = await createCheckoutPayment({
       merchantOrderId: order.id,
       amountPaisa,
-      redirectUrl: process.env.PHONEPE_REDIRECT_URL,
+      redirectUrl: getPhonePeRedirectUrl(process.env, order.id),
       // udf1..udf10: order metadata echoed back by status/webhook responses.
       metaInfo: { udf1: 'ecshopping-order', udf2: order.customerEmail || '', udf3: String(order.total) },
       expireAfter: 3600
@@ -2684,6 +2693,73 @@ app.post('/api/payments/phonepe/verify', requireCustomerOrAnon, paymentLimiter, 
       success: false,
       error: err?.message || 'Payment verification failed. The order stays in pending state until confirmed.'
     });
+  }
+});
+
+/**
+ * Server-to-server callback / webhook endpoint for PhonePe payments.
+ * Reconciles gateway payment notification independently of the browser return redirect.
+ */
+app.post('/api/payments/phonepe/callback', paymentLimiter, async (req, res) => {
+  try {
+    const rawResponse = req.body?.response;
+    const xVerify = req.headers['x-verify'];
+    const saltKey = process.env.PHONEPE_SALT_KEY || process.env.phonepe_salt_key;
+    const saltIndex = process.env.PHONEPE_SALT_INDEX || process.env.phonepe_salt_index || '1';
+
+    let orderId = null;
+    let paymentCode = null;
+    let transactionId = null;
+
+    if (rawResponse) {
+      if (saltKey && xVerify) {
+        const expectedHash = crypto.createHash('sha256').update(rawResponse + saltKey).digest('hex');
+        const expectedChecksum = `${expectedHash}###${saltIndex}`;
+        if (xVerify !== expectedChecksum) {
+          console.warn('⚠️ [PhonePe Webhook] Invalid X-VERIFY signature rejected');
+          return res.status(401).json({ success: false, error: 'Invalid webhook signature' });
+        }
+      }
+      try {
+        const decoded = JSON.parse(Buffer.from(rawResponse, 'base64').toString('utf8'));
+        orderId = decoded?.data?.merchantTransactionId;
+        paymentCode = decoded?.code || decoded?.data?.responseCode;
+        transactionId = decoded?.data?.transactionId || decoded?.data?.providerReferenceId;
+      } catch (parseErr) {
+        console.error('⚠️ [PhonePe Webhook] Malformed base64 payload:', parseErr.message);
+        return res.status(400).json({ success: false, error: 'Malformed webhook payload' });
+      }
+    } else if (req.body?.orderId || req.body?.merchantOrderId) {
+      orderId = req.body.orderId || req.body.merchantOrderId;
+      paymentCode = req.body.state || req.body.code;
+      transactionId = req.body.transactionId;
+    }
+
+    if (!orderId) {
+      return res.status(400).json({ success: false, error: 'Order reference missing from webhook' });
+    }
+
+    const order = await loadOrderForPayment(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Referenced order not found' });
+    }
+
+    const normalizedStatus = mapPhonePeState(paymentCode);
+    if (normalizedStatus === 'paid' && order.paymentStatus !== 'paid') {
+      await pool.query(
+        `UPDATE orders SET payment_status = 'paid', payment_reference = COALESCE(?, payment_reference) WHERE id = ? AND payment_status <> 'paid'`,
+        [transactionId ? `phonepe-txn:${transactionId}` : null, order.id]
+      );
+      console.log(`✅ [PhonePe Webhook] Order ${order.id} marked as PAID via server callback`);
+    } else if (normalizedStatus === 'failed' && order.paymentStatus !== 'paid') {
+      await pool.query(`UPDATE orders SET payment_status = 'failed' WHERE id = ?`, [order.id]);
+      console.log(`⚠️ [PhonePe Webhook] Order ${order.id} marked as FAILED via server callback`);
+    }
+
+    return res.status(200).json({ success: true, message: 'Callback processed successfully' });
+  } catch (err) {
+    console.error('❌ PhonePe callback error:', err.message);
+    return res.status(500).json({ success: false, error: 'Internal server error processing callback' });
   }
 });
 
@@ -2896,9 +2972,9 @@ app.get('/api/admin/payment-config', requireAuth('admin'), (req, res) => {
       hasSaltKey,
       saltIndex
     },
-    redirectUrl: redirectUrl || null,
+    redirectUrl: redirectUrl || getPhonePeRedirectUrl(process.env),
     whitelistedDomains: [
-      'https://ec-shopping.vercel.app',
+      'https://ecshopping.in',
       'https://ec-shopping-three.vercel.app'
     ],
     notes: [

@@ -65,8 +65,6 @@ export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interva
 
   if (!campaigns || total === 0) return null;
 
-  const active = campaigns[currentIndex];
-
   return (
     <section
       className="promo-banner-section"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { initStorage, getCurrentCustomer, logoutCustomer, saveVendorSession, getCurrentAdmin, logoutAdmin, syncFromServer } from './utils/storage';
 import { CartContext, lineKeyOf } from './context/CartContext';
@@ -9,36 +9,38 @@ import ScrollToTop from './components/ui/ScrollToTop';
 import Home from './pages/Home';
 import Shop from './pages/Shop';
 import Cart from './pages/Cart';
-import Checkout from './pages/Checkout';
-import OrderConfirmation from './pages/OrderConfirmation';
-import AdminLogin from './pages/admin/AdminLogin';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import VendorLogin from './pages/vendor/VendorLogin';
-import VendorDashboard from './pages/vendor/VendorDashboard';
-import CustomerProfile from './pages/CustomerProfile';
-import Login from './pages/Login';
-import ResetPassword from './pages/ResetPassword';
-import LoginModal from './components/auth/LoginModal';
-import Orders from './pages/Orders';
-import OrderDetails from './pages/OrderDetails';
-import TrackOrder from './pages/TrackOrder';
 import ProductDetails from './pages/ProductDetails';
-import Wishlist from './pages/Wishlist';
-import AboutUs from './pages/AboutUs';
-import ContactUs from './pages/ContactUs';
-import Faq from './pages/Faq';
-import ShippingPolicy from './pages/ShippingPolicy';
-import ReturnsRefunds from './pages/ReturnsRefunds';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import Terms from './pages/Terms';
-import BulkOrder from './pages/BulkOrder';
-import Blog from './pages/Blog';
-import BlogPost from './pages/BlogPost';
-import StoreLocator from './pages/StoreLocator';
-import NotFound from './pages/NotFound';
-import PaymentStatus from './pages/PaymentStatus';
+import Login from './pages/Login';
+import LoginModal from './components/auth/LoginModal';
 import { CheckCircle } from 'lucide-react';
 import './App.css';
+
+// Lazy-loaded routes for code splitting
+const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const VendorLogin = lazy(() => import('./pages/vendor/VendorLogin'));
+const VendorDashboard = lazy(() => import('./pages/vendor/VendorDashboard'));
+const Checkout = lazy(() => import('./pages/Checkout'));
+const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation'));
+const CustomerProfile = lazy(() => import('./pages/CustomerProfile'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const Orders = lazy(() => import('./pages/Orders'));
+const OrderDetails = lazy(() => import('./pages/OrderDetails'));
+const TrackOrder = lazy(() => import('./pages/TrackOrder'));
+const Wishlist = lazy(() => import('./pages/Wishlist'));
+const AboutUs = lazy(() => import('./pages/AboutUs'));
+const ContactUs = lazy(() => import('./pages/ContactUs'));
+const Faq = lazy(() => import('./pages/Faq'));
+const ShippingPolicy = lazy(() => import('./pages/ShippingPolicy'));
+const ReturnsRefunds = lazy(() => import('./pages/ReturnsRefunds'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const Terms = lazy(() => import('./pages/Terms'));
+const BulkOrder = lazy(() => import('./pages/BulkOrder'));
+const Blog = lazy(() => import('./pages/Blog'));
+const BlogPost = lazy(() => import('./pages/BlogPost'));
+const StoreLocator = lazy(() => import('./pages/StoreLocator'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+const PaymentStatus = lazy(() => import('./pages/PaymentStatus'));
 
 const CART_KEY = 'ecshopping_cart';
 
@@ -218,17 +220,18 @@ function App() {
       <ScrollToTop />
       <CartContext.Provider value={cartContext}>
         <div className="app-wrapper">
-          <Routes>
-            <Route
-              path="/admin/*"
-              element={
-                adminUser ? (
-                  <AdminDashboard admin={adminUser} onLogout={handleAdminLogout} />
-                ) : (
-                  <AdminLogin onLogin={handleAdminLogin} />
-                )
-              }
-            />
+          <Suspense fallback={<div className="page-route-loading" aria-busy="true" />}>
+            <Routes>
+              <Route
+                path="/admin/*"
+                element={
+                  adminUser ? (
+                    <AdminDashboard admin={adminUser} onLogout={handleAdminLogout} />
+                  ) : (
+                    <AdminLogin onLogin={handleAdminLogin} />
+                  )
+                }
+              />
 
             <Route
               path="/vendor/register"
@@ -343,6 +346,7 @@ function App() {
               }
             />
           </Routes>
+          </Suspense>
 
           {toastMessage && (
             <div className="cart-toast" role="status" aria-live="polite">

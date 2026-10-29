@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { CheckCircle2, PackageCheck, ArrowRight, Truck, Receipt, KeyRound, Ban } from 'lucide-react';
 import { getOrders } from '../utils/storage';
@@ -6,13 +6,14 @@ import { formatINR, getDeliveryMethod } from '../utils/pricing';
 import { PageHero } from '../components/ui/PageHeader';
 import { EmptyState } from '../components/ui/States';
 import PaymentStates from '../components/checkout/PaymentStates';
+import api from '../utils/api';
 import './OrderConfirmation.css';
 
 export default function OrderConfirmation({ loggedInCustomer }) {
   const location = useLocation();
   const { orderId } = useParams();
 
-  const order = useMemo(() => {
+  const [order, setOrder] = useState(() => {
     if (location.state?.order) return location.state.order;
     try {
       const saved = JSON.parse(localStorage.getItem('ecshopping_last_order') || 'null');
@@ -21,6 +22,23 @@ export default function OrderConfirmation({ loggedInCustomer }) {
       /* ignore corrupt storage */
     }
     return getOrders().find((o) => String(o.id) === String(orderId)) || null;
+  });
+
+  useEffect(() => {
+    if (location.state?.order) {
+      setOrder(location.state.order);
+      return;
+    }
+    // If not found in storage or if cached copy is still marked pending, attempt live hydration
+    if (!order || order.paymentStatus === 'pending') {
+      api.getOrder(orderId, 'customer')
+        .then((res) => {
+          if (res?.success && res.order) {
+            setOrder(res.order);
+          }
+        })
+        .catch(() => {});
+    }
   }, [location.state, orderId]);
 
   const autoCredentials = location.state?.autoCredentials;
@@ -64,7 +82,7 @@ export default function OrderConfirmation({ loggedInCustomer }) {
     <>
       <PageHero
         title="Order confirmed"
-        subtitle={`Order ${order.orderNumber || order.id} · ${new Date(order.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+        subtitle={`Order ${order.orderNumber || order.id} · ${order.date ? new Date(order.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}`}
         crumbs={[{ label: 'Home', to: '/' }, { label: 'Order confirmed' }]}
       />
 

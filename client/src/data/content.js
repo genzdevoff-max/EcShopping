@@ -15,6 +15,32 @@ export const siteInfo = {
   currency: 'INR (₹)'
 };
 
+/**
+ * Manageable social media channels for the storefront footer.
+ * URLs can be customized directly here or overridden via VITE_* environment variables.
+ * Empty or non-http links are gracefully skipped to avoid dead "#" links.
+ */
+export const socialLinks = [
+  {
+    name: 'Instagram',
+    key: 'instagram',
+    url: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_INSTAGRAM_URL) || 'https://www.instagram.com/ecshopping.in',
+    ariaLabel: 'Follow EcShopping on Instagram'
+  },
+  {
+    name: 'Facebook',
+    key: 'facebook',
+    url: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FACEBOOK_URL) || 'https://www.facebook.com/ecshopping.in',
+    ariaLabel: 'Follow EcShopping on Facebook'
+  },
+  {
+    name: 'YouTube',
+    key: 'youtube',
+    url: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_YOUTUBE_URL) || 'https://www.youtube.com/@ecshopping',
+    ariaLabel: 'Subscribe to EcShopping on YouTube'
+  }
+];
+
 export const faqs = [
   {
     category: 'Orders & Payment',

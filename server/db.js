@@ -309,6 +309,18 @@ export const initDatabase = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Additive migration: performance indexes (products status+category, orders customer+status)
+    try {
+      await connection.query('CREATE INDEX idx_products_status_category ON products (status, category)');
+    } catch {
+      // Non-fatal if index exists
+    }
+    try {
+      await connection.query('CREATE INDEX idx_orders_customer_status ON orders (customer_email, status)');
+    } catch {
+      // Non-fatal if index exists
+    }
+
     connection.release();
     console.log('✅ TiDB Cloud tables (users, vendors, categories, products, orders, order_items, reviews, admins, customer_addresses, password_resets) ready & clean (no dummy data)!');
   } catch (error) {

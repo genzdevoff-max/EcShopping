@@ -32,6 +32,73 @@ const ENVIRONMENTS = {
 
 const REQUIRED_ENV_V2 = ['PHONEPE_CLIENT_ID', 'PHONEPE_CLIENT_VERSION', 'PHONEPE_CLIENT_SECRET', 'PHONEPE_REDIRECT_URL'];
 
+/**
+ * Resolves the canonical storefront origin safely from validated configuration.
+ * Never trust arbitrary Host headers or client-provided redirect roots.
+ */
+export const getFrontendOrigin = (env = process.env) => {
+  const custom = String(env.FRONTEND_URL || env.frontend_url || '').trim();
+  if (custom) {
+    try {
+      const parsed = new URL(custom);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.origin;
+      }
+    } catch {
+      /* ignore malformed url and fall back safely */
+    }
+  }
+  const envType = String(env.PHONEPE_ENV || env.phonepe_env || env.NODE_ENV || '').trim().toLowerCase();
+  const isProd = envType === 'prod' || envType === 'production';
+  return isProd ? 'https://ecshopping.in' : 'http://localhost:5173';
+};
+
+/**
+ * Constructs the canonical customer-facing PhonePe return URL.
+ * Defaults to the official production storefront origin https://ecshopping.in/payment/phonepe/return
+ * Optionally appends orderId parameter so the return flow always retains order identity.
+ */
+export const getPhonePeRedirectUrl = (env = process.env, orderId = null) => {
+  const explicit = String(env.PHONEPE_REDIRECT_URL || env.phonepe_redirect_url || '').trim();
+  let base = '';
+  if (explicit) {
+    try {
+      const parsed = new URL(explicit);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        base = explicit;
+      }
+    } catch {
+      /* ignore malformed explicit url and fall back */
+    }
+  }
+  if (!base) {
+    base = `${getFrontendOrigin(env)}/payment/phonepe/return`;
+  }
+  if (orderId) {
+    const cleanId = String(orderId).trim();
+    if (cleanId && !base.includes('orderId=')) {
+      const separator = base.includes('?') ? '&' : '?';
+      return `${base}${separator}orderId=${encodeURIComponent(cleanId)}`;
+    }
+  }
+  return base;
+};
+
+/**
+ * Constructs the server-to-server callback / webhook URL for PhonePe.
+ * Kept strictly isolated from browser storefront return URLs.
+ */
+export const getPhonePeCallbackUrl = (env = process.env) => {
+  const explicit = String(env.PHONEPE_CALLBACK_URL || env.phonepe_callback_url || '').trim();
+  if (explicit) {
+    return explicit;
+  }
+  const envType = String(env.PHONEPE_ENV || env.phonepe_env || env.NODE_ENV || '').trim().toLowerCase();
+  const isProd = envType === 'prod' || envType === 'production';
+  const backendBase = isProd ? 'https://ec-shopping-three.vercel.app' : 'http://localhost:5000';
+  return `${backendBase}/api/payments/phonepe/callback`;
+};
+
 const getOptAConfig = (env = process.env) => {
   const merchantId = String(env.PHONEPE_MERCHANT_ID || env.phonepe_merchant_id || '').trim();
   const saltKey = String(env.PHONEPE_SALT_KEY || env.phonepe_salt_key || '').trim();
@@ -40,7 +107,8 @@ const getOptAConfig = (env = process.env) => {
   const isProd = envType === 'prod' || envType === 'production';
   const defaultHost = isProd ? ENVIRONMENTS.production.hermes : ENVIRONMENTS.sandbox.hermes;
   const hostUrl = String(env.PHONEPE_HOST_URL || env.phonepe_host_url || defaultHost).trim();
-  const redirectUrl = String(env.PHONEPE_REDIRECT_URL || env.phonepe_redirect_url || '').trim();
+  const redirectUrl = getPhonePeRedirectUrl(env);
+  const callbackUrl = getPhonePeCallbackUrl(env);
 
   return {
     merchantId,
@@ -49,6 +117,7 @@ const getOptAConfig = (env = process.env) => {
     isProd,
     hostUrl,
     redirectUrl,
+    callbackUrl,
     isValid: Boolean(merchantId && saltKey && saltIndex)
   };
 };
@@ -148,10 +217,12 @@ export async function createCheckoutPayment({ merchantOrderId, amountPaisa, redi
     throw phonePeError(503, 'PhonePe payments are not configured yet');
   }
 
+  const effectiveRedirect = redirectUrl || getPhonePeRedirectUrl(process.env, merchantOrderId);
+
   // OPTION A: Hermes PG v1 integration
   if (config.mode === 'v1') {
     const optA = getOptAConfig();
-    const effectiveRedirect = redirectUrl || optA.redirectUrl || 'https://ec-shopping.vercel.app/payment/phonepe/return';
+    const effectiveCallback = optA.callbackUrl || effectiveRedirect;
 
     const payload = {
       merchantId: optA.merchantId,
@@ -163,7 +234,7 @@ export async function createCheckoutPayment({ merchantOrderId, amountPaisa, redi
       amount: Number(amountPaisa),
       redirectUrl: effectiveRedirect,
       redirectMode: 'REDIRECT',
-      callbackUrl: effectiveRedirect,
+      callbackUrl: effectiveCallback,
       paymentInstrument: {
         type: 'PAY_PAGE'
       }
@@ -219,7 +290,7 @@ export async function createCheckoutPayment({ merchantOrderId, amountPaisa, redi
         ...(Number.isFinite(Number(expireAfter)) ? { expireAfter: Number(expireAfter) } : {}),
         paymentFlow: {
           type: 'PG_CHECKOUT',
-          merchantUrls: { redirectUrl: String(redirectUrl) }
+          merchantUrls: { redirectUrl: String(effectiveRedirect) }
         },
         ...(metaInfo && Object.keys(metaInfo).length ? { metaInfo } : {})
       })

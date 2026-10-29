@@ -590,9 +590,24 @@
 }
 
 @media (max-width: 560px) {
-  .brand-logo-img { height: 36px; max-width: 150px; }
+  .brand-logo-img { height: 34px; max-width: 140px; }
   .action-icon-btn { width: 38px; height: 38px; }
-  .header-container { gap: 8px; min-height: 62px; }
+  .header-container { gap: 6px; min-height: 60px; }
+}
+
+@media (max-width: 430px) {
+  .brand-logo-img { height: 30px; max-width: 115px; }
+  .action-icon-btn { width: 34px; height: 34px; padding: 0; }
+  .header-actions { gap: 3px; }
+  .header-container { gap: 4px; min-height: 56px; }
+}
+
+@media (max-width: 350px) {
+  .brand-logo-img { height: 26px; max-width: 90px; }
+  .action-icon-btn { width: 30px; height: 30px; }
+  .mobile-menu-btn { width: 32px; height: 32px; }
+  .header-actions { gap: 2px; }
+  .header-container { gap: 2px; min-height: 52px; }
 }
 
 /* ---------- Nav badges ---------- */

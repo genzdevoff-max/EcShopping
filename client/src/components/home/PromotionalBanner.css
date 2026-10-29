@@ -23,8 +23,9 @@
   position: relative;
   width: 100%;
   aspect-ratio: 4.2 / 1;
-  min-height: 240px;
-  max-height: 330px;
+  min-height: 300px;
+  max-height: 340px;
+  height: clamp(300px, 23.5vw, 340px);
   border-radius: var(--r-lg, 18px);
   overflow: hidden;
   background: linear-gradient(135deg, #07322a 0%, #0e5c4a 65%, #136a56 100%);
@@ -307,20 +308,33 @@
 
 @media (max-width: 1024px) {
   .promo-banner-viewport {
-    aspect-ratio: 3.4 / 1;
+    aspect-ratio: auto;
     min-height: 220px;
+    max-height: 280px;
+    height: clamp(220px, 26vw, 280px);
   }
 
   .promo-banner-content {
     max-width: 75%;
     padding: clamp(16px, 3vw, 28px);
   }
+
+  .promo-arrow {
+    width: 34px;
+    height: 34px;
+  }
 }
 
 @media (max-width: 768px) {
+  .promo-banner-section {
+    padding-block: 8px;
+  }
+
   .promo-banner-viewport {
     aspect-ratio: auto;
-    min-height: 205px;
+    min-height: 180px;
+    max-height: 220px;
+    height: clamp(180px, 48vw, 220px);
     border-radius: var(--r-md, 14px);
   }
 
@@ -335,63 +349,121 @@
 
   .promo-banner-content {
     max-width: 100%;
-    padding: 18px 20px;
+    padding: clamp(14px, 3vw, 20px);
   }
 
+  /* Arrows visible and neatly placed without obscuring content */
   .promo-arrow {
-    display: none; /* Mobile uses touch-friendly layout; dots retained */
+    width: 28px;
+    height: 28px;
+    top: auto;
+    bottom: 10px;
+    transform: none;
+    background: rgba(7, 50, 42, 0.75);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+
+  .promo-arrow-prev {
+    left: auto;
+    right: 88px;
+  }
+
+  .promo-arrow-next {
+    right: 52px;
   }
 
   .promo-dots {
-    bottom: 10px;
-    right: 16px;
+    bottom: 12px;
+    right: 14px;
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 430px) {
   .promo-banner-section {
     padding-block: 6px;
   }
 
   .promo-banner-viewport {
-    min-height: 185px;
-    border-radius: var(--r-sm, 10px);
-  }
-
-  .promo-banner-content {
-    padding: 14px 16px;
-  }
-
-  .promo-banner-badge {
-    display: none; /* Keep header compact on small screens */
-  }
-
-  .promo-banner-sub {
-    -webkit-line-clamp: 2;
-    margin-bottom: 10px;
-  }
-
-  .promo-btn {
-    min-height: 38px;
-    padding: 6px 14px;
-    font-size: 0.8rem;
-  }
-
-  .promo-btn-secondary {
-    display: none; /* Prioritize primary CTA on very narrow screens */
-  }
-}
-
-@media (max-width: 360px) {
-  .promo-banner-viewport {
-    min-height: 175px;
+    min-height: 160px;
+    max-height: 210px;
+    height: clamp(160px, 45vw, 210px);
+    border-radius: var(--r-sm, 12px);
   }
 
   .promo-banner-content {
     padding: 12px 14px;
   }
 
+  .promo-banner-badge {
+    display: none; /* Keep header compact on small screens */
+  }
+
   .promo-banner-title {
-    font-size: 1.12rem;
+    font-size: clamp(1.02rem, 4.2vw, 1.25rem);
+    margin-bottom: 4px;
+  }
+
+  .promo-banner-sub {
+    font-size: 0.78rem;
+    -webkit-line-clamp: 2;
+    margin-bottom: 8px;
+  }
+
+  .promo-btn {
+    min-height: 34px;
+    padding: 5px 13px;
+    font-size: 0.78rem;
+  }
+
+  .promo-btn-secondary {
+    display: none; /* Prioritize primary CTA on narrow screens */
+  }
+
+  .promo-arrow {
+    width: 24px;
+    height: 24px;
+    bottom: 8px;
+  }
+
+  .promo-arrow-prev {
+    right: 76px;
+  }
+
+  .promo-arrow-next {
+    right: 44px;
+  }
+
+  .promo-dots {
+    bottom: 10px;
+    right: 10px;
+  }
+}
+
+@media (max-width: 350px) {
+  .promo-banner-viewport {
+    min-height: 150px;
+    max-height: 180px;
+    height: 165px;
+  }
+
+  .promo-banner-content {
+    padding: 10px 12px;
+  }
+
+  .promo-banner-title {
+    font-size: 0.98rem;
+    margin-bottom: 3px;
+  }
+
+  .promo-banner-sub {
+    font-size: 0.72rem;
+    -webkit-line-clamp: 1;
+    margin-bottom: 6px;
+  }
+
+  .promo-btn {
+    min-height: 32px;
+    padding: 4px 11px;
+    font-size: 0.74rem;
   }
 }

@@ -92,6 +92,8 @@
 .pay-state.pending p { color: #97701f; }
 .pay-state.warning { background: var(--warning-soft); border-color: #f0e0b4; color: #7a5410; }
 .pay-state.warning p { color: #97701f; }
+.pay-state.info { background: #f0f7f5; border-color: #cce3dc; color: #0e5c4a; }
+.pay-state.info p { color: #166c58; }
 
 .pay-ref {
   display: inline-block;

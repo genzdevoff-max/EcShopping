@@ -11,7 +11,16 @@ import supertest from 'supertest';
 
 const { default: app } = await import('../index.js');
 const { initDatabase, pool } = await import('../db.js');
-const { validatePhonePeConfig, mapPhonePeState, assertPaisa, resetTokenCache, sanitizeMerchantUserId } = await import('../utils/phonepe.js');
+const {
+  validatePhonePeConfig,
+  mapPhonePeState,
+  assertPaisa,
+  resetTokenCache,
+  sanitizeMerchantUserId,
+  getFrontendOrigin,
+  getPhonePeRedirectUrl,
+  getPhonePeCallbackUrl
+} = await import('../utils/phonepe.js');
 
 // Ensure no payment credentials are present for this process so the
 // fail-closed assertions are deterministic (must run after index.js dotenv.config()).
@@ -127,4 +136,85 @@ test('sanitizeMerchantUserId strictly enforces PhonePe alphanumeric and length r
   const veryLong = sanitizeMerchantUserId('A'.repeat(50), 'ORD-1');
   assert.equal(veryLong.length, 35);
   assert.equal(/^[a-zA-Z0-9]{1,35}$/.test(veryLong), true);
+});
+
+test('getFrontendOrigin safely resolves canonical storefront origins', () => {
+  // Explicit FRONTEND_URL configuration
+  assert.equal(getFrontendOrigin({ FRONTEND_URL: 'https://ecshopping.in' }), 'https://ecshopping.in');
+  assert.equal(getFrontendOrigin({ FRONTEND_URL: 'https://ecshopping.in/' }), 'https://ecshopping.in');
+  assert.equal(getFrontendOrigin({ FRONTEND_URL: 'http://localhost:5173' }), 'http://localhost:5173');
+
+  // Fallback in production mode
+  assert.equal(getFrontendOrigin({ NODE_ENV: 'production' }), 'https://ecshopping.in');
+  assert.equal(getFrontendOrigin({ PHONEPE_ENV: 'production' }), 'https://ecshopping.in');
+  assert.equal(getFrontendOrigin({ PHONEPE_ENV: 'prod' }), 'https://ecshopping.in');
+
+  // Fallback in local/development mode
+  assert.equal(getFrontendOrigin({ NODE_ENV: 'development' }), 'http://localhost:5173');
+  assert.equal(getFrontendOrigin({}), 'http://localhost:5173');
+
+  // Malformed URL safely falls back to environment default
+  assert.equal(getFrontendOrigin({ FRONTEND_URL: 'not-a-valid-url', NODE_ENV: 'production' }), 'https://ecshopping.in');
+});
+
+test('getPhonePeRedirectUrl constructs valid canonical return URLs', () => {
+  // Explicit override takes precedence when valid
+  assert.equal(
+    getPhonePeRedirectUrl({ PHONEPE_REDIRECT_URL: 'https://custom.ecshopping.in/return' }),
+    'https://custom.ecshopping.in/return'
+  );
+
+  // Derived from FRONTEND_URL
+  assert.equal(
+    getPhonePeRedirectUrl({ FRONTEND_URL: 'https://ecshopping.in' }),
+    'https://ecshopping.in/payment/phonepe/return'
+  );
+
+  // Production default
+  assert.equal(
+    getPhonePeRedirectUrl({ NODE_ENV: 'production' }),
+    'https://ecshopping.in/payment/phonepe/return'
+  );
+
+  // Development default
+  assert.equal(
+    getPhonePeRedirectUrl({ NODE_ENV: 'development' }),
+    'http://localhost:5173/payment/phonepe/return'
+  );
+});
+
+test('getPhonePeCallbackUrl isolates server webhooks from browser return URLs', () => {
+  // Explicit webhook setting
+  assert.equal(
+    getPhonePeCallbackUrl({ PHONEPE_CALLBACK_URL: 'https://my-backend.app/callback' }),
+    'https://my-backend.app/callback'
+  );
+
+  // Production backend callback URL default
+  assert.equal(
+    getPhonePeCallbackUrl({ NODE_ENV: 'production' }),
+    'https://ec-shopping-three.vercel.app/api/payments/phonepe/callback'
+  );
+
+  // Development backend callback URL default
+  assert.equal(
+    getPhonePeCallbackUrl({ NODE_ENV: 'development' }),
+    'http://localhost:5000/api/payments/phonepe/callback'
+  );
+});
+
+test('POST /api/payments/phonepe/callback handles webhook verification and validation safely', async () => {
+  // Missing order reference returns 400
+  const missingRes = await request()
+    .post('/api/payments/phonepe/callback')
+    .send({});
+  assert.equal(missingRes.status, 400);
+  assert.equal(missingRes.body.success, false);
+
+  // Unknown order returns 404
+  const unknownRes = await request()
+    .post('/api/payments/phonepe/callback')
+    .send({ orderId: 'ORD-NON-EXISTENT-XYZ', state: 'COMPLETED' });
+  assert.equal(unknownRes.status, 404);
+  assert.equal(unknownRes.body.success, false);
 });
