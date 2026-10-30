@@ -301,11 +301,49 @@ export const initDatabase = async () => {
         product_id VARCHAR(64) NOT NULL,
         status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
         display_order INT NOT NULL DEFAULT 0,
+        public_id VARCHAR(255) DEFAULT NULL,
+        format VARCHAR(32) DEFAULT NULL,
+        duration DECIMAL(10,2) DEFAULT NULL,
+        bytes BIGINT DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_videos_product (product_id),
         INDEX idx_videos_status (status)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    // Safe additive column migrations for product_videos
+    try {
+      if (!(await columnExists(connection, 'product_videos', 'public_id'))) {
+        await connection.query('ALTER TABLE product_videos ADD COLUMN public_id VARCHAR(255) NULL DEFAULT NULL');
+        console.log('✅ Added product_videos.public_id');
+      }
+    } catch (e) {
+      if (!e.message?.includes('Duplicate column')) throw e;
+    }
+    try {
+      if (!(await columnExists(connection, 'product_videos', 'format'))) {
+        await connection.query('ALTER TABLE product_videos ADD COLUMN format VARCHAR(32) NULL DEFAULT NULL');
+        console.log('✅ Added product_videos.format');
+      }
+    } catch (e) {
+      if (!e.message?.includes('Duplicate column')) throw e;
+    }
+    try {
+      if (!(await columnExists(connection, 'product_videos', 'duration'))) {
+        await connection.query('ALTER TABLE product_videos ADD COLUMN duration DECIMAL(10,2) NULL DEFAULT NULL');
+        console.log('✅ Added product_videos.duration');
+      }
+    } catch (e) {
+      if (!e.message?.includes('Duplicate column')) throw e;
+    }
+    try {
+      if (!(await columnExists(connection, 'product_videos', 'bytes'))) {
+        await connection.query('ALTER TABLE product_videos ADD COLUMN bytes BIGINT NULL DEFAULT NULL');
+        console.log('✅ Added product_videos.bytes');
+      }
+    } catch (e) {
+      if (!e.message?.includes('Duplicate column')) throw e;
+    }
 
     // Additive table: Platform Settings (Key-Value Store for runtime flags)
     await connection.query(`

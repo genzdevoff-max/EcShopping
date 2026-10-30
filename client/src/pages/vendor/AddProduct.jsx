@@ -97,7 +97,7 @@ export default function AddProduct({
   const [creatingCat, setCreatingCat] = useState(false);
 
   // Admin-specific state
-  const [selectedVendorId, setSelectedVendorId] = useState('shared');
+  const [selectedVendorId, setSelectedVendorId] = useState('admin');
   const [status, setStatus] = useState('approved');
 
   // Quick inline category creation
@@ -106,9 +106,10 @@ export default function AddProduct({
     setCreatingCat(true);
     try {
       const role = effectiveMode === 'admin' ? 'admin' : 'vendor';
-      const catVendorId = (effectiveMode === 'admin' && selectedVendorId !== 'shared' && selectedVendorId !== 'null')
+      const isVendorTarget = effectiveMode === 'admin' && selectedVendorId && selectedVendorId !== 'admin' && selectedVendorId !== 'null' && selectedVendorId !== 'shared';
+      const catVendorId = isVendorTarget
         ? selectedVendorId
-        : (vendor?.id || null);
+        : (effectiveMode === 'admin' ? null : (vendor?.id || null));
 
       const res = await api.createCategory({ name: newCatName.trim(), vendorId: catVendorId }, role);
       if (res?.success && res.category) {
@@ -358,10 +359,12 @@ export default function AddProduct({
 
     if (effectiveMode === 'admin') {
       try {
+        const isSelectedVendor = selectedVendorId && selectedVendorId !== 'admin' && selectedVendorId !== 'null' && selectedVendorId !== 'shared';
         const adminPayload = {
           ...newProdData,
           status: status || 'approved',
-          vendorId: (selectedVendorId && selectedVendorId !== 'shared' && selectedVendorId !== 'null') ? selectedVendorId : null
+          vendorId: isSelectedVendor ? selectedVendorId : null,
+          vendorName: isSelectedVendor ? (currentAssignedVendor?.name || '') : 'Admin'
         };
         const res = await api.createProduct(adminPayload, 'admin');
         if (res?.success && res.product) {
@@ -406,12 +409,16 @@ export default function AddProduct({
   };
 
   // Derive selected vendor display name for preview
+  const isSelectedVendor = effectiveMode === 'admin'
+    ? Boolean(selectedVendorId && selectedVendorId !== 'admin' && selectedVendorId !== 'null' && selectedVendorId !== 'shared')
+    : true;
+
   const currentAssignedVendor = effectiveMode === 'admin'
     ? vendors.find((v) => String(v.id) === String(selectedVendorId))
     : vendor;
 
   const previewSeller = effectiveMode === 'admin'
-    ? (selectedVendorId === 'shared' || !selectedVendorId ? 'Platform Direct' : (currentAssignedVendor?.name || 'Assigned Vendor'))
+    ? (isSelectedVendor ? (currentAssignedVendor?.name || 'Assigned Vendor') : 'Admin (EcShopping)')
     : (vendor?.name || 'My Store');
 
   return (
@@ -452,16 +459,18 @@ export default function AddProduct({
                   {/* Vendor / Store Assignment */}
                   <div className="add-prod-field">
                     <label className="add-prod-label">
-                      <span>Product Owner / Vendor</span>
+                      <span>Product Owner</span>
+                      <span className="req">*</span>
                     </label>
                     <VendorSelect
                       vendors={vendors}
                       value={selectedVendorId}
                       onChange={(val) => setSelectedVendorId(val)}
-                      placeholder="Select vendor or shared platform…"
+                      placeholder="Select product owner (Admin or Vendor)…"
+                      includeShared={false}
                     />
                     <span className="add-prod-field-hint">
-                      Choose a vendor to own this listing, or "Shared" for Platform Direct.
+                      Choose &ldquo;Admin&rdquo; for an Admin-owned listing, or select an approved Vendor.
                     </span>
                   </div>
 
@@ -1021,7 +1030,11 @@ export default function AddProduct({
                 Status: {status.toUpperCase()}
               </span>
               <span className="preview-seller-pill">
-                <Store size={12} /> {previewSeller}
+                {!isSelectedVendor ? (
+                  <><ShieldCheck size={12} style={{ color: '#0e5c4a' }} /> Owner: Admin</>
+                ) : (
+                  <><Store size={12} /> Owner: {previewSeller}</>
+                )}
               </span>
             </div>
           )}

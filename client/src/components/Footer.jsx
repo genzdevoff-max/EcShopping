@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Globe, Mail, Phone, MapPin, Check, ArrowRight } from 'lucide-react';
+import { Globe, Phone, MapPin, Check, ArrowRight } from 'lucide-react';
 import brandLogo from '../assets/logo/without-bg-logo.png';
 import { useStorefrontCategories } from '../data/storefront';
-import { siteInfo, socialLinks } from '../data/content';
+import { socialLinks } from '../data/content';
 import './Footer.css';
 
 function InstagramIcon({ size = 18, ...props }) {
@@ -99,11 +99,23 @@ export default function Footer() {
               everyday goods — from farm produce to handmade home essentials.
             </p>
 
-            <ul className="footer-contact">
-              <li><Mail size={15} /> <a href={`mailto:${siteInfo.email}`}>{siteInfo.email}</a></li>
-              <li><Phone size={15} /> <a href={`tel:${siteInfo.phone.replace(/\s/g, '')}`}>{siteInfo.phone}</a></li>
-              <li><MapPin size={15} /> <span>{siteInfo.address}</span></li>
-            </ul>
+            <div className="footer-contact footer-contact-card">
+              <div className="footer-contact-name">RAMESH. S</div>
+              <div className="footer-contact-address">
+                <MapPin size={15} className="footer-contact-icon" aria-hidden="true" />
+                <address className="footer-address-lines">
+                  <span>1/896, Nadu Thottam,</span>
+                  <span>Konamoolai,</span>
+                  <span>Sathyamangalam,</span>
+                  <span>Erode – 638402</span>
+                </address>
+              </div>
+              <div className="footer-contact-cell">
+                <Phone size={15} className="footer-contact-icon" aria-hidden="true" />
+                <span className="footer-cell-label">Cell:</span>
+                <a href="tel:9786070708" className="footer-cell-link">9786070708</a>
+              </div>
+            </div>
 
             <div className="social-links" aria-label="Social media channels">
               {socialLinks

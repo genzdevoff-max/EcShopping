@@ -52,6 +52,19 @@
   font-size: 12px;
 }
 
+.vendor-badge-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #0e5c4a;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 .vendor-badge-selected {
   display: inline-flex;
   align-items: center;

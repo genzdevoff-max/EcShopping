@@ -28,7 +28,8 @@ import {
   PlayCircle,
   Cloud,
   UploadCloud,
-  Loader2
+  Loader2,
+  Store
 } from 'lucide-react';
 import api from '../../utils/api';
 import {
@@ -574,9 +575,14 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
                             <span className="prod-table-name" title={p.title || p.name}>
                               {p.title || p.name}
                             </span>
-                            <span className="prod-table-unit">
-                              Unit: <strong>{p.unit || '1 unit'}</strong>
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                              <span className="prod-table-unit">
+                                Unit: <strong>{p.unit || '1 unit'}</strong>
+                              </span>
+                              <span className="prod-owner-badge prod-owner-vendor" style={{ fontSize: 10, padding: '1px 5px' }}>
+                                <Store size={10} /> {vendor?.name || 'My Store'}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -704,7 +710,9 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
                 <div className="prod-card-body">
                   <div className="prod-card-header">
                     <span className="prod-card-cat">{p.category || 'General'}</span>
-                    <span className="prod-card-unit">{p.unit || '1 unit'}</span>
+                    <span className="prod-owner-badge prod-owner-vendor" style={{ fontSize: 10, padding: '1px 5px' }}>
+                      <Store size={10} /> {vendor?.name || 'My Store'}
+                    </span>
                   </div>
 
                   <h4 className="prod-card-title" title={p.title || p.name}>

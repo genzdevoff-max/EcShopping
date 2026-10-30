@@ -1133,3 +1133,245 @@
     padding: 14px 16px 36px;
   }
 }
+
+/* ===================================================
+   ADMIN VIDEO REVIEWS - LOCAL UPLOAD & PREVIEW
+   =================================================== */
+
+.admin-video-form-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.admin-video-mode-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 4px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.admin-video-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 38px;
+}
+
+.admin-video-mode-btn:hover {
+  color: #0f172a;
+}
+
+.admin-video-mode-btn.active {
+  background: #ffffff;
+  color: #0e5c4a;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.admin-video-upload-area {
+  margin-bottom: 16px;
+}
+
+.admin-video-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 20px;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-video-dropzone:hover,
+.admin-video-dropzone.drag-active {
+  border-color: #0e5c4a;
+  background: #f0fdf4;
+}
+
+.admin-video-file-card {
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.admin-video-file-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-video-file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-video-file-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #0e5c4a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-video-file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+.admin-video-file-size {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.admin-video-preview-player {
+  width: 100%;
+  max-width: 480px;
+  max-height: 280px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: #000;
+  margin-top: 6px;
+  display: block;
+}
+
+.admin-upload-progress-wrap {
+  margin-top: 14px;
+}
+
+.admin-upload-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.admin-upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #0e5c4a);
+  transition: width 0.2s ease;
+}
+
+.admin-upload-progress-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #0e5c4a;
+  font-weight: 500;
+  margin-top: 6px;
+}
+
+.admin-video-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.admin-submit-video-btn {
+  background: #0e5c4a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.admin-submit-video-btn:hover:not(:disabled) {
+  background: #094033;
+}
+
+.admin-submit-video-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .admin-video-form-card {
+    padding: 16px;
+  }
+
+  .admin-video-mode-selector {
+    width: 100%;
+  }
+
+  .admin-video-mode-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .admin-video-file-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-video-preview-player {
+    max-width: 100%;
+  }
+
+  .admin-submit-video-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Product Ownership Badges */
+.prod-owner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+}
+
+.prod-owner-admin {
+  background: #ecfdf5;
+  color: #0e5c4a;
+  border: 1px solid #a7f3d0;
+}
+
+.prod-owner-vendor {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}

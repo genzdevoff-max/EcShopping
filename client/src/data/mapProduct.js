@@ -30,6 +30,13 @@ export function mapServerProduct(row) {
   const strikeRaw = row.strikePrice != null && row.strikePrice !== '' ? Number(row.strikePrice) : null;
   const stockStatus = row.stockStatus || 'in_stock';
   const isApproved = row.status ? row.status === 'approved' : true;
+  const isVendorProduct = Boolean(row.vendorId && row.vendorId !== 'admin');
+  const isAdminProduct = !isVendorProduct;
+
+  let resolvedSeller = row.vendorName || 'EcShopping Seller';
+  if (row.vendorName === 'Platform Direct' || row.vendorName === 'admin' || row.vendorName === 'Admin') {
+    resolvedSeller = 'Admin Direct';
+  }
 
   return {
     id: String(row.id ?? ''),
@@ -45,8 +52,11 @@ export function mapServerProduct(row) {
     videoUrl: row.videoUrl || row.video_url || '',
     category: row.category || '',
     categorySlug: categorySlugFromName(row.category),
-    seller: row.vendorName || 'EcShopping Seller',
+    seller: resolvedSeller,
     vendorId: row.vendorId || null,
+    isAdminProduct,
+    isVendorProduct,
+    ownerType: isVendorProduct ? 'vendor' : 'admin',
     unit: row.unit || '',
     variants: [],
     selectedVariant: null,

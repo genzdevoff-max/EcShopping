@@ -153,6 +153,18 @@ test('POST /api/upload/video: Rejects invalid video formats and missing files', 
   assert.match(badFormat.body.error, /Invalid video format/);
 });
 
+test('POST /api/upload/video: Clear diagnostic error when cloud_name contains spaces', async () => {
+  const res = await request()
+    .post('/api/upload/video')
+    .set('Authorization', `Bearer ${VENDOR_TOKEN}`)
+    .attach('video', Buffer.from('dummy mp4 binary data'), 'sample.mp4');
+
+  // Because CLOUDINARY_CLOUD_NAME has spaces ('Ec shopping'), the backend returns 502 with clear diagnostic
+  assert.equal(res.status, 502);
+  assert.equal(res.body.success, false);
+  assert.match(res.body.error, /Cloud names cannot contain spaces|Cloudinary rejected credentials/);
+});
+
 test('POST /api/upload/video/delete: Enforces auth and validates publicId', async () => {
   const anon = await request()
     .post('/api/upload/video/delete')
@@ -164,4 +176,82 @@ test('POST /api/upload/video/delete: Enforces auth and validates publicId', asyn
     .set('Authorization', `Bearer ${VENDOR_TOKEN}`)
     .send({});
   assert.equal(missingId.status, 400);
+});
+
+test('Video Reviews: Complete lifecycle with Cloudinary metadata persistence and cleanup', async () => {
+  // Query an approved or existing product to attach
+  const [prods] = await pool.query('SELECT id FROM products WHERE status = "approved" LIMIT 1');
+  const productId = prods[0]?.id;
+  assert.ok(productId, 'An approved product must exist for video reviews');
+
+  // 1. Create a video review with full Cloudinary metadata
+  const testPayload = {
+    title: 'Unit Test Harvest Reel',
+    description: 'Farm tour video review',
+    videoUrl: 'https://res.cloudinary.com/test-cloud/video/upload/v1234/ecshopping/products/videos/test-reel.mp4',
+    publicId: 'ecshopping/products/videos/test-reel',
+    format: 'mp4',
+    duration: 42.50,
+    bytes: 12500000,
+    productId,
+    displayOrder: 1
+  };
+
+  const createRes = await request()
+    .post('/api/videos')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .send(testPayload);
+
+  assert.equal(createRes.status, 201);
+  assert.equal(createRes.body.success, true);
+  assert.ok(createRes.body.video?.id);
+  const videoId = createRes.body.video.id;
+
+  // 2. Query admin list and verify metadata persistence
+  const listRes = await request()
+    .get('/api/videos')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+  assert.equal(listRes.status, 200);
+  const foundInAdmin = listRes.body.videos.find((v) => v.id === videoId);
+  assert.ok(foundInAdmin, 'Video should appear in admin list');
+  assert.equal(foundInAdmin.title, testPayload.title);
+  assert.equal(foundInAdmin.publicId, testPayload.publicId);
+  assert.equal(foundInAdmin.format, 'mp4');
+  assert.equal(Number(foundInAdmin.duration), 42.50);
+  assert.equal(Number(foundInAdmin.bytes), 12500000);
+
+  // 3. Query public endpoint and verify active status
+  const pubRes = await request().get('/api/videos/public');
+  assert.equal(pubRes.status, 200);
+  const foundInPublic = pubRes.body.videos.find((v) => v.id === videoId);
+  assert.ok(foundInPublic, 'Active video should appear in public endpoint');
+  assert.equal(foundInPublic.title, testPayload.title);
+
+  // 4. Update the video record
+  const updateRes = await request()
+    .put(`/api/videos/${videoId}`)
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .send({
+      title: 'Updated Harvest Reel',
+      status: 'inactive'
+    });
+  assert.equal(updateRes.status, 200);
+  assert.equal(updateRes.body.success, true);
+
+  // Inactive video should not appear in public rail
+  const pubResAfterDeactivate = await request().get('/api/videos/public');
+  const foundInactive = pubResAfterDeactivate.body.videos.find((v) => v.id === videoId);
+  assert.equal(foundInactive, undefined, 'Inactive video should not appear in public endpoint');
+
+  // 5. Delete the video and verify DB removal
+  const delRes = await request()
+    .delete(`/api/videos/${videoId}`)
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.body.success, true);
+
+  const [dbRows] = await pool.query('SELECT id FROM product_videos WHERE id = ?', [videoId]);
+  assert.equal(dbRows.length, 0, 'Record should be removed from database');
 });

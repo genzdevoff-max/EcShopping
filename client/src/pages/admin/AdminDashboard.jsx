@@ -1,8 +1,9 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import {
   LogOut, RefreshCw, CheckCircle, XCircle, Package, Users as UsersIcon,
   ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Trash2,
-  Menu, X, CreditCard, ShieldCheck, Globe, AlertTriangle, Save, Eye, EyeOff, Lock, CheckCircle2
+  Menu, X, CreditCard, ShieldCheck, Globe, AlertTriangle, Save, Eye, EyeOff, Lock, CheckCircle2,
+  UploadCloud, Link as LinkIcon, Play, FileVideo, Film, Store
 } from 'lucide-react';
 import api, { authSessions } from '../../utils/api';
 import { getCurrentAdmin } from '../../utils/storage';
@@ -49,6 +50,7 @@ export default function AdminDashboard({ onLogout }) {
   const [editCatImage, setEditCatImage] = useState('');
 
   /* Video review management form state */
+  const [vidInputMode, setVidInputMode] = useState('upload'); // 'upload' | 'url'
   const [newVidTitle, setNewVidTitle] = useState('');
   const [newVidDesc, setNewVidDesc] = useState('');
   const [newVidUrl, setNewVidUrl] = useState('');
@@ -57,6 +59,17 @@ export default function AdminDashboard({ onLogout }) {
   const [newVidOrder, setNewVidOrder] = useState('0');
   const [creatingVid, setCreatingVid] = useState(false);
   const [vidFormMsg, setVidFormMsg] = useState({ type: null, text: '' });
+
+  // Local Video Upload state
+  const [selectedVideoFile, setSelectedVideoFile] = useState(null);
+  const [localVideoPreview, setLocalVideoPreview] = useState(null);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const videoFileInputRef = useRef(null);
+
+  // Video Preview Modal in table
+  const [previewingVideo, setPreviewingVideo] = useState(null);
 
   /* Category filters and pagination */
   const [catSearch, setCatSearch] = useState('');
@@ -69,6 +82,7 @@ export default function AdminDashboard({ onLogout }) {
   const [prodSearch, setProdSearch] = useState('');
   const [prodStatusFilter, setProdStatusFilter] = useState('all');
   const [prodStockFilter, setProdStockFilter] = useState('all');
+  const [prodOwnerFilter, setProdOwnerFilter] = useState('all');
   const [prodPage, setProdPage] = useState(1);
   const [prodPageSize, setProdPageSize] = useState(10);
 
@@ -306,40 +320,139 @@ export default function AdminDashboard({ onLogout }) {
     }, 'Category update failed');
   };
 
-  const handleCreateVideo = async (e) => {
-    e.preventDefault();
-    if (!newVidTitle.trim() || !newVidUrl.trim() || !newVidProduct) {
-      setVidFormMsg({ type: 'error', text: 'Title, Video URL, and attached product are required.' });
+  const handleSelectVideoFile = (file) => {
+    if (!file) return;
+
+    const validTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'];
+    const validExts = ['.mp4', '.webm', '.mov', '.ogg'];
+    const hasValidExt = validExts.some(ext => file.name.toLowerCase().endsWith(ext));
+    if (!validTypes.includes(file.type) && !hasValidExt) {
+      setVidFormMsg({ type: 'error', text: 'Unsupported video format. Please choose an MP4, WebM, MOV, or OGG video file.' });
       return;
     }
+
+    const MAX_SIZE = 50 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setVidFormMsg({ type: 'error', text: `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds maximum allowed limit of 50MB.` });
+      return;
+    }
+
+    if (localVideoPreview) {
+      URL.revokeObjectURL(localVideoPreview);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setSelectedVideoFile(file);
+    setLocalVideoPreview(objectUrl);
+    setVideoUploadProgress(0);
+    setVidFormMsg({ type: null, text: '' });
+
+    if (!newVidTitle.trim()) {
+      const cleanName = file.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+      setNewVidTitle(cleanName);
+    }
+  };
+
+  const handleClearSelectedVideo = () => {
+    if (localVideoPreview) {
+      URL.revokeObjectURL(localVideoPreview);
+    }
+    setSelectedVideoFile(null);
+    setLocalVideoPreview(null);
+    setVideoUploadProgress(0);
+    setIsUploadingVideo(false);
+    if (videoFileInputRef.current) {
+      videoFileInputRef.current.value = '';
+    }
+  };
+
+  const handleCreateVideo = async (e) => {
+    e.preventDefault();
+    if (!newVidTitle.trim()) {
+      setVidFormMsg({ type: 'error', text: 'Please enter a video title.' });
+      return;
+    }
+    if (!newVidProduct) {
+      setVidFormMsg({ type: 'error', text: 'Please select an approved product to attach to this video.' });
+      return;
+    }
+
+    if (vidInputMode === 'upload' && !selectedVideoFile) {
+      setVidFormMsg({ type: 'error', text: 'Please select a local video file from your device, or switch to Video URL.' });
+      return;
+    }
+
+    if (vidInputMode === 'url') {
+      const trimmedUrl = newVidUrl.trim();
+      if (!trimmedUrl || (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://'))) {
+        setVidFormMsg({ type: 'error', text: 'Please enter a valid http(s) video URL (YouTube, Vimeo, or direct MP4).' });
+        return;
+      }
+    }
+
     setCreatingVid(true);
     setVidFormMsg({ type: null, text: '' });
+
+    let finalVideoUrl = newVidUrl.trim();
+    let uploadMetadata = {};
+
     try {
+      if (vidInputMode === 'upload' && selectedVideoFile) {
+        setIsUploadingVideo(true);
+        setVideoUploadProgress(10);
+
+        const uploadRes = await api.uploadVideo(
+          selectedVideoFile,
+          'admin',
+          (percent) => setVideoUploadProgress(Math.max(10, percent))
+        );
+
+        if (!uploadRes?.success || !uploadRes.url) {
+          throw new Error(uploadRes?.error || 'Cloudinary video upload failed. Please try again.');
+        }
+
+        finalVideoUrl = uploadRes.url;
+        uploadMetadata = {
+          publicId: uploadRes.publicId || uploadRes.public_id,
+          format: uploadRes.format,
+          duration: uploadRes.duration,
+          bytes: uploadRes.bytes
+        };
+        setVideoUploadProgress(100);
+      }
+
       const res = await api.createVideo({
         title: newVidTitle.trim(),
         description: newVidDesc.trim(),
-        videoUrl: newVidUrl.trim(),
+        videoUrl: finalVideoUrl,
         thumbnailUrl: newVidThumb.trim() || null,
         productId: newVidProduct,
-        displayOrder: Number(newVidOrder) || 0
+        displayOrder: Number(newVidOrder) || 0,
+        ...uploadMetadata
       });
+
       if (res?.success) {
+        handleClearSelectedVideo();
         setNewVidTitle('');
         setNewVidDesc('');
         setNewVidUrl('');
         setNewVidThumb('');
         setNewVidProduct('');
         setNewVidOrder('0');
-        setVidFormMsg({ type: 'success', text: 'Video review added successfully!' });
+        setVidFormMsg({ type: 'success', text: 'Video review saved successfully!' });
         setAttempt((n) => n + 1);
-        setTimeout(() => setVidFormMsg({ type: null, text: '' }), 3000);
+        setTimeout(() => setVidFormMsg({ type: null, text: '' }), 4000);
       } else {
         setVidFormMsg({ type: 'error', text: res?.error || 'Failed to add video' });
       }
     } catch (err) {
-      setVidFormMsg({ type: 'error', text: err?.message || 'Failed to add video' });
+      setVidFormMsg({ type: 'error', text: err?.message || 'Failed to process video review' });
     } finally {
       setCreatingVid(false);
+      setIsUploadingVideo(false);
     }
   };
 
@@ -406,15 +519,20 @@ export default function AdminDashboard({ onLogout }) {
   // Products
   const filteredProducts = state.products.filter((prod) => {
     const query = prodSearch.toLowerCase();
+    const isAdminProd = !prod.vendorId || prod.vendorId === 'admin' || prod.vendorName === 'Admin' || prod.vendorName === 'Platform Direct';
     const matchesSearch = !prodSearch ||
       (prod.title || '').toLowerCase().includes(query) ||
       (prod.vendorName || '').toLowerCase().includes(query) ||
-      (prod.category || '').toLowerCase().includes(query);
+      (prod.category || '').toLowerCase().includes(query) ||
+      (isAdminProd && query.includes('admin'));
     const matchesStatus = prodStatusFilter === 'all' || prod.status === prodStatusFilter;
     const matchesStock = prodStockFilter === 'all' ||
       (prodStockFilter === 'in_stock' && prod.stockStatus !== 'out_of_stock') ||
       (prodStockFilter === 'out_of_stock' && prod.stockStatus === 'out_of_stock');
-    return matchesSearch && matchesStatus && matchesStock;
+    const matchesOwner = prodOwnerFilter === 'all' ||
+      (prodOwnerFilter === 'admin' && isAdminProd) ||
+      (prodOwnerFilter === 'vendor' && !isAdminProd);
+    return matchesSearch && matchesStatus && matchesStock && matchesOwner;
   });
 
   const paginatedProducts = filteredProducts.slice(
@@ -1139,6 +1257,15 @@ export default function AdminDashboard({ onLogout }) {
                     <option value="in_stock">In Stock</option>
                     <option value="out_of_stock">Out of Stock</option>
                   </select>
+                  <select
+                    className="admin-filter-input"
+                    value={prodOwnerFilter}
+                    onChange={(e) => { setProdOwnerFilter(e.target.value); setProdPage(1); }}
+                  >
+                    <option value="all">All Ownership</option>
+                    <option value="admin">Admin Products Only</option>
+                    <option value="vendor">Vendor Products Only</option>
+                  </select>
                 </div>
 
                 <div className="vendors-table-container">
@@ -1146,7 +1273,7 @@ export default function AdminDashboard({ onLogout }) {
                     <thead>
                       <tr>
                         <th style={{ width: 60 }}>Image</th>
-                        <th>Title & Vendor</th>
+                        <th>Title & Ownership</th>
                         <th>Price</th>
                         <th>Stock</th>
                         <th>Approval Status</th>
@@ -1154,7 +1281,9 @@ export default function AdminDashboard({ onLogout }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedProducts.map((product) => (
+                      {paginatedProducts.map((product) => {
+                        const isAdminProd = !product.vendorId || product.vendorId === 'admin' || product.vendorName === 'Admin' || product.vendorName === 'Platform Direct';
+                        return (
                         <tr key={product.id}>
                           <td>
                             {product.image ? (
@@ -1164,9 +1293,22 @@ export default function AdminDashboard({ onLogout }) {
                             )}
                           </td>
                           <td>
-                            <div style={{ fontWeight: 600, color: '#0f172a' }}>{product.title}</div>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: 2 }}>
-                              Vendor: {product.vendorName || 'Not specified'} | Category: {product.category || 'General'}
+                            <div style={{ fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span>{product.title}</span>
+                              {isAdminProd ? (
+                                <span className="prod-owner-badge prod-owner-admin" title="Admin-owned product">
+                                  <ShieldCheck size={12} /> Admin
+                                </span>
+                              ) : (
+                                <span className="prod-owner-badge prod-owner-vendor" title={`Vendor: ${product.vendorName || 'Assigned Vendor'}`}>
+                                  <Store size={12} /> {product.vendorName || 'Vendor'}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: 3 }}>
+                              <span>{isAdminProd ? 'Owner: Admin (EcShopping)' : `Vendor: ${product.vendorName || 'Assigned Vendor'}`}</span>
+                              <span style={{ margin: '0 6px' }}>•</span>
+                              <span>Category: {product.category || 'General'}</span>
                             </div>
                           </td>
                           <td>
@@ -1236,7 +1378,8 @@ export default function AdminDashboard({ onLogout }) {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                       {filteredProducts.length === 0 && (
                         <tr><td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>No products match your search or filter.</td></tr>
                       )}
@@ -1371,105 +1514,267 @@ export default function AdminDashboard({ onLogout }) {
             {activeTab === 'videos' && (
               <div className="admin-cat-section-wrap">
                 {/* Add Video Review Form */}
-                <div className="admin-cat-form-card">
-                  <h3 style={{ margin: '0 0 6px', fontSize: 16, color: '#0f172a' }}>
-                    <Plus size={16} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6 }} />
-                    Add Video Review or Short
+                <div className="admin-cat-form-card admin-video-form-card">
+                  <h3 style={{ margin: '0 0 6px', fontSize: 16, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Film size={18} color="#0e5c4a" />
+                    <span>Add Video Review or Short</span>
                   </h3>
                   <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b' }}>
-                    Active videos appear in the 9:16 vertical reels rail on the homepage, linked to your approved products.
+                    Upload farm harvest reels, customer unboxings, or cooking demonstrations. Videos appear in the 9:16 vertical reels rail on the homepage, linked to your approved products.
                   </p>
 
                   {vidFormMsg.text && (
                     <div style={{
-                      padding: '8px 14px',
-                      borderRadius: 6,
-                      marginBottom: 14,
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      marginBottom: 16,
                       fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
                       background: vidFormMsg.type === 'success' ? '#dcfce7' : '#fee2e2',
                       color: vidFormMsg.type === 'success' ? '#166534' : '#991b1b',
                       border: vidFormMsg.type === 'success' ? '1px solid #bbf7d0' : '1px solid #fecaca'
                     }}>
-                      {vidFormMsg.text}
+                      {vidFormMsg.type === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+                      <span>{vidFormMsg.text}</span>
                     </div>
                   )}
 
-                  <form onSubmit={handleCreateVideo} className="admin-cat-form-grid">
-                    <div className="cat-form-field">
-                      <label>Video Title *</label>
-                      <input
-                        type="text"
-                        className="admin-filter-input"
-                        style={{ width: '100%' }}
-                        placeholder="e.g. Traditional A2 Ghee Churning"
-                        value={newVidTitle}
-                        onChange={(e) => setNewVidTitle(e.target.value)}
-                        required
-                      />
+                  {/* Mode switch: Local Upload vs URL */}
+                  <div className="admin-video-mode-selector" role="tablist" aria-label="Video input source">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={vidInputMode === 'upload'}
+                      className={`admin-video-mode-btn ${vidInputMode === 'upload' ? 'active' : ''}`}
+                      onClick={() => setVidInputMode('upload')}
+                    >
+                      <UploadCloud size={15} />
+                      <span>Upload Video from Device</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={vidInputMode === 'url'}
+                      className={`admin-video-mode-btn ${vidInputMode === 'url' ? 'active' : ''}`}
+                      onClick={() => setVidInputMode('url')}
+                    >
+                      <LinkIcon size={15} />
+                      <span>Provide Video URL (YouTube / External)</span>
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCreateVideo} className="admin-video-form-layout">
+                    {/* OPTION 1: Local Video Upload */}
+                    {vidInputMode === 'upload' && (
+                      <div className="admin-video-upload-area">
+                        <input
+                          type="file"
+                          ref={videoFileInputRef}
+                          accept="video/mp4,video/webm,video/quicktime,video/ogg"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleSelectVideoFile(file);
+                          }}
+                        />
+
+                        {!selectedVideoFile ? (
+                          <div
+                            className={`admin-video-dropzone ${isDragActive ? 'drag-active' : ''}`}
+                            onClick={() => !creatingVid && videoFileInputRef.current?.click()}
+                            onDragEnter={(e) => { e.preventDefault(); setIsDragActive(true); }}
+                            onDragOver={(e) => { e.preventDefault(); setIsDragActive(true); }}
+                            onDragLeave={(e) => { e.preventDefault(); setIsDragActive(false); }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              setIsDragActive(false);
+                              const file = e.dataTransfer.files?.[0];
+                              if (file) handleSelectVideoFile(file);
+                            }}
+                          >
+                            <UploadCloud size={36} color="#0e5c4a" />
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 14 }}>
+                              Choose a video file or drag and drop here
+                            </div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>
+                              Supports MP4, WebM, MOV, or OGG up to 50MB (will be uploaded directly to Cloudinary)
+                            </div>
+                            <button
+                              type="button"
+                              className="btn-secondary-sm"
+                              style={{ marginTop: 6 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                videoFileInputRef.current?.click();
+                              }}
+                            >
+                              Browse Files
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="admin-video-file-card">
+                            <div className="admin-video-file-meta">
+                              <div className="admin-video-file-info">
+                                <div className="admin-video-file-icon">
+                                  <FileVideo size={20} />
+                                </div>
+                                <div>
+                                  <div className="admin-video-file-name">{selectedVideoFile.name}</div>
+                                  <div className="admin-video-file-size">
+                                    {(selectedVideoFile.size / (1024 * 1024)).toFixed(2)} MB • Ready to upload to Cloudinary
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  className="btn-secondary-sm"
+                                  disabled={creatingVid}
+                                  onClick={() => videoFileInputRef.current?.click()}
+                                >
+                                  Replace File
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-secondary-sm"
+                                  style={{ color: '#dc2626', borderColor: '#fecaca' }}
+                                  disabled={creatingVid}
+                                  onClick={handleClearSelectedVideo}
+                                >
+                                  <Trash2 size={13} /> Remove
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Local Video Player Preview */}
+                            {localVideoPreview && (
+                              <div style={{ marginTop: 8 }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
+                                  Video Preview:
+                                </div>
+                                <video
+                                  src={localVideoPreview}
+                                  controls
+                                  playsInline
+                                  preload="metadata"
+                                  className="admin-video-preview-player"
+                                />
+                              </div>
+                            )}
+
+                            {/* Upload Progress Bar */}
+                            {isUploadingVideo && (
+                              <div className="admin-upload-progress-wrap">
+                                <div className="admin-upload-progress-bar">
+                                  <div
+                                    className="admin-upload-progress-fill"
+                                    style={{ width: `${videoUploadProgress}%` }}
+                                  />
+                                </div>
+                                <div className="admin-upload-progress-text">
+                                  <span>Uploading video to Cloudinary CDN (ecshopping/products/videos)...</span>
+                                  <span>{videoUploadProgress}%</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* OPTION 2: Video URL */}
+                    {vidInputMode === 'url' && (
+                      <div className="cat-form-field">
+                        <label>Video URL (YouTube, Vimeo, or direct MP4) *</label>
+                        <input
+                          type="url"
+                          className="admin-filter-input"
+                          style={{ width: '100%' }}
+                          placeholder="https://www.youtube.com/watch?v=... or https://.../video.mp4"
+                          value={newVidUrl}
+                          onChange={(e) => setNewVidUrl(e.target.value)}
+                          required={vidInputMode === 'url'}
+                        />
+                      </div>
+                    )}
+
+                    {/* Form Metadata Fields */}
+                    <div className="admin-video-fields-grid">
+                      <div className="cat-form-field">
+                        <label>Video Title *</label>
+                        <input
+                          type="text"
+                          className="admin-filter-input"
+                          style={{ width: '100%' }}
+                          placeholder="e.g. Traditional A2 Ghee Churning"
+                          value={newVidTitle}
+                          onChange={(e) => setNewVidTitle(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="cat-form-field">
+                        <label>Attached Product *</label>
+                        <select
+                          className="admin-filter-input"
+                          style={{ width: '100%' }}
+                          value={newVidProduct}
+                          onChange={(e) => setNewVidProduct(e.target.value)}
+                          required
+                        >
+                          <option value="">Select an approved product...</option>
+                          {state.products.filter(p => p.status === 'approved').map((p) => (
+                            <option key={p.id} value={p.id}>{p.title} (₹{p.price})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="cat-form-field">
+                        <label>Thumbnail Poster URL (Optional)</label>
+                        <input
+                          type="url"
+                          className="admin-filter-input"
+                          style={{ width: '100%' }}
+                          placeholder="https://... (Auto-uses product image if blank)"
+                          value={newVidThumb}
+                          onChange={(e) => setNewVidThumb(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="cat-form-field">
+                        <label>Display Order</label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="admin-filter-input"
+                          style={{ width: '100%' }}
+                          value={newVidOrder}
+                          onChange={(e) => setNewVidOrder(e.target.value)}
+                        />
+                      </div>
                     </div>
 
-                    <div className="cat-form-field">
-                      <label>Video URL (MP4 or YouTube) *</label>
-                      <input
-                        type="url"
-                        className="admin-filter-input"
-                        style={{ width: '100%' }}
-                        placeholder="https://...mp4 or YouTube URL"
-                        value={newVidUrl}
-                        onChange={(e) => setNewVidUrl(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="cat-form-field">
-                      <label>Thumbnail Poster URL</label>
-                      <input
-                        type="url"
-                        className="admin-filter-input"
-                        style={{ width: '100%' }}
-                        placeholder="https://... (Optional for YouTube)"
-                        value={newVidThumb}
-                        onChange={(e) => setNewVidThumb(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="cat-form-field">
-                      <label>Attached Product *</label>
-                      <select
-                        className="admin-filter-input"
-                        style={{ width: '100%' }}
-                        value={newVidProduct}
-                        onChange={(e) => setNewVidProduct(e.target.value)}
-                        required
-                      >
-                        <option value="">Select an approved product...</option>
-                        {state.products.filter(p => p.status === 'approved').map((p) => (
-                          <option key={p.id} value={p.id}>{p.title} (₹{p.price})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="cat-form-field">
-                      <label>Display Order</label>
-                      <input
-                        type="number"
-                        min="0"
-                        className="admin-filter-input"
-                        style={{ width: '100%' }}
-                        value={newVidOrder}
-                        onChange={(e) => setNewVidOrder(e.target.value)}
-                      />
-                    </div>
-
-                    <div>
+                    <div style={{ marginTop: 14 }}>
                       <button
                         type="submit"
                         disabled={creatingVid}
-                        className="approve-btn"
-                        style={{ height: 38, padding: '0 18px', display: 'flex', alignItems: 'center', gap: 6 }}
+                        className="approve-btn admin-submit-video-btn"
+                        style={{ height: 42, padding: '0 20px', display: 'inline-flex', alignItems: 'center', gap: 8 }}
                       >
-                        {creatingVid ? <Loader2 size={15} className="spin" /> : <Plus size={15} />}
-                        <span>Add Video</span>
+                        {creatingVid ? (
+                          <Loader2 size={16} className="spin" />
+                        ) : vidInputMode === 'upload' ? (
+                          <UploadCloud size={16} />
+                        ) : (
+                          <Plus size={16} />
+                        )}
+                        <span>
+                          {creatingVid
+                            ? (isUploadingVideo ? `Uploading Video (${videoUploadProgress}%)…` : 'Saving Video Record…')
+                            : (vidInputMode === 'upload' ? 'Upload & Save Video Review' : 'Add Video Review')}
+                        </span>
                       </button>
                     </div>
                   </form>
@@ -1530,6 +1835,19 @@ export default function AdminDashboard({ onLogout }) {
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                              {vid.videoUrl && (
+                                <button
+                                  type="button"
+                                  className="btn-secondary-sm"
+                                  style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                  onClick={() => setPreviewingVideo(vid)}
+                                  title={`Preview "${vid.title}"`}
+                                  aria-label="Preview video"
+                                >
+                                  <Play size={13} />
+                                  <span>Play</span>
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className={vid.status === 'active' ? 'reject-btn' : 'approve-btn'}
@@ -1965,6 +2283,56 @@ export default function AdminDashboard({ onLogout }) {
                     onCancel={() => setAddProductOpen(false)}
                   />
                 </Suspense>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- VIDEO PREVIEW MODAL ---------------- */}
+        {previewingVideo && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-video-modal-title">
+            <div className="admin-modal-backdrop" onClick={() => setPreviewingVideo(null)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 540 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge">
+                    <Film size={14} /> Video Preview
+                  </div>
+                  <h2 id="admin-video-modal-title">{previewingVideo.title}</h2>
+                  {previewingVideo.productTitle && (
+                    <p>Attached to product: <strong>{previewingVideo.productTitle}</strong></p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  onClick={() => setPreviewingVideo(null)}
+                  aria-label="Close dialog"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="admin-modal-body" style={{ padding: 16 }}>
+                <div style={{ position: 'relative', width: '100%', borderRadius: 8, overflow: 'hidden', background: '#000' }}>
+                  <video
+                    src={previewingVideo.videoUrl}
+                    controls
+                    autoPlay
+                    playsInline
+                    style={{ width: '100%', maxHeight: '70vh', display: 'block', margin: '0 auto' }}
+                  />
+                </div>
+                {previewingVideo.description && (
+                  <p style={{ marginTop: 12, fontSize: 13, color: '#475569' }}>
+                    {previewingVideo.description}
+                  </p>
+                )}
+                <div style={{ marginTop: 12, fontSize: 12, color: '#64748b', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {previewingVideo.format && <span>Format: <strong>{previewingVideo.format}</strong></span>}
+                  {previewingVideo.duration && <span>Duration: <strong>{previewingVideo.duration}s</strong></span>}
+                  {previewingVideo.bytes && <span>Size: <strong>{(previewingVideo.bytes / (1024 * 1024)).toFixed(2)} MB</strong></span>}
+                  {previewingVideo.publicId && <span>Cloudinary ID: <code>{previewingVideo.publicId}</code></span>}
+                </div>
               </div>
             </div>
           </div>

@@ -357,13 +357,15 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
             <div className="avatar">
               <User size={32} color="#fff" />
             </div>
-            <h3>{loggedInCustomer.name}</h3>
-            <p className="profile-email">{loggedInCustomer.email}</p>
-            {loggedInCustomer.phone && (
-              <p className="profile-phone"><Phone size={13} style={{ display: 'inline', marginRight: 4 }} />{loggedInCustomer.phone}</p>
-            )}
-            <div className="profile-badge">
-              <ShieldCheck size={14} color="#16a34a" /> Verified Customer
+            <div className="profile-user-info">
+              <h3>{loggedInCustomer.name}</h3>
+              <p className="profile-email">{loggedInCustomer.email}</p>
+              {loggedInCustomer.phone && (
+                <p className="profile-phone"><Phone size={13} style={{ display: 'inline', marginRight: 4 }} />{loggedInCustomer.phone}</p>
+              )}
+              <div className="profile-badge">
+                <ShieldCheck size={14} color="#16a34a" /> Verified Customer
+              </div>
             </div>
           </div>
 

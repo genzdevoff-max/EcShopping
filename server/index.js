@@ -54,7 +54,11 @@ cloudinary.config({
 });
 
 if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
-  console.log(`✅ Cloudinary configured (cloud: ${process.env.CLOUDINARY_CLOUD_NAME})`);
+  if (/\s/.test(process.env.CLOUDINARY_CLOUD_NAME)) {
+    console.warn(`⚠️ [Cloudinary] WARNING: CLOUDINARY_CLOUD_NAME ("${process.env.CLOUDINARY_CLOUD_NAME}") contains spaces. Cloudinary cloud names must be strictly alphanumeric identifiers without spaces (from Cloudinary dashboard).`);
+  } else {
+    console.log(`✅ Cloudinary configured (cloud: ${process.env.CLOUDINARY_CLOUD_NAME})`);
+  }
 } else {
   console.warn('⚠️ Cloudinary not configured — uploads will fall back to inline data URIs.');
 }
@@ -225,64 +229,127 @@ app.post('/api/upload', requireVendorOrAdmin, upload.single('image'), async (req
 });
 
 // Cloudinary Video Upload Endpoint (sellers/admins only)
-app.post('/api/upload/video', requireVendorOrAdmin, videoUpload.single('video'), async (req, res) => {
-  try {
-    if (!req.file || !req.file.buffer) {
-      return res.status(400).json({ success: false, error: 'No video file uploaded' });
-    }
-
-    const mime = req.file.mimetype || '';
-    const allowedMimes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg', 'video/x-msvideo'];
-    const ext = (req.file.originalname || '').split('.').pop().toLowerCase();
-    const allowedExts = ['mp4', 'webm', 'mov', 'ogg', 'avi', 'm4v'];
-
-    if (!allowedMimes.includes(mime) && !allowedExts.includes(ext)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid video format. Supported formats: MP4, WebM, MOV, OGG.'
-      });
-    }
-
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      return res.status(503).json({
-        success: false,
-        error: 'Cloudinary credentials are not configured on the server. Please provide a video URL instead.'
-      });
-    }
-
-    const uploadPromise = new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'ecshopping/products/videos',
-          resource_type: 'video'
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
+app.post(
+  '/api/upload/video',
+  requireVendorOrAdmin,
+  (req, res, next) => {
+    videoUpload.single('video')(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({
+            success: false,
+            error: 'Video file exceeds the 50MB size limit. Please upload a smaller video or provide a YouTube URL.'
+          });
         }
-      );
-      stream.end(req.file.buffer);
+        return res.status(400).json({
+          success: false,
+          error: `Video upload error: ${err.message}`
+        });
+      }
+      next();
     });
+  },
+  async (req, res) => {
+    try {
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ success: false, error: 'No video file uploaded' });
+      }
 
-    const result = await uploadPromise;
-    console.log(`🎬 [Cloudinary] Video uploaded: ${result.secure_url}`);
-    return res.status(200).json({
-      success: true,
-      url: result.secure_url,
-      publicId: result.public_id,
-      public_id: result.public_id,
-      format: result.format,
-      duration: result.duration,
-      bytes: result.bytes
-    });
-  } catch (err) {
-    console.error('❌ Video upload error:', err?.message || err);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to upload video to Cloudinary. Please check video file size or provide a YouTube / video URL.'
-    });
+      const mime = req.file.mimetype || '';
+      const allowedMimes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg', 'video/x-msvideo'];
+      const ext = (req.file.originalname || '').split('.').pop().toLowerCase();
+      const allowedExts = ['mp4', 'webm', 'mov', 'ogg', 'avi', 'm4v'];
+
+      if (!allowedMimes.includes(mime) && !allowedExts.includes(ext)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid video format (.${ext || 'unknown'}). Supported formats: MP4, WebM, MOV, OGG, AVI.`
+        });
+      }
+
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      const apiKey = process.env.CLOUDINARY_API_KEY;
+      const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+      if (!cloudName || !apiKey || !apiSecret) {
+        return res.status(503).json({
+          success: false,
+          error: 'Cloudinary credentials are not configured on the server. Please provide a video URL instead.'
+        });
+      }
+
+      if (/\s/.test(cloudName)) {
+        return res.status(502).json({
+          success: false,
+          error: `Cloudinary rejected credentials: Invalid cloud_name "${cloudName}". Cloud names cannot contain spaces. Please check your Cloudinary configuration in server environment.`
+        });
+      }
+
+      const uploadPromise = new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'ecshopping/products/videos',
+            resource_type: 'video'
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        stream.on('error', reject);
+        stream.end(req.file.buffer);
+      });
+
+      const result = await uploadPromise;
+      console.log(`🎬 [Cloudinary] Video uploaded: ${result.secure_url}`);
+      return res.status(200).json({
+        success: true,
+        url: result.secure_url,
+        publicId: result.public_id,
+        public_id: result.public_id,
+        format: result.format,
+        duration: result.duration,
+        bytes: result.bytes
+      });
+    } catch (err) {
+      console.error('❌ Video upload error:', err?.message || err);
+
+      const msg = err?.message || '';
+
+      if (
+        err?.http_code === 401 ||
+        msg.includes('cloud_name') ||
+        msg.includes('Invalid cloud_name') ||
+        msg.includes('mismatch') ||
+        msg.includes('Must supply')
+      ) {
+        return res.status(502).json({
+          success: false,
+          error: `Cloudinary authentication failed: ${msg || 'Cloud name or API credentials rejected by Cloudinary CDN'}. Please verify Cloudinary credentials in server environment.`
+        });
+      }
+
+      if (err?.http_code === 400) {
+        return res.status(400).json({
+          success: false,
+          error: `Cloudinary video rejection: ${msg || 'Unsupported video encoding or corrupted file'}.`
+        });
+      }
+
+      if (err?.code === 'ETIMEDOUT' || err?.code === 'ECONNRESET' || msg.includes('timeout')) {
+        return res.status(504).json({
+          success: false,
+          error: 'Cloudinary connection timed out. Please check your network and try again.'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: `Failed to upload video to Cloudinary: ${msg || 'Unknown error'}. Please provide a YouTube / video URL if upload persists failing.`
+      });
+    }
   }
-});
+);
 
 // Cloudinary Video Removal / Deletion Endpoint (sellers/admins only)
 app.post('/api/upload/video/delete', requireVendorOrAdmin, async (req, res) => {
@@ -2884,7 +2951,8 @@ app.get('/api/videos/public', async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT v.id, v.title, v.description, v.video_url AS videoUrl, v.thumbnail_url AS thumbnailUrl,
-              v.product_id AS productId, v.status, v.display_order AS displayOrder, v.created_at AS createdAt,
+              v.product_id AS productId, v.status, v.display_order AS displayOrder,
+              v.public_id AS publicId, v.format, v.duration, v.bytes, v.created_at AS createdAt,
               p.title AS productTitle, p.name AS productName, p.price AS productPrice,
               p.strike_price AS productStrikePrice, p.image AS productImage, p.category AS productCategory
        FROM product_videos v
@@ -2905,7 +2973,8 @@ app.get('/api/videos', requireAuth('admin'), async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT v.id, v.title, v.description, v.video_url AS videoUrl, v.thumbnail_url AS thumbnailUrl,
-              v.product_id AS productId, v.status, v.display_order AS displayOrder, v.created_at AS createdAt,
+              v.product_id AS productId, v.status, v.display_order AS displayOrder,
+              v.public_id AS publicId, v.format, v.duration, v.bytes, v.created_at AS createdAt,
               p.title AS productTitle, p.price AS productPrice, p.image AS productImage
        FROM product_videos v
        LEFT JOIN products p ON p.id = v.product_id
@@ -2920,7 +2989,20 @@ app.get('/api/videos', requireAuth('admin'), async (req, res) => {
 
 // Admin create new video
 app.post('/api/videos', requireAuth('admin'), async (req, res) => {
-  const { title, description, videoUrl, thumbnailUrl, productId, status = 'active', displayOrder = 0 } = req.body || {};
+  const {
+    title,
+    description,
+    videoUrl,
+    thumbnailUrl,
+    productId,
+    status = 'active',
+    displayOrder = 0,
+    publicId,
+    public_id,
+    format,
+    duration,
+    bytes
+  } = req.body || {};
 
   if (!title || !title.trim()) {
     return res.status(400).json({ success: false, error: 'Video title is required' });
@@ -2937,6 +3019,11 @@ app.post('/api/videos', requireAuth('admin'), async (req, res) => {
     return res.status(400).json({ success: false, error: 'A valid http(s) video URL is required' });
   }
 
+  const finalPublicId = (publicId || public_id) ? String(publicId || public_id).trim() : null;
+  const finalFormat = format ? String(format).trim() : null;
+  const finalDuration = duration != null ? parseFloat(duration) : null;
+  const finalBytes = bytes != null ? parseInt(bytes, 10) : null;
+
   try {
     const [prods] = await pool.query('SELECT id, title, price, image FROM products WHERE id = ?', [productId.trim()]);
     if (prods.length === 0) {
@@ -2948,8 +3035,8 @@ app.post('/api/videos', requireAuth('admin'), async (req, res) => {
     const orderNum = parseInt(displayOrder, 10) || 0;
 
     await pool.query(
-      `INSERT INTO product_videos (id, title, description, video_url, thumbnail_url, product_id, status, display_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO product_videos (id, title, description, video_url, thumbnail_url, product_id, status, display_order, public_id, format, duration, bytes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         title.trim(),
@@ -2958,7 +3045,11 @@ app.post('/api/videos', requireAuth('admin'), async (req, res) => {
         thumbnailUrl ? thumbnailUrl.trim() : (prods[0].image || null),
         productId.trim(),
         cleanStatus,
-        orderNum
+        orderNum,
+        finalPublicId,
+        finalFormat,
+        finalDuration,
+        finalBytes
       ]
     );
 
@@ -2974,6 +3065,10 @@ app.post('/api/videos', requireAuth('admin'), async (req, res) => {
       productImage: prods[0].image,
       status: cleanStatus,
       displayOrder: orderNum,
+      publicId: finalPublicId,
+      format: finalFormat,
+      duration: finalDuration,
+      bytes: finalBytes,
       createdAt: new Date().toISOString()
     };
 
@@ -2981,6 +3076,17 @@ app.post('/api/videos', requireAuth('admin'), async (req, res) => {
     return res.status(201).json({ success: true, video: newVideo });
   } catch (err) {
     console.error('❌ Create video DB error:', err);
+    // Cleanup newly uploaded Cloudinary asset if DB insertion failed
+    if (finalPublicId && finalPublicId.startsWith('ecshopping/products/videos/')) {
+      try {
+        if (cloudinary?.uploader?.destroy) {
+          await cloudinary.uploader.destroy(finalPublicId, { resource_type: 'video' });
+          console.log(`🧹 Cleaned up Cloudinary asset ${finalPublicId} after DB save failure`);
+        }
+      } catch (cleanErr) {
+        console.warn('Failed to cleanup Cloudinary asset:', cleanErr?.message);
+      }
+    }
     return res.status(500).json({ success: false, error: 'Unable to save video right now.' });
   }
 });
@@ -2988,7 +3094,20 @@ app.post('/api/videos', requireAuth('admin'), async (req, res) => {
 // Admin update video
 app.put('/api/videos/:id', requireAuth('admin'), async (req, res) => {
   const { id } = req.params;
-  const { title, description, videoUrl, thumbnailUrl, productId, status, displayOrder } = req.body || {};
+  const {
+    title,
+    description,
+    videoUrl,
+    thumbnailUrl,
+    productId,
+    status,
+    displayOrder,
+    publicId,
+    public_id,
+    format,
+    duration,
+    bytes
+  } = req.body || {};
 
   try {
     const [rows] = await pool.query('SELECT * FROM product_videos WHERE id = ?', [id]);
@@ -3004,6 +3123,12 @@ app.put('/api/videos/:id', requireAuth('admin'), async (req, res) => {
     const updatedProdId = productId !== undefined ? productId.trim() : current.product_id;
     const updatedStatus = status !== undefined ? (status === 'inactive' ? 'inactive' : 'active') : current.status;
     const updatedOrder = displayOrder !== undefined ? (parseInt(displayOrder, 10) || 0) : current.display_order;
+    const updatedPublicId = (publicId !== undefined || public_id !== undefined)
+      ? ((publicId || public_id) ? String(publicId || public_id).trim() : null)
+      : current.public_id;
+    const updatedFormat = format !== undefined ? (format ? String(format).trim() : null) : current.format;
+    const updatedDuration = duration !== undefined ? (duration != null ? parseFloat(duration) : null) : current.duration;
+    const updatedBytes = bytes !== undefined ? (bytes != null ? parseInt(bytes, 10) : null) : current.bytes;
 
     if (!updatedTitle) {
       return res.status(400).json({ success: false, error: 'Video title cannot be empty' });
@@ -3014,10 +3139,44 @@ app.put('/api/videos/:id', requireAuth('admin'), async (req, res) => {
 
     await pool.query(
       `UPDATE product_videos
-       SET title = ?, description = ?, video_url = ?, thumbnail_url = ?, product_id = ?, status = ?, display_order = ?
+       SET title = ?, description = ?, video_url = ?, thumbnail_url = ?, product_id = ?, status = ?, display_order = ?,
+           public_id = ?, format = ?, duration = ?, bytes = ?
        WHERE id = ?`,
-      [updatedTitle, updatedDesc, updatedUrl, updatedThumb, updatedProdId, updatedStatus, updatedOrder, id]
+      [
+        updatedTitle,
+        updatedDesc,
+        updatedUrl,
+        updatedThumb,
+        updatedProdId,
+        updatedStatus,
+        updatedOrder,
+        updatedPublicId,
+        updatedFormat,
+        updatedDuration,
+        updatedBytes,
+        id
+      ]
     );
+
+    // If Cloudinary video was replaced, delete old asset only if not referenced elsewhere
+    if (
+      current.public_id &&
+      updatedPublicId !== current.public_id &&
+      current.public_id.startsWith('ecshopping/products/videos/')
+    ) {
+      const [usedElsewhere] = await pool.query(
+        'SELECT id FROM product_videos WHERE public_id = ? AND id != ? LIMIT 1',
+        [current.public_id, id]
+      );
+      if (usedElsewhere.length === 0 && cloudinary?.uploader?.destroy) {
+        try {
+          await cloudinary.uploader.destroy(current.public_id, { resource_type: 'video' });
+          console.log(`🧹 Deleted replaced Cloudinary asset: ${current.public_id}`);
+        } catch (cleanErr) {
+          console.warn('Could not delete old Cloudinary asset:', cleanErr?.message);
+        }
+      }
+    }
 
     console.log(`✅ [TiDB] Video updated: ${id} (${updatedStatus})`);
     return res.status(200).json({ success: true, message: 'Video updated successfully' });
@@ -3032,10 +3191,33 @@ app.delete('/api/videos/:id', requireAuth('admin'), async (req, res) => {
   const { id } = req.params;
 
   try {
+    const [rows] = await pool.query('SELECT * FROM product_videos WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+    const current = rows[0];
+
     const [result] = await pool.query('DELETE FROM product_videos WHERE id = ?', [id]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, error: 'Video not found' });
     }
+
+    // If record owned a Cloudinary asset, check if referenced elsewhere before destroying
+    if (current.public_id && current.public_id.startsWith('ecshopping/products/videos/')) {
+      const [usedElsewhere] = await pool.query(
+        'SELECT id FROM product_videos WHERE public_id = ? LIMIT 1',
+        [current.public_id]
+      );
+      if (usedElsewhere.length === 0 && cloudinary?.uploader?.destroy) {
+        try {
+          await cloudinary.uploader.destroy(current.public_id, { resource_type: 'video' });
+          console.log(`🧹 Cleaned up deleted Cloudinary asset: ${current.public_id}`);
+        } catch (cleanErr) {
+          console.warn('Could not delete Cloudinary asset:', cleanErr?.message);
+        }
+      }
+    }
+
     console.log(`✅ [TiDB] Video deleted: ${id}`);
     return res.status(200).json({ success: true, message: 'Video deleted successfully' });
   } catch (err) {

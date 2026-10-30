@@ -177,13 +177,54 @@ export const api = {
 
   /* Upload (vendor or admin) */
   uploadImage: (file, role = 'vendor') => api.upload(file, role),
-  uploadVideo: (file, role = 'vendor') => api.uploadVideoFile(file, role),
+  uploadVideo: (file, role = 'vendor', onProgress = null) => api.uploadVideoFile(file, role, onProgress),
   deleteCloudinaryVideo: (publicId, role = 'vendor') =>
     request('/api/upload/video/delete', { method: 'POST', body: { publicId }, role }),
 
-  /** Shared multipart upload helper for video files. */
-  uploadVideoFile(file, role) {
+  /** Shared multipart upload helper for video files with real progress tracking. */
+  uploadVideoFile(file, role, onProgress = null) {
     return new Promise((resolve, reject) => {
+      // If XMLHttpRequest is available (browser), use it for real progress updates
+      if (typeof XMLHttpRequest !== 'undefined') {
+        const xhr = new XMLHttpRequest();
+        const token = authSessions.get(role);
+
+        xhr.open('POST', `${API_URL}/api/upload/video`);
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        if (onProgress && xhr.upload) {
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const percent = Math.round((event.loaded / event.total) * 100);
+              onProgress(percent);
+            }
+          };
+        }
+
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText || '{}');
+            if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+              resolve(data);
+            } else {
+              if (xhr.status === 401) authSessions.clear(role);
+              reject(new Error(data.error || `Upload failed (${xhr.status})`));
+            }
+          } catch {
+            reject(new Error(`Upload failed (${xhr.status})`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during video upload'));
+        xhr.onabort = () => reject(new Error('Video upload cancelled'));
+
+        const formData = new FormData();
+        formData.append('video', file);
+        xhr.send(formData);
+        return;
+      }
+
+      // Fetch fallback for Node or non-browser environments
       const headers = {};
       const token = authSessions.get(role);
       if (token) headers.Authorization = `Bearer ${token}`;

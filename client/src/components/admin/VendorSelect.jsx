@@ -1,22 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Check, X, Store, Globe } from 'lucide-react';
+import { Search, ChevronDown, Check, X, Store, Globe, ShieldCheck } from 'lucide-react';
 import './VendorSelect.css';
 
 /**
- * Searchable vendor selection combobox for Admin Category & Resource assignment.
- * Supports "Shared (Global)" and live search by vendor store name or email.
+ * Searchable vendor/owner selection combobox.
+ * Supports:
+ * - Product Ownership: Admin vs. Vendor only (no Shared option)
+ * - Category Ownership: Shared (Global) vs. Vendor (when includeShared=true)
  */
 export default function VendorSelect({
   vendors = [],
-  value = 'shared',
+  value = 'admin',
   onChange,
   disabled = false,
-  placeholder = 'Select vendor or shared…'
+  placeholder = 'Select product owner…',
+  includeShared = false,
+  allowShared = false
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
+
+  const showShared = Boolean(includeShared || allowShared);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -37,7 +43,8 @@ export default function VendorSelect({
   }, [isOpen]);
 
   const selectedVendor = vendors.find((v) => String(v.id) === String(value));
-  const isShared = !value || value === 'shared' || value === 'null';
+  const isShared = showShared && (!value || value === 'shared' || value === 'null');
+  const isAdmin = !showShared && (!value || value === 'admin' || value === 'shared' || value === 'null' || value === '');
 
   const filteredVendors = vendors.filter((v) => {
     const q = search.trim().toLowerCase();
@@ -63,9 +70,13 @@ export default function VendorSelect({
         aria-expanded={isOpen}
       >
         <span className="vendor-select-val">
-          {isShared ? (
+          {showShared && isShared ? (
             <span className="vendor-badge-shared">
               <Globe size={14} /> Shared (Global)
+            </span>
+          ) : !showShared && isAdmin ? (
+            <span className="vendor-badge-admin">
+              <ShieldCheck size={14} /> Admin (EcShopping)
             </span>
           ) : selectedVendor ? (
             <span className="vendor-badge-selected">
@@ -107,25 +118,45 @@ export default function VendorSelect({
           </div>
 
           <div className="vendor-select-options">
-            {/* 1. Shared (Global) option */}
-            <div
-              className={`vendor-select-opt ${isShared ? 'selected' : ''}`}
-              onClick={() => handleSelect('shared')}
-              role="option"
-              aria-selected={isShared}
-            >
-              <div className="opt-info">
-                <span className="opt-title">
-                  <Globe size={14} /> Shared (Global Category)
-                </span>
-                <span className="opt-sub">Available to all approved vendors across the platform</span>
+            {/* 1. Category Mode: Shared (Global Category) */}
+            {showShared && (
+              <div
+                className={`vendor-select-opt ${isShared ? 'selected' : ''}`}
+                onClick={() => handleSelect('shared')}
+                role="option"
+                aria-selected={isShared}
+              >
+                <div className="opt-info">
+                  <span className="opt-title">
+                    <Globe size={14} /> Shared (Global Category)
+                  </span>
+                  <span className="opt-sub">Available to all approved vendors across the platform</span>
+                </div>
+                {isShared && <Check size={16} className="opt-check" />}
               </div>
-              {isShared && <Check size={16} className="opt-check" />}
-            </div>
+            )}
+
+            {/* 2. Product Ownership Mode: Admin (EcShopping) Only */}
+            {!showShared && (
+              <div
+                className={`vendor-select-opt ${isAdmin ? 'selected' : ''}`}
+                onClick={() => handleSelect('admin')}
+                role="option"
+                aria-selected={isAdmin}
+              >
+                <div className="opt-info">
+                  <span className="opt-title">
+                    <ShieldCheck size={14} color="#0e5c4a" /> Admin (EcShopping)
+                  </span>
+                  <span className="opt-sub">Admin-owned product managed and fulfilled directly by Admin</span>
+                </div>
+                {isAdmin && <Check size={16} className="opt-check" />}
+              </div>
+            )}
 
             <div className="vendor-select-divider">Vendors ({filteredVendors.length})</div>
 
-            {/* 2. Filtered vendor options */}
+            {/* 3. Filtered vendor options */}
             {filteredVendors.map((v) => {
               const selected = String(v.id) === String(value);
               return (
