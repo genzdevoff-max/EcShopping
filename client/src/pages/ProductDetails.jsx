@@ -479,7 +479,7 @@ export default function ProductDetails({ onAddToCart }) {
                 <MapPin size={17} />
                 <span>
                   <strong>Sold by {product.seller}</strong>
-                  <small>Identity-verified marketplace seller</small>
+                  <small>{product.vendorId ? 'Identity-verified marketplace seller' : 'Official EcShopping Admin Store'}</small>
                 </span>
               </li>
             </ul>
