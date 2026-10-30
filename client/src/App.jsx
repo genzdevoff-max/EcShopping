@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { initStorage, getCurrentCustomer, logoutCustomer, saveVendorSession, getCurrentAdmin, logoutAdmin, syncFromServer } from './utils/storage';
+import { initStorage, getCurrentCustomer, logoutCustomer, saveVendorSession, getCurrentVendor, getCurrentAdmin, logoutAdmin, syncFromServer } from './utils/storage';
 import { CartContext, lineKeyOf } from './context/CartContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -59,16 +59,25 @@ function App() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [adminUser, setAdminUserState] = useState(() => getCurrentAdmin());
-  const [vendorUser, setVendorUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('ecshopping_current_vendor');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [vendorUser, setVendorUser] = useState(() => getCurrentVendor());
   const [loggedInCustomer, setLoggedInCustomerState] = useState(() => getCurrentCustomer());
   const [dataVersion, setDataVersion] = useState(0);
+
+  useEffect(() => {
+    const handleAuthSync = () => {
+      setAdminUserState(getCurrentAdmin());
+      setVendorUser(getCurrentVendor());
+      setLoggedInCustomerState(getCurrentCustomer());
+    };
+
+    window.addEventListener('storage', handleAuthSync);
+    window.addEventListener('ecshopping:auth-change', handleAuthSync);
+
+    return () => {
+      window.removeEventListener('storage', handleAuthSync);
+      window.removeEventListener('ecshopping:auth-change', handleAuthSync);
+    };
+  }, []);
 
   useEffect(() => {
     initStorage();
@@ -223,6 +232,10 @@ function App() {
           <Suspense fallback={<div className="page-route-loading" aria-busy="true" />}>
             <Routes>
               <Route
+                path="/admin/login"
+                element={<AdminLogin onLogin={handleAdminLogin} />}
+              />
+              <Route
                 path="/admin/*"
                 element={
                   adminUser ? (
@@ -303,11 +316,11 @@ function App() {
                       />
                       <Route
                         path="/login"
-                        element={<Login onCustomerLogin={handleCustomerLogin} loggedInCustomer={loggedInCustomer} />}
+                        element={<Login onCustomerLogin={handleCustomerLogin} onVendorLogin={handleVendorLogin} loggedInCustomer={loggedInCustomer} />}
                       />
                       <Route
                         path="/register"
-                        element={<Login onCustomerLogin={handleCustomerLogin} loggedInCustomer={loggedInCustomer} />}
+                        element={<Login onCustomerLogin={handleCustomerLogin} onVendorLogin={handleVendorLogin} loggedInCustomer={loggedInCustomer} />}
                       />
                       <Route
                         path="/reset-password"
@@ -341,6 +354,7 @@ function App() {
                     open={loginOpen}
                     onClose={() => setLoginOpen(false)}
                     onCustomerLogin={handleCustomerLogin}
+                    onVendorLogin={handleVendorLogin}
                   />
                 </>
               }

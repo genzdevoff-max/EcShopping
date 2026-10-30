@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import {
   LogOut, RefreshCw, CheckCircle, XCircle, Package, Users as UsersIcon,
   ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Trash2,
   Menu, X, CreditCard, ShieldCheck, Globe, AlertTriangle, Save, Eye, EyeOff, Lock, CheckCircle2
 } from 'lucide-react';
-import api from '../../utils/api';
+import api, { authSessions } from '../../utils/api';
+import { getCurrentAdmin } from '../../utils/storage';
 import Pagination from '../../components/ui/Pagination';
 import VendorSelect from '../../components/admin/VendorSelect';
-import AddProduct from '../vendor/AddProduct';
+import { FormSkeleton } from '../../components/ui/States';
 import './AdminDashboard.css';
+
+const AddProduct = lazy(() => import('../vendor/AddProduct'));
 
 const ORDER_STATUSES = ['Processing', 'Shipped', 'Delivered', 'Cancelled'];
 const fmtINR = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
@@ -104,6 +107,15 @@ export default function AdminDashboard({ onLogout }) {
   });
   const [savingPayment, setSavingPayment] = useState(false);
   const [paymentSaveMsg, setPaymentSaveMsg] = useState({ type: null, text: '' });
+
+  // Proactive session validation: reject immediately if token or admin profile is absent or invalid
+  useEffect(() => {
+    const token = authSessions.get('admin');
+    const admin = getCurrentAdmin();
+    if (!token || !admin || admin.role !== 'admin') {
+      if (typeof onLogout === 'function') onLogout();
+    }
+  }, [onLogout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -543,10 +555,12 @@ export default function AdminDashboard({ onLogout }) {
             </button>
           </div>
         </nav>
-        <button className="admin-logout-btn" onClick={onLogout}>
-          <LogOut size={18} />
-          <span>Logout</span>
-        </button>
+        <div className="admin-sidebar-footer">
+          <button className="admin-logout-btn" onClick={onLogout}>
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
+        </div>
       </aside>
 
       <main className="admin-main">
@@ -571,7 +585,7 @@ export default function AdminDashboard({ onLogout }) {
               {activeTab === 'payment' && 'Payment Gateway Configuration'}
             </h1>
           </div>
-          <div>
+          <div className="admin-header-actions">
             {refreshBtn}
           </div>
         </header>
@@ -1943,12 +1957,14 @@ export default function AdminDashboard({ onLogout }) {
                 </button>
               </div>
               <div className="admin-modal-body">
-                <AddProduct
-                  mode="admin"
-                  vendors={state.vendors}
-                  onProductCreated={handleAdminProductCreated}
-                  onCancel={() => setAddProductOpen(false)}
-                />
+                <Suspense fallback={<FormSkeleton fields={5} />}>
+                  <AddProduct
+                    mode="admin"
+                    vendors={state.vendors}
+                    onProductCreated={handleAdminProductCreated}
+                    onCancel={() => setAddProductOpen(false)}
+                  />
+                </Suspense>
               </div>
             </div>
           </div>

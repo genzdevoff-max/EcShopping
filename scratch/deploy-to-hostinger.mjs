@@ -39,7 +39,7 @@ async function uploadFile(pw, localFile, remoteRelPath) {
     // Normalizing forward slashes for FTP URL
     const ftpUrl = `ftp://195.35.44.99:21/${remoteRelPath.replace(/\\/g, '/')}`;
     const args = [
-      '--ssl-reqd',
+      '--ftp-ssl-control',
       '--insecure',
       '--ftp-create-dirs',
       '--config', '-',
@@ -62,6 +62,17 @@ async function uploadFile(pw, localFile, remoteRelPath) {
     child.stdin.write(`user = "u525835209.ecshopping.in:${pw}"\n`);
     child.stdin.end();
   });
+}
+
+async function uploadWithRetry(pw, localFile, remoteRelPath, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await uploadFile(pw, localFile, remoteRelPath);
+    } catch (err) {
+      if (attempt === retries) throw err;
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
+  }
 }
 
 async function run() {
@@ -90,10 +101,12 @@ async function run() {
     count++;
     process.stdout.write(`[${count}/${files.length}] Uploading ${file.rel} (${(file.size / 1024).toFixed(1)} KB)... `);
     const start = Date.now();
-    await uploadFile(pw, file.full, file.rel);
+    await uploadWithRetry(pw, file.full, file.rel);
     const duration = ((Date.now() - start) / 1000).toFixed(1);
     uploadedBytes += file.size;
     console.log(`Done (${duration}s)`);
+    // Brief 250ms pause to prevent LiteSpeed FTP connection thrashing
+    await new Promise(r => setTimeout(r, 250));
   }
 
   console.log('\n✅ All files successfully uploaded to Hostinger via FTPS!');

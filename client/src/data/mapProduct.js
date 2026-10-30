@@ -42,6 +42,7 @@ export function mapServerProduct(row) {
     compareAt: strikeRaw != null && strikeRaw > price ? strikeRaw : null,
     image: row.image || '',
     images: row.image ? [row.image] : [],
+    videoUrl: row.videoUrl || row.video_url || '',
     category: row.category || '',
     categorySlug: categorySlugFromName(row.category),
     seller: row.vendorName || 'EcShopping Seller',

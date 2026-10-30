@@ -64,6 +64,11 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB maximum file size
 });
 
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB maximum video size
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -216,6 +221,84 @@ app.post('/api/upload', requireVendorOrAdmin, upload.single('image'), async (req
     }
 
     return res.status(500).json({ success: false, error: 'Image upload failed. Please try again.' });
+  }
+});
+
+// Cloudinary Video Upload Endpoint (sellers/admins only)
+app.post('/api/upload/video', requireVendorOrAdmin, videoUpload.single('video'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, error: 'No video file uploaded' });
+    }
+
+    const mime = req.file.mimetype || '';
+    const allowedMimes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg', 'video/x-msvideo'];
+    const ext = (req.file.originalname || '').split('.').pop().toLowerCase();
+    const allowedExts = ['mp4', 'webm', 'mov', 'ogg', 'avi', 'm4v'];
+
+    if (!allowedMimes.includes(mime) && !allowedExts.includes(ext)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid video format. Supported formats: MP4, WebM, MOV, OGG.'
+      });
+    }
+
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return res.status(503).json({
+        success: false,
+        error: 'Cloudinary credentials are not configured on the server. Please provide a video URL instead.'
+      });
+    }
+
+    const uploadPromise = new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'ecshopping/products/videos',
+          resource_type: 'video'
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      stream.end(req.file.buffer);
+    });
+
+    const result = await uploadPromise;
+    console.log(`🎬 [Cloudinary] Video uploaded: ${result.secure_url}`);
+    return res.status(200).json({
+      success: true,
+      url: result.secure_url,
+      publicId: result.public_id,
+      public_id: result.public_id,
+      format: result.format,
+      duration: result.duration,
+      bytes: result.bytes
+    });
+  } catch (err) {
+    console.error('❌ Video upload error:', err?.message || err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to upload video to Cloudinary. Please check video file size or provide a YouTube / video URL.'
+    });
+  }
+});
+
+// Cloudinary Video Removal / Deletion Endpoint (sellers/admins only)
+app.post('/api/upload/video/delete', requireVendorOrAdmin, async (req, res) => {
+  try {
+    const { publicId, public_id } = req.body || {};
+    const pid = publicId || public_id;
+    if (!pid) {
+      return res.status(400).json({ success: false, error: 'publicId is required' });
+    }
+    if (cloudinary?.uploader?.destroy) {
+      await cloudinary.uploader.destroy(pid, { resource_type: 'video' });
+    }
+    return res.status(200).json({ success: true, message: 'Video removed from Cloudinary storage' });
+  } catch (err) {
+    console.error('❌ Video removal error:', err?.message || err);
+    return res.status(500).json({ success: false, error: 'Failed to remove video from Cloudinary' });
   }
 });
 
@@ -779,6 +862,22 @@ app.post('/api/auth/admin/login', authLimiter, async (req, res) => {
     console.error('❌ Admin login DB error:', err);
     return res.status(500).json({ success: false, error: 'Unable to process the login right now. Please try again.' });
   }
+});
+
+// Session verification endpoint — verifies current token & returns session info
+app.post('/api/auth/verify', requireAuth(), (req, res) => {
+  return res.status(200).json({
+    success: true,
+    user: req.auth
+  });
+});
+
+// Session logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: 'Session terminated'
+  });
 });
 
 // ================= PASSWORD RESET FLOWS (TiDB Cloud) =================
@@ -1431,7 +1530,7 @@ app.delete('/api/categories/:id', requireAuth('vendor', 'admin'), async (req, re
 // ================= PRODUCT MANAGEMENT (multi-vendor + admin approval) =================
 
 const PRODUCT_COLUMNS = `id, vendor_id AS vendorId, vendor_name AS vendorName, title, name, description, category,
-  price, strike_price AS strikePrice, unit, image, stock_status AS stockStatus, stock_quantity AS stockQuantity, status, created_at AS createdAt`;
+  price, strike_price AS strikePrice, unit, image, video_url AS videoUrl, stock_status AS stockStatus, stock_quantity AS stockQuantity, status, created_at AS createdAt`;
 
 // List products (optionally filtered by vendorId, status, category)
 // Anonymous/customers see approved products only; vendors see their own
@@ -1622,11 +1721,16 @@ app.get('/api/products/:id', optionalAuth, async (req, res) => {
 
     const product = rows[0];
 
-    if (!req.auth) {
-      if (product.status !== 'approved') {
-        return res.status(404).json({ success: false, error: 'Product not found' });
-      }
-    } else if (req.auth.role === 'vendor' && String(product.vendorId) !== String(req.auth.vendorId) && product.status !== 'approved') {
+    // Visibility rule:
+    // - Approved products are public (anyone can view).
+    // - Admin can view any product regardless of status.
+    // - Vendor can view their own product regardless of status.
+    // - Unapproved products are NOT visible to anonymous users, customers, or different vendors.
+    const isApproved = product.status === 'approved';
+    const isAdmin = req.auth && req.auth.role === 'admin';
+    const isOwnerVendor = req.auth && req.auth.role === 'vendor' && String(product.vendorId) === String(req.auth.vendorId);
+
+    if (!isApproved && !isAdmin && !isOwnerVendor) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
@@ -1682,7 +1786,7 @@ const handleCreateProduct = async (req, res, isAdminEndpoint = false) => {
 
   const {
     id, vendorId: rawVendorId, vendor_id: rawVendor_id, vendorName, title: rawTitle, name: rawName, description,
-    category, price, strikePrice, unit, image, stockStatus, stockQuantity, status
+    category, price, strikePrice, unit, image, videoUrl, video_url, stockStatus, stockQuantity, status
   } = req.body || {};
 
   const title = (rawTitle || rawName || '').trim();
@@ -1776,15 +1880,19 @@ const handleCreateProduct = async (req, res, isAdminEndpoint = false) => {
       }
     }
 
+    const productVideoUrl = videoUrl !== undefined
+      ? (videoUrl ? String(videoUrl).trim() : null)
+      : (video_url !== undefined ? (video_url ? String(video_url).trim() : null) : null);
+
     await pool.query(
       `INSERT INTO products
-        (id, vendor_id, vendor_name, title, name, description, category, price, strike_price, unit, image, stock_status, stock_quantity, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, vendor_id, vendor_name, title, name, description, category, price, strike_price, unit, image, video_url, stock_status, stock_quantity, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          vendor_id = VALUES(vendor_id), vendor_name = VALUES(vendor_name), title = VALUES(title),
          name = VALUES(name), description = VALUES(description), category = VALUES(category),
          price = VALUES(price), strike_price = VALUES(strike_price), unit = VALUES(unit),
-         image = VALUES(image), stock_status = VALUES(stock_status), stock_quantity = VALUES(stock_quantity),
+         image = VALUES(image), video_url = VALUES(video_url), stock_status = VALUES(stock_status), stock_quantity = VALUES(stock_quantity),
          status = VALUES(status)`,
       [
         productId,
@@ -1798,6 +1906,7 @@ const handleCreateProduct = async (req, res, isAdminEndpoint = false) => {
         strike,
         unit || '',
         image || '',
+        productVideoUrl,
         derivedStockStatus,
         quantity,
         finalStatus
@@ -1872,7 +1981,7 @@ app.post('/api/admin/products', requireAdmin, (req, res) => handleCreateProduct(
 // Update product fields (vendor edits own pending/rejected, or manages stock for approved; admin edits any)
 app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
   const { id } = req.params;
-  const { title, name, description, category, price, strikePrice, unit, image, stockStatus, stockQuantity } = req.body || {};
+  const { title, name, description, category, price, strikePrice, unit, image, videoUrl, video_url, stockStatus, stockQuantity } = req.body || {};
 
   try {
     const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
@@ -1887,7 +1996,7 @@ app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
         return res.status(403).json({ success: false, error: 'You can only manage your own products' });
       }
 
-      const hasContentModifications = [title, name, description, category, price, strikePrice, unit, image].some(
+      const hasContentModifications = [title, name, description, category, price, strikePrice, unit, image, videoUrl, video_url].some(
         (field) => field !== undefined
       );
 
@@ -1916,6 +2025,10 @@ app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
       ? stockStatus
       : (resolvedQuantity > 0 ? 'in_stock' : 'out_of_stock');
 
+    const resolvedVideoUrl = videoUrl !== undefined
+      ? (videoUrl ? String(videoUrl).trim() : null)
+      : (video_url !== undefined ? (video_url ? String(video_url).trim() : null) : current.video_url);
+
     const updated = {
       title: title !== undefined ? String(title).trim() : current.title,
       name: name !== undefined ? String(name).trim() : current.name,
@@ -1925,6 +2038,7 @@ app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
       strikePrice: strikePrice !== undefined ? (strikePrice === '' || strikePrice === null ? null : Number(strikePrice)) : current.strike_price,
       unit: unit !== undefined ? unit : current.unit,
       image: image !== undefined ? image : current.image,
+      videoUrl: resolvedVideoUrl,
       stockStatus: resolvedQuantity > 0 ? resolvedStockStatus : 'out_of_stock',
       stockQuantity: resolvedQuantity
     };
@@ -1933,9 +2047,9 @@ app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
     const newStatus = (req.auth.role === 'vendor' && wasRejected) ? 'pending' : current.status;
 
     await pool.query(
-      `UPDATE products SET title = ?, name = ?, description = ?, category = ?, price = ?, strike_price = ?, unit = ?, image = ?, stock_status = ?, stock_quantity = ?, status = ?
+      `UPDATE products SET title = ?, name = ?, description = ?, category = ?, price = ?, strike_price = ?, unit = ?, image = ?, video_url = ?, stock_status = ?, stock_quantity = ?, status = ?
        WHERE id = ?`,
-      [updated.title, updated.name, updated.description, updated.category, updated.price, updated.strikePrice, updated.unit, updated.image, updated.stockStatus, updated.stockQuantity, newStatus, id]
+      [updated.title, updated.name, updated.description, updated.category, updated.price, updated.strikePrice, updated.unit, updated.image, updated.videoUrl, updated.stockStatus, updated.stockQuantity, newStatus, id]
     );
 
     const [result] = await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products WHERE id = ?`, [id]);

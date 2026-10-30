@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, ChevronDown } from 'lucide-react';
 import './PromotionalBanner.css';
 
 export const PROMO_CAMPAIGNS = [
@@ -137,6 +137,24 @@ export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interva
               </div>
             );
           })}
+
+          {/* Scroll Down Cue to Explore Categories */}
+          <button
+            type="button"
+            className="promo-scroll-cue"
+            onClick={() => {
+              const el = document.getElementById('storefront-categories');
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth' });
+              } else {
+                window.scrollBy({ top: window.innerHeight * 0.75, behavior: 'smooth' });
+              }
+            }}
+            aria-label="Scroll down to explore categories and deals"
+          >
+            <span>Explore Store</span>
+            <ChevronDown size={14} className="promo-scroll-cue-icon" aria-hidden="true" />
+          </button>
 
           {/* Navigation Controls: Previous / Next arrow buttons */}
           {total > 1 && (

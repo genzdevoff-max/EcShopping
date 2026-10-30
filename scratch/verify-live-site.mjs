@@ -16,7 +16,7 @@ async function check(url, expectedType = 'text/html') {
     if (expectedType === 'text/html') {
       const hasRoot = text.includes('<div id="root"></div>');
       const hasTitle = text.includes('<title>EcShopping');
-      const hasScript = text.includes('index-CKTi8RrZ.js');
+      const hasScript = text.includes('index-BWdC5_KN.js');
       console.log(`   HTML verification: hasRoot=${hasRoot}, hasTitle=${hasTitle}, hasScript=${hasScript}`);
     }
     return { ok, status: res.status, url };
@@ -42,8 +42,8 @@ async function run() {
   await check('https://ecshopping.in/payment/phonepe/return', 'text/html');
 
   console.log('\n--- 2. Static Assets Direct Serving ---');
-  await check('https://ecshopping.in/assets/index-CKTi8RrZ.js', 'javascript');
-  await check('https://ecshopping.in/assets/index-G13eq9H4.css', 'css');
+  await check('https://ecshopping.in/assets/index-BWdC5_KN.js', 'javascript');
+  await check('https://ecshopping.in/assets/index-D-RRukZj.css', 'css');
   await check('https://ecshopping.in/favicon.svg', 'svg');
   await check('https://ecshopping.in/placeholder.png', 'image');
 

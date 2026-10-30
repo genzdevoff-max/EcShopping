@@ -35,6 +35,10 @@ export const authSessions = {
     try {
       if (token) localStorage.setItem(tokenKey(role), token);
       else localStorage.removeItem(tokenKey(role));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ecshopping:auth-change', { detail: { role, token } }));
+        try { localStorage.setItem('ecshopping_auth_sync', Date.now().toString()); } catch {}
+      }
     } catch {
       /* storage unavailable — session ends at page unload */
     }
@@ -45,6 +49,10 @@ export const authSessions = {
       if (role === 'customer') localStorage.removeItem('ecshopping_current_customer');
       else if (role === 'vendor') localStorage.removeItem('ecshopping_current_vendor');
       else if (role === 'admin') localStorage.removeItem('ecshopping_current_admin');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ecshopping:auth-change', { detail: { role, user: null, token: '' } }));
+        try { localStorage.setItem('ecshopping_auth_sync', Date.now().toString()); } catch {}
+      }
     } catch {
       /* storage unavailable */
     }
@@ -136,8 +144,24 @@ export const api = {
 
   /* Products — reads are public unless a vendor wants their pending items too */
   getProducts: (params = {}, role) => request(`/api/products${qs(params)}`, { role }),
-  getProduct: (id) => request(`/api/products/${encodeURIComponent(id)}`),
-  getRelatedProducts: (id) => request(`/api/products/${encodeURIComponent(id)}/related`),
+  getProduct: (id, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else if (authSessions.get('vendor')) resolvedRole = 'vendor';
+      else if (authSessions.get('customer')) resolvedRole = 'customer';
+    }
+    return request(`/api/products/${encodeURIComponent(id)}`, { role: resolvedRole });
+  },
+  getRelatedProducts: (id, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else if (authSessions.get('vendor')) resolvedRole = 'vendor';
+      else if (authSessions.get('customer')) resolvedRole = 'customer';
+    }
+    return request(`/api/products/${encodeURIComponent(id)}/related`, { role: resolvedRole });
+  },
   createProduct: (product, role = 'vendor') => request('/api/products', { method: 'POST', body: product, role }),
   createAdminProduct: (product) => request('/api/admin/products', { method: 'POST', body: product, role: 'admin' }),
   updateProduct: (id, updates, role = 'vendor') => request(`/api/products/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role }),
@@ -153,6 +177,32 @@ export const api = {
 
   /* Upload (vendor or admin) */
   uploadImage: (file, role = 'vendor') => api.upload(file, role),
+  uploadVideo: (file, role = 'vendor') => api.uploadVideoFile(file, role),
+  deleteCloudinaryVideo: (publicId, role = 'vendor') =>
+    request('/api/upload/video/delete', { method: 'POST', body: { publicId }, role }),
+
+  /** Shared multipart upload helper for video files. */
+  uploadVideoFile(file, role) {
+    return new Promise((resolve, reject) => {
+      const headers = {};
+      const token = authSessions.get(role);
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const formData = new FormData();
+      formData.append('video', file);
+
+      fetch(`${API_URL}/api/upload/video`, { method: 'POST', headers, body: formData })
+        .then(async (res) => {
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            if (res.status === 401) authSessions.clear(role);
+            reject(new Error((data && data.error) || `Upload failed (${res.status})`));
+            return;
+          }
+          resolve(data);
+        })
+        .catch(reject);
+    });
+  },
 
   /** Shared multipart upload helper (outside the object literal to keep
    *  the executor warning-free). */

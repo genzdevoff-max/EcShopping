@@ -19,7 +19,9 @@ import {
   Cloud,
   Link as LinkIcon,
   ShieldCheck,
-  Store
+  Store,
+  Video,
+  PlayCircle
 } from 'lucide-react';
 import { createProductOnServer } from '../../utils/storage';
 import api from '../../utils/api';
@@ -27,13 +29,32 @@ import CategorySelect from '../../components/ui/CategorySelect';
 import VendorSelect from '../../components/admin/VendorSelect';
 import './AddProduct.css';
 
+export function isValidVideoUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return false;
+  const isYoutube = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)/i.test(trimmed);
+  const isVimeo = /vimeo\.com\/(?:video\/)?\d+/i.test(trimmed);
+  const isDirectVideo = /\.(mp4|webm|mov|ogg|m4v)(\?.*)?$/i.test(trimmed);
+  const isCloudinaryVideo = /cloudinary\.com\/.*\/video\/upload\//i.test(trimmed);
+  return isYoutube || isVimeo || isDirectVideo || isCloudinaryVideo;
+}
+
+export function getYoutubeEmbedUrl(url) {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
+  return match ? `https://www.youtube-nocookie.com/embed/${match[1]}` : null;
+}
+
 export default function AddProduct({
   vendor = null,
   mode = 'vendor', // 'vendor' | 'admin'
+  isAdmin = false,
   vendors = [], // passed in admin mode
   onProductCreated = null,
   onCancel = null
 }) {
+  const effectiveMode = isAdmin || mode === 'admin' ? 'admin' : 'vendor';
   const navigate = useNavigate();
 
   // Unit Options explicitly defined by user
@@ -84,8 +105,8 @@ export default function AddProduct({
     if (!newCatName.trim()) return;
     setCreatingCat(true);
     try {
-      const role = mode === 'admin' ? 'admin' : 'vendor';
-      const catVendorId = (mode === 'admin' && selectedVendorId !== 'shared' && selectedVendorId !== 'null')
+      const role = effectiveMode === 'admin' ? 'admin' : 'vendor';
+      const catVendorId = (effectiveMode === 'admin' && selectedVendorId !== 'shared' && selectedVendorId !== 'null')
         ? selectedVendorId
         : (vendor?.id || null);
 
@@ -112,6 +133,15 @@ export default function AddProduct({
   const [showManualUrl, setShowManualUrl] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Product Video state
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoInputMode, setVideoInputMode] = useState('url'); // 'url' | 'upload'
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoUploadError, setVideoUploadError] = useState('');
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const [videoUrlError, setVideoUrlError] = useState('');
+  const videoFileInputRef = useRef(null);
+
   // Floating Toast state
   const [toast, setToast] = useState(null);
 
@@ -137,7 +167,7 @@ export default function AddProduct({
     let cancelled = false;
     const fetchCats = async () => {
       try {
-        const data = mode === 'admin'
+        const data = effectiveMode === 'admin'
           ? await api.getCategories({}, 'admin')
           : await api.getCategories({ vendorId: vendor?.id || '' });
 
@@ -157,7 +187,7 @@ export default function AddProduct({
     };
     fetchCats();
     return () => { cancelled = true; };
-  }, [mode, vendor?.id]);
+  }, [effectiveMode, vendor?.id]);
 
   // Discount Calculation
   const parsedSelling = parseFloat(sellingPrice) || 0;
@@ -182,7 +212,7 @@ export default function AddProduct({
 
     setUploading(true);
     try {
-      const uploadRole = mode === 'admin' ? 'admin' : 'vendor';
+      const uploadRole = effectiveMode === 'admin' ? 'admin' : 'vendor';
       const data = await api.uploadImage(file, uploadRole);
       if (data && data.success && data.url) {
         setImage(data.url);
@@ -205,6 +235,64 @@ export default function AddProduct({
     const file = e.target.files?.[0];
     if (file) {
       handleFileUpload(file);
+    }
+  };
+
+  // Video URL and Upload Handlers
+  const handleApplyVideoUrl = () => {
+    setVideoUrlError('');
+    const trimmed = videoUrlInput.trim();
+    if (!trimmed) {
+      setVideoUrl('');
+      return;
+    }
+    if (!isValidVideoUrl(trimmed)) {
+      setVideoUrlError('Please enter a valid YouTube, Vimeo, or direct video (.mp4, .webm) URL.');
+      return;
+    }
+    setVideoUrl(trimmed);
+    showToast('Product video link applied!', 'success');
+  };
+
+  const handleVideoFileUpload = async (file) => {
+    if (!file) return;
+    setVideoUploadError('');
+
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'];
+    const ext = (file.name || '').split('.').pop().toLowerCase();
+    const allowedExts = ['mp4', 'webm', 'mov', 'ogg', 'm4v'];
+
+    if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
+      setVideoUploadError('Unsupported format. Please select an MP4, WebM, MOV, or OGG video.');
+      showToast('Unsupported video format', 'error');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setVideoUploadError('Video file exceeds maximum allowed size of 50MB.');
+      showToast('Video exceeds 50MB limit', 'error');
+      return;
+    }
+
+    setVideoUploading(true);
+    try {
+      const uploadRole = effectiveMode === 'admin' ? 'admin' : 'vendor';
+      const data = await api.uploadVideo(file, uploadRole);
+      if (data?.success && data.url) {
+        setVideoUrl(data.url);
+        setVideoUrlInput(data.url);
+        showToast('Video uploaded successfully! 🎬', 'success');
+      } else {
+        const err = data?.error || 'Video upload failed';
+        setVideoUploadError(err);
+        showToast(err, 'error');
+      }
+    } catch (err) {
+      const msg = err.message || 'Video upload failed';
+      setVideoUploadError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setVideoUploading(false);
     }
   };
 
@@ -261,13 +349,14 @@ export default function AddProduct({
       strikePrice: parsedStrike > 0 ? parsedStrike : null,
       unit: unit,
       image: image.trim(),
+      videoUrl: videoUrl ? videoUrl.trim() : null,
       stockStatus: parsedQty > 0 ? stockStatus : 'out_of_stock',
       stockQuantity: parsedQty
     };
 
     setSubmitting(true);
 
-    if (mode === 'admin') {
+    if (effectiveMode === 'admin') {
       try {
         const adminPayload = {
           ...newProdData,
@@ -312,16 +401,16 @@ export default function AddProduct({
     if (typeof onCancel === 'function') {
       onCancel();
     } else {
-      navigate(mode === 'admin' ? '/admin' : '/vendor/products');
+      navigate(effectiveMode === 'admin' ? '/admin' : '/vendor/products');
     }
   };
 
   // Derive selected vendor display name for preview
-  const currentAssignedVendor = mode === 'admin'
+  const currentAssignedVendor = effectiveMode === 'admin'
     ? vendors.find((v) => String(v.id) === String(selectedVendorId))
     : vendor;
 
-  const previewSeller = mode === 'admin'
+  const previewSeller = effectiveMode === 'admin'
     ? (selectedVendorId === 'shared' || !selectedVendorId ? 'Platform Direct' : (currentAssignedVendor?.name || 'Assigned Vendor'))
     : (vendor?.name || 'My Store');
 
@@ -352,7 +441,7 @@ export default function AddProduct({
         <div className="add-prod-form-card">
           <form onSubmit={handleSubmit}>
             {/* 0. Admin Ownership & Governance (Admin Mode Only) */}
-            {mode === 'admin' && (
+            {effectiveMode === 'admin' && (
               <div className="add-prod-section admin-governance-section">
                 <div className="add-prod-section-header">
                   <ShieldCheck size={18} />
@@ -750,11 +839,161 @@ export default function AddProduct({
               </div>
             </div>
 
+            {/* 5. Product Video (Upload or Link) */}
+            <div className="add-prod-section">
+              <div className="add-prod-section-header">
+                <Video size={18} />
+                <span>Product Video (Optional)</span>
+              </div>
+
+              {/* Mode switch: URL vs Upload */}
+              <div className="prod-video-mode-selector">
+                <button
+                  type="button"
+                  className={`prod-video-mode-btn ${videoInputMode === 'url' ? 'active' : ''}`}
+                  onClick={() => setVideoInputMode('url')}
+                >
+                  <LinkIcon size={14} />
+                  <span>Add Video URL</span>
+                </button>
+                <button
+                  type="button"
+                  className={`prod-video-mode-btn ${videoInputMode === 'upload' ? 'active' : ''}`}
+                  onClick={() => setVideoInputMode('upload')}
+                >
+                  <UploadCloud size={14} />
+                  <span>Upload Video File (MP4/WebM)</span>
+                </button>
+              </div>
+
+              {/* Option B: Video URL input */}
+              {videoInputMode === 'url' && (
+                <div className="prod-video-url-block">
+                  <label htmlFor="prod-video-url" className="add-prod-label">
+                    <span>Product Video URL</span>
+                    <span className="opt">(YouTube, Vimeo, or direct MP4/WebM)</span>
+                  </label>
+                  <div className="prod-video-url-input-row">
+                    <input
+                      id="prod-video-url"
+                      type="url"
+                      className="add-prod-input"
+                      placeholder="https://www.youtube.com/watch?v=... or https://.../video.mp4"
+                      value={videoUrlInput}
+                      onChange={(e) => {
+                        setVideoUrlInput(e.target.value);
+                        setVideoUrlError('');
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="prod-video-apply-btn"
+                      onClick={handleApplyVideoUrl}
+                    >
+                      Apply Link
+                    </button>
+                  </div>
+                  {videoUrlError && <p className="prod-video-error-text">{videoUrlError}</p>}
+                </div>
+              )}
+
+              {/* Option A: Video File Upload */}
+              {videoInputMode === 'upload' && (
+                <div className="prod-video-upload-block">
+                  <input
+                    type="file"
+                    ref={videoFileInputRef}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleVideoFileUpload(f);
+                    }}
+                    accept="video/mp4,video/webm,video/quicktime,video/ogg"
+                    style={{ display: 'none' }}
+                  />
+                  <div
+                    className={`add-prod-dropzone ${videoUploading ? 'uploading' : ''}`}
+                    onClick={() => !videoUploading && videoFileInputRef.current?.click()}
+                  >
+                    {videoUploading ? (
+                      <div className="add-prod-upload-loading">
+                        <Loader2 size={36} className="add-prod-spinner" />
+                        <div className="upload-loading-text">
+                          <strong>Uploading Video to Cloud CDN…</strong>
+                          <span>This might take a moment depending on file size (up to 50MB)</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="add-prod-dropzone-content">
+                        <div className="add-prod-dropzone-icon">
+                          <UploadCloud size={38} />
+                        </div>
+                        <div className="add-prod-dropzone-text">
+                          <p className="dropzone-main"><strong>Click to upload video</strong> or choose file</p>
+                          <p className="dropzone-sub">MP4, WebM, MOV (Max 50MB)</p>
+                        </div>
+                        <span className="dropzone-badge">
+                          <Cloud size={13} /> Cloudinary Video Storage
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {videoUploadError && <p className="prod-video-error-text">{videoUploadError}</p>}
+                </div>
+              )}
+
+              {/* Video Preview Card if videoUrl is set */}
+              {videoUrl && (
+                <div className="prod-video-preview-card">
+                  <div className="prod-video-preview-header">
+                    <div className="prod-video-preview-title">
+                      <PlayCircle size={16} className="video-preview-icon" />
+                      <span>Video Ready &amp; Attached</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="add-prod-action-btn remove"
+                      onClick={() => {
+                        setVideoUrl('');
+                        setVideoUrlInput('');
+                      }}
+                      title="Remove product video"
+                    >
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
+                  </div>
+                  <div className="prod-video-player-container">
+                    {getYoutubeEmbedUrl(videoUrl) ? (
+                      <iframe
+                        src={getYoutubeEmbedUrl(videoUrl)}
+                        title="Product Video Preview"
+                        className="prod-video-iframe"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video
+                        src={videoUrl}
+                        controls
+                        playsInline
+                        className="prod-video-html5"
+                      >
+                        Your browser does not support the video tag.
+                      </video>
+                    )}
+                  </div>
+                  <span className="prod-video-url-display" title={videoUrl}>
+                    {videoUrl}
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Form Actions */}
             <div className="add-prod-actions">
               <button type="submit" className="add-prod-submit-btn" disabled={submitting}>
                 {submitting ? <Loader2 size={18} className="add-prod-spinner" /> : <PlusCircle size={18} />}
-                <span>{submitting ? 'Saving…' : (mode === 'admin' ? 'Create Product' : 'Publish Product')}</span>
+                <span>{submitting ? 'Saving…' : (effectiveMode === 'admin' ? 'Create Product' : 'Publish Product')}</span>
               </button>
               <button 
                 type="button" 
@@ -776,7 +1015,7 @@ export default function AddProduct({
           </div>
 
           {/* Mode-specific status badge */}
-          {mode === 'admin' && (
+          {effectiveMode === 'admin' && (
             <div className="preview-admin-meta">
               <span className={`preview-status-pill status-${status}`}>
                 Status: {status.toUpperCase()}

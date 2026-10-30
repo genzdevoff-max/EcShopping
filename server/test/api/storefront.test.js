@@ -280,3 +280,35 @@ test('related products mask non-visible base products', async () => {
   const unknown = await request().get('/api/products/p-sf-none/related');
   assert.equal(unknown.status, 404);
 });
+
+test('GET /api/products/:id isolates pending products to owner vendor and admin', async () => {
+  const ownerToken = signToken({ sub: VENDOR.id, role: 'vendor', vendorId: VENDOR.id, email: VENDOR.email });
+  const otherVendorToken = signToken({ sub: VENDOR_2.id, role: 'vendor', vendorId: VENDOR_2.id, email: VENDOR_2.email });
+  const adminToken = signToken({ sub: 'admin-01', role: 'admin', email: 'admin@ecshopping.test' });
+  const customerToken = signToken({ sub: 'cust-01', role: 'customer', email: 'cust@ecshopping.test' });
+
+  // 1. Anonymous user cannot view pending product (404)
+  const anonRes = await request().get('/api/products/p-sf-pend');
+  assert.equal(anonRes.status, 404);
+
+  // 2. Customer cannot view pending product (404)
+  const custRes = await request().get('/api/products/p-sf-pend').set('Authorization', `Bearer ${customerToken}`);
+  assert.equal(custRes.status, 404);
+
+  // 3. Different vendor cannot view another vendor's pending product (404)
+  const diffVendorRes = await request().get('/api/products/p-sf-pend').set('Authorization', `Bearer ${otherVendorToken}`);
+  assert.equal(diffVendorRes.status, 404);
+
+  // 4. Owner vendor CAN view their own pending product (200)
+  const ownerRes = await request().get('/api/products/p-sf-pend').set('Authorization', `Bearer ${ownerToken}`);
+  assert.equal(ownerRes.status, 200);
+  assert.equal(ownerRes.body.success, true);
+  assert.equal(ownerRes.body.product.id, 'p-sf-pend');
+  assert.equal(ownerRes.body.product.status, 'pending');
+
+  // 5. Admin CAN view any pending product (200)
+  const adminRes = await request().get('/api/products/p-sf-pend').set('Authorization', `Bearer ${adminToken}`);
+  assert.equal(adminRes.status, 200);
+  assert.equal(adminRes.body.success, true);
+  assert.equal(adminRes.body.product.id, 'p-sf-pend');
+});

@@ -123,3 +123,45 @@ test('POST /api/upload: Accepts valid image and returns safe fallback or CDN url
   assert.equal(res.body.success, true);
   assert.ok(res.body.url);
 });
+
+test('POST /api/upload/video: Authentication and role enforcement', async () => {
+  // 401 without auth
+  const anon = await request()
+    .post('/api/upload/video')
+    .attach('video', Buffer.from('test video content'), 'test.mp4');
+  assert.equal(anon.status, 401);
+
+  // 403 for customer (only vendors and admins can manage video storage)
+  const cust = await request()
+    .post('/api/upload/video')
+    .set('Authorization', `Bearer ${CUSTOMER_TOKEN}`)
+    .attach('video', Buffer.from('test video content'), 'test.mp4');
+  assert.equal(cust.status, 403);
+});
+
+test('POST /api/upload/video: Rejects invalid video formats and missing files', async () => {
+  const noFile = await request()
+    .post('/api/upload/video')
+    .set('Authorization', `Bearer ${VENDOR_TOKEN}`);
+  assert.equal(noFile.status, 400);
+
+  const badFormat = await request()
+    .post('/api/upload/video')
+    .set('Authorization', `Bearer ${VENDOR_TOKEN}`)
+    .attach('video', Buffer.from('not a video'), 'test.exe');
+  assert.equal(badFormat.status, 400);
+  assert.match(badFormat.body.error, /Invalid video format/);
+});
+
+test('POST /api/upload/video/delete: Enforces auth and validates publicId', async () => {
+  const anon = await request()
+    .post('/api/upload/video/delete')
+    .send({ publicId: 'test' });
+  assert.equal(anon.status, 401);
+
+  const missingId = await request()
+    .post('/api/upload/video/delete')
+    .set('Authorization', `Bearer ${VENDOR_TOKEN}`)
+    .send({});
+  assert.equal(missingId.status, 400);
+});

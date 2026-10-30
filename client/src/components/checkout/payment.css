@@ -114,3 +114,18 @@
 @media (prefers-reduced-motion: reduce) {
   .spin { animation-duration: 2.4s; }
 }
+
+@media (max-width: 480px) {
+  .pp-option {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'radio main'
+      '. right'
+      'note note';
+    padding: 12px 14px;
+    gap: 8px 10px;
+  }
+  .pp-right {
+    align-items: flex-start;
+  }
+}

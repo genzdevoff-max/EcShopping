@@ -147,7 +147,6 @@ export default function Footer() {
               <li><Link to="/returns">Returns & refunds</Link></li>
               <li><Link to="/track-order">Track your order</Link></li>
               <li><Link to="/orders">Order history</Link></li>
-              <li><Link to="/store-locator">Store locator</Link></li>
               <li><Link to="/contact">Contact us</Link></li>
               <li><Link to="/bulk-order">Bulk order enquiry</Link></li>
             </ul>
@@ -157,12 +156,11 @@ export default function Footer() {
             <h4>Company</h4>
             <ul>
               <li><Link to="/about">About us</Link></li>
-              <li><Link to="/blog">Blog</Link></li>
               <li><Link to="/privacy">Privacy policy</Link></li>
               <li><Link to="/terms">Terms & conditions</Link></li>
               <li><Link to="/vendor">Vendor portal</Link></li>
               <li><Link to="/vendor/register">Become a seller</Link></li>
-              <li><Link to="/admin">Admin portal</Link></li>
+              <li><Link to="/admin/login">Admin Login</Link></li>
             </ul>
           </nav>
 

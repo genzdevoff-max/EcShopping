@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle, AlertTriangle, ArrowRight, ShieldCheck } from 'lucide-react';
+import brandLogo from '../assets/logo/without-bg-logo.png';
 import api from '../utils/api';
 import './ResetPassword.css';
 
@@ -110,6 +111,9 @@ export default function ResetPassword() {
   return (
     <div className="reset-password-page">
       <div className="reset-password-card">
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <img src={brandLogo} alt="EcShopping" style={{ height: 34, width: 'auto', objectFit: 'contain' }} />
+        </div>
         <div className="reset-badge-wrap">
           <span className="reset-security-badge">
             <ShieldCheck size={16} aria-hidden="true" />

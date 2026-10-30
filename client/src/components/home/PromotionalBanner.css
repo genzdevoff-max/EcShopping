@@ -1,6 +1,7 @@
 /* ============================================================
-   Promotional Homepage Banner
-   Aspect ratio ~4:1 to 5:2 on desktop, adapting down to mobile.
+   Promotional Homepage Hero Landing Banner
+   Immersive, full-screen first-impression landing experience.
+   Aspect ratio definition (~4.1 / 1) preserved for layout safety.
    Brand palette: Pine Green #0e5c4a & Terracotta #d9663d
    ============================================================ */
 
@@ -8,28 +9,29 @@
   width: 100%;
   position: relative;
   background: var(--paper, #faf8f3);
-  padding-block: clamp(8px, 1.2vw, 14px);
+  padding-block: clamp(6px, 1vw, 12px);
   overflow: hidden;
 }
 
 .promo-banner-container {
   width: 100%;
-  max-width: var(--wrap, 1240px);
+  max-width: 100%;
   margin-inline: auto;
-  padding-inline: clamp(12px, 2.5vw, 24px);
+  padding-inline: clamp(12px, 2.2vw, 28px);
 }
 
+/* Immersive Hero Landing Viewport — Nearly full-screen below sticky header */
 .promo-banner-viewport {
   position: relative;
   width: 100%;
-  aspect-ratio: 4.2 / 1;
-  min-height: 300px;
-  max-height: 340px;
-  height: clamp(300px, 23.5vw, 340px);
-  border-radius: var(--r-lg, 18px);
+  aspect-ratio: 4.1 / 1;
+  min-height: calc(100vh - var(--header-h, 72px) - 28px);
+  height: calc(100vh - var(--header-h, 72px) - 28px);
+  max-height: 840px;
+  border-radius: var(--r-xl, 24px);
   overflow: hidden;
   background: linear-gradient(135deg, #07322a 0%, #0e5c4a 65%, #136a56 100%);
-  box-shadow: 0 4px 18px rgba(7, 50, 42, 0.12);
+  box-shadow: 0 10px 36px rgba(7, 50, 42, 0.16);
 }
 
 /* Individual Slide */
@@ -40,7 +42,7 @@
   height: 100%;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.45s ease-in-out, visibility 0.45s ease-in-out;
+  transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
   pointer-events: none;
   z-index: 1;
 }
@@ -66,7 +68,7 @@
   height: 100%;
   object-fit: cover;
   object-position: center right;
-  transform: scale(1.02);
+  transform: scale(1.03);
   transition: transform 6s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
@@ -74,15 +76,16 @@
   transform: scale(1);
 }
 
+/* Multi-stop Pine Green Gradient Overlay for Maximum Readability */
 .promo-banner-overlay {
   position: absolute;
   inset: 0;
   background: linear-gradient(
     90deg,
-    rgba(7, 50, 42, 0.94) 0%,
-    rgba(14, 92, 74, 0.88) 42%,
-    rgba(14, 92, 74, 0.5) 70%,
-    rgba(7, 50, 42, 0.2) 100%
+    rgba(7, 50, 42, 0.96) 0%,
+    rgba(14, 92, 74, 0.90) 45%,
+    rgba(14, 92, 74, 0.60) 72%,
+    rgba(7, 50, 42, 0.28) 100%
   );
 }
 
@@ -95,33 +98,33 @@
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
-  padding: clamp(16px, 3.5vw, 36px) clamp(20px, 4vw, 44px);
-  max-width: clamp(380px, 62%, 720px);
+  padding: clamp(32px, 5.5vw, 68px) clamp(32px, 5.5vw, 76px);
+  max-width: clamp(480px, 62%, 820px);
   color: #ffffff;
 }
 
 .promo-banner-tag-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: clamp(6px, 1vw, 10px);
+  margin-bottom: clamp(10px, 1.4vw, 16px);
 }
 
 .promo-banner-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  color: #fff;
-  font-size: clamp(0.7rem, 0.95vw, 0.78rem);
+  color: #ffffff;
+  font-size: clamp(0.74rem, 1vw, 0.84rem);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 3px 10px;
+  padding: 5px 14px;
   border-radius: var(--r-pill, 999px);
 }
 
@@ -131,39 +134,44 @@
 
 .promo-banner-badge {
   display: inline-flex;
-  font-size: clamp(0.7rem, 0.9vw, 0.76rem);
+  font-size: clamp(0.74rem, 0.95vw, 0.82rem);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(7, 50, 42, 0.35);
+  padding: 4px 12px;
+  border-radius: var(--r-pill, 999px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .promo-banner-title {
   font-family: var(--font-display, 'Poppins', sans-serif);
-  font-size: clamp(1.28rem, 2.7vw, 2.15rem);
-  line-height: 1.16;
-  font-weight: 600;
+  font-size: clamp(1.85rem, 3.8vw, 3.2rem);
+  line-height: 1.14;
+  font-weight: 700;
   color: #ffffff;
-  letter-spacing: -0.015em;
-  margin-bottom: clamp(6px, 1vw, 10px);
-  text-shadow: 0 1px 3px rgba(7, 50, 42, 0.4);
+  letter-spacing: -0.02em;
+  margin-bottom: clamp(10px, 1.4vw, 18px);
+  text-shadow: 0 2px 6px rgba(7, 50, 42, 0.5);
 }
 
 .promo-banner-sub {
   font-family: var(--font-ui, 'Poppins', sans-serif);
-  font-size: clamp(0.82rem, 1.25vw, 0.95rem);
-  line-height: 1.45;
-  color: rgba(255, 255, 255, 0.92);
-  margin-bottom: clamp(12px, 1.8vw, 18px);
+  font-size: clamp(0.92rem, 1.35vw, 1.15rem);
+  line-height: 1.58;
+  color: rgba(255, 255, 255, 0.94);
+  margin-bottom: clamp(20px, 2.5vw, 32px);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  max-width: 640px;
 }
 
 /* Call to Action Buttons */
 .promo-banner-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
@@ -171,16 +179,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 42px;
-  padding: 8px 18px;
+  gap: 9px;
+  min-height: 48px;
+  padding: 12px 26px;
   border-radius: var(--r-pill, 999px);
   font-family: var(--font-ui, 'Poppins', sans-serif);
-  font-size: clamp(0.82rem, 1.1vw, 0.9rem);
+  font-size: clamp(0.88rem, 1.15vw, 0.98rem);
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
 }
 
@@ -188,14 +196,14 @@
   background: var(--accent, #d9663d);
   color: #ffffff;
   border: 1px solid var(--accent, #d9663d);
-  box-shadow: 0 2px 8px rgba(217, 102, 61, 0.32);
+  box-shadow: 0 4px 16px rgba(217, 102, 61, 0.38);
 }
 
 .promo-btn-primary:hover {
   background: var(--accent-600, #bd5128);
   border-color: var(--accent-600, #bd5128);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(217, 102, 61, 0.42);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(217, 102, 61, 0.48);
 }
 
 .promo-btn-primary:focus-visible {
@@ -204,17 +212,17 @@
 }
 
 .promo-btn-secondary {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .promo-btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.6);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.26);
+  border-color: rgba(255, 255, 255, 0.7);
+  transform: translateY(-2px);
 }
 
 .promo-btn-secondary:focus-visible {
@@ -228,27 +236,27 @@
   top: 50%;
   transform: translateY(-50%);
   z-index: 5;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: rgba(7, 50, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(7, 50, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  opacity: 0.82;
+  opacity: 0.88;
 }
 
 .promo-arrow:hover {
-  background: rgba(7, 50, 42, 0.85);
-  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(7, 50, 42, 0.9);
+  border-color: rgba(255, 255, 255, 0.7);
   opacity: 1;
-  transform: translateY(-50%) scale(1.06);
+  transform: translateY(-50%) scale(1.08);
 }
 
 .promo-arrow:focus-visible {
@@ -258,29 +266,29 @@
 }
 
 .promo-arrow-prev {
-  left: 12px;
+  left: 20px;
 }
 
 .promo-arrow-next {
-  right: 12px;
+  right: 20px;
 }
 
 /* Pagination Dots */
 .promo-dots {
   position: absolute;
-  bottom: 12px;
-  right: 20px;
+  bottom: 22px;
+  right: 28px;
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .promo-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: var(--r-pill, 999px);
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.45);
   border: none;
   padding: 0;
   cursor: pointer;
@@ -288,13 +296,13 @@
 }
 
 .promo-dot:hover {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .promo-dot.active {
-  width: 22px;
+  width: 26px;
   background: var(--accent, #d9663d);
-  box-shadow: 0 0 6px rgba(217, 102, 61, 0.5);
+  box-shadow: 0 0 8px rgba(217, 102, 61, 0.6);
 }
 
 .promo-dot:focus-visible {
@@ -302,168 +310,293 @@
   outline-offset: 2px;
 }
 
+/* Scroll Cue Button (Invites visitor to discover categories & products below) */
+.promo-scroll-cue {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  background: rgba(7, 50, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--r-pill, 999px);
+  color: #ffffff;
+  font-family: var(--font-ui, 'Poppins', sans-serif);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  animation: promoBounce 2.6s infinite ease-in-out;
+}
+
+.promo-scroll-cue:hover {
+  background: rgba(7, 50, 42, 0.9);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.promo-scroll-cue-icon {
+  color: #f7d070;
+}
+
+@keyframes promoBounce {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(5px);
+  }
+}
+
 /* ============================================================
    Responsive Adaptations
    ============================================================ */
 
+/* Tablet (1024px and below) */
 @media (max-width: 1024px) {
   .promo-banner-viewport {
     aspect-ratio: auto;
-    min-height: 220px;
-    max-height: 280px;
-    height: clamp(220px, 26vw, 280px);
+    min-height: calc(85vh - var(--header-h, 72px));
+    height: clamp(520px, 80vh, 680px);
+    max-height: 680px;
   }
 
   .promo-banner-content {
-    max-width: 75%;
-    padding: clamp(16px, 3vw, 28px);
+    max-width: 80%;
+    padding: clamp(28px, 4.5vw, 48px);
+  }
+
+  .promo-banner-title {
+    font-size: clamp(1.65rem, 4vw, 2.4rem);
   }
 
   .promo-arrow {
-    width: 34px;
-    height: 34px;
+    width: 38px;
+    height: 38px;
   }
 }
 
+/* Tablet Portrait & Mobile Landscape (768px and below) */
 @media (max-width: 768px) {
-  .promo-banner-section {
-    padding-block: 8px;
-  }
-
-  .promo-banner-viewport {
-    aspect-ratio: auto;
-    min-height: 180px;
-    max-height: 220px;
-    height: clamp(180px, 48vw, 220px);
-    border-radius: var(--r-md, 14px);
-  }
-
-  .promo-banner-overlay {
-    background: linear-gradient(
-      100deg,
-      rgba(7, 50, 42, 0.95) 0%,
-      rgba(14, 92, 74, 0.9) 65%,
-      rgba(14, 92, 74, 0.6) 100%
-    );
-  }
-
-  .promo-banner-content {
-    max-width: 100%;
-    padding: clamp(14px, 3vw, 20px);
-  }
-
-  /* Arrows visible and neatly placed without obscuring content */
-  .promo-arrow {
-    width: 28px;
-    height: 28px;
-    top: auto;
-    bottom: 10px;
-    transform: none;
-    background: rgba(7, 50, 42, 0.75);
-    border-color: rgba(255, 255, 255, 0.35);
-  }
-
-  .promo-arrow-prev {
-    left: auto;
-    right: 88px;
-  }
-
-  .promo-arrow-next {
-    right: 52px;
-  }
-
-  .promo-dots {
-    bottom: 12px;
-    right: 14px;
-  }
-}
-
-@media (max-width: 430px) {
   .promo-banner-section {
     padding-block: 6px;
   }
 
+  .promo-banner-container {
+    padding-inline: clamp(10px, 2.5vw, 16px);
+  }
+
   .promo-banner-viewport {
-    min-height: 160px;
-    max-height: 210px;
-    height: clamp(160px, 45vw, 210px);
-    border-radius: var(--r-sm, 12px);
+    aspect-ratio: auto;
+    min-height: calc(82vh - var(--header-h, 72px));
+    height: clamp(480px, 78vh, 600px);
+    max-height: 600px;
+    border-radius: var(--r-lg, 18px);
+  }
+
+  /* Vertical gradient overlay for rich contrast on tall mobile views */
+  .promo-banner-overlay {
+    background: linear-gradient(
+      180deg,
+      rgba(7, 50, 42, 0.96) 0%,
+      rgba(14, 92, 74, 0.92) 55%,
+      rgba(14, 92, 74, 0.75) 80%,
+      rgba(7, 50, 42, 0.60) 100%
+    );
+  }
+
+  .promo-banner-img {
+    object-position: center center;
   }
 
   .promo-banner-content {
-    padding: 12px 14px;
-  }
-
-  .promo-banner-badge {
-    display: none; /* Keep header compact on small screens */
+    max-width: 100%;
+    padding: clamp(24px, 4vw, 36px) clamp(18px, 3.5vw, 28px);
   }
 
   .promo-banner-title {
-    font-size: clamp(1.02rem, 4.2vw, 1.25rem);
-    margin-bottom: 4px;
+    font-size: clamp(1.4rem, 5.2vw, 1.95rem);
+    margin-bottom: 10px;
+  }
+
+  .promo-banner-sub {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    margin-bottom: 20px;
+    -webkit-line-clamp: 3;
+  }
+
+  .promo-btn {
+    min-height: 44px;
+    padding: 10px 20px;
+    font-size: 0.88rem;
+  }
+
+  /* Arrows placed neatly at bottom right without blocking content */
+  .promo-arrow {
+    width: 32px;
+    height: 32px;
+    top: auto;
+    bottom: 14px;
+    transform: none;
+    background: rgba(7, 50, 42, 0.85);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  .promo-arrow-prev {
+    left: auto;
+    right: 96px;
+  }
+
+  .promo-arrow-next {
+    right: 56px;
+  }
+
+  .promo-dots {
+    bottom: 18px;
+    right: 14px;
+  }
+
+  .promo-scroll-cue {
+    left: 20px;
+    transform: none;
+    bottom: 12px;
+    padding: 5px 12px;
+    font-size: 0.72rem;
+  }
+
+  @keyframes promoBounce {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(4px);
+    }
+  }
+}
+
+/* Mobile Portrait (430px and below) */
+@media (max-width: 430px) {
+  .promo-banner-section {
+    padding-block: 4px;
+  }
+
+  .promo-banner-viewport {
+    min-height: calc(80vh - var(--header-h, 72px));
+    height: clamp(460px, 80vh, 560px);
+    max-height: 560px;
+    border-radius: var(--r-md, 16px);
+  }
+
+  .promo-banner-content {
+    padding: 22px 16px;
+  }
+
+  .promo-banner-tag-row {
+    margin-bottom: 8px;
+  }
+
+  .promo-banner-tag {
+    font-size: 0.72rem;
+    padding: 4px 11px;
+  }
+
+  .promo-banner-badge {
+    display: none; /* Keep header concise on phone viewports */
+  }
+
+  .promo-banner-title {
+    font-size: clamp(1.25rem, 5.8vw, 1.6rem);
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+
+  .promo-banner-sub {
+    font-size: 0.82rem;
+    line-height: 1.45;
+    -webkit-line-clamp: 3;
+    margin-bottom: 18px;
+  }
+
+  .promo-banner-actions {
+    gap: 10px;
+    width: 100%;
+  }
+
+  .promo-btn {
+    min-height: 44px;
+    padding: 8px 18px;
+    font-size: 0.84rem;
+  }
+
+  .promo-btn-secondary {
+    display: none; /* Emphasize single primary conversion action on narrow phones */
+  }
+
+  .promo-arrow {
+    width: 28px;
+    height: 28px;
+    bottom: 10px;
+  }
+
+  .promo-arrow-prev {
+    right: 82px;
+  }
+
+  .promo-arrow-next {
+    right: 48px;
+  }
+
+  .promo-dots {
+    bottom: 14px;
+    right: 12px;
+  }
+
+  .promo-scroll-cue {
+    left: 14px;
+    bottom: 10px;
+    padding: 4px 10px;
+    font-size: 0.7rem;
+  }
+}
+
+/* Small Mobile (350px and below - e.g. iPhone SE 320px) */
+@media (max-width: 350px) {
+  .promo-banner-viewport {
+    height: clamp(430px, 80vh, 500px);
+    min-height: 430px;
+  }
+
+  .promo-banner-content {
+    padding: 18px 12px;
+  }
+
+  .promo-banner-title {
+    font-size: 1.18rem;
+    line-height: 1.22;
+    margin-bottom: 6px;
   }
 
   .promo-banner-sub {
     font-size: 0.78rem;
     -webkit-line-clamp: 2;
-    margin-bottom: 8px;
+    margin-bottom: 14px;
   }
 
   .promo-btn {
-    min-height: 34px;
-    padding: 5px 13px;
-    font-size: 0.78rem;
+    min-height: 42px;
+    padding: 7px 14px;
+    font-size: 0.8rem;
+    width: 100%;
   }
 
-  .promo-btn-secondary {
-    display: none; /* Prioritize primary CTA on narrow screens */
-  }
-
-  .promo-arrow {
-    width: 24px;
-    height: 24px;
-    bottom: 8px;
-  }
-
-  .promo-arrow-prev {
-    right: 76px;
-  }
-
-  .promo-arrow-next {
-    right: 44px;
-  }
-
-  .promo-dots {
-    bottom: 10px;
-    right: 10px;
-  }
-}
-
-@media (max-width: 350px) {
-  .promo-banner-viewport {
-    min-height: 150px;
-    max-height: 180px;
-    height: 165px;
-  }
-
-  .promo-banner-content {
-    padding: 10px 12px;
-  }
-
-  .promo-banner-title {
-    font-size: 0.98rem;
-    margin-bottom: 3px;
-  }
-
-  .promo-banner-sub {
-    font-size: 0.72rem;
-    -webkit-line-clamp: 1;
-    margin-bottom: 6px;
-  }
-
-  .promo-btn {
-    min-height: 32px;
-    padding: 4px 11px;
-    font-size: 0.74rem;
+  .promo-scroll-cue {
+    display: none; /* Save space for slider dots on 320px devices */
   }
 }

@@ -439,6 +439,9 @@
   .form-grid-2 {
     grid-template-columns: 1fr;
   }
+  .co-saved-addresses-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 

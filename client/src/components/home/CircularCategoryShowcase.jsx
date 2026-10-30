@@ -86,6 +86,7 @@ export default function CircularCategoryShowcase({ categories = [], loading = fa
 
   return (
     <section
+      id="storefront-categories"
       className="circular-category-showcase compact-cat-nav"
       aria-label="Shop by Category"
     >

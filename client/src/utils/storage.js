@@ -30,6 +30,7 @@ const normalizeProduct = (p) => ({
   strikePrice: p.strikePrice != null && p.strikePrice !== '' ? Number(p.strikePrice) : null,
   unit: p.unit || '',
   image: p.image || '',
+  videoUrl: p.videoUrl || p.video_url || '',
   stockStatus: p.stockStatus || (p.inStock === false ? 'out_of_stock' : 'in_stock'),
   inStock: (p.stockStatus || 'in_stock') !== 'out_of_stock',
   status: p.status || 'pending',
@@ -218,8 +219,58 @@ export const updateVendor = (id, updatedData) => {
 
 const CURRENT_CUSTOMER_KEY = 'ecshopping_current_customer';
 
+/** Safely extracts and parses JWT payload if formatted as a 3-part token. */
+export const parseJwt = (token) => {
+  try {
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+};
+
+/** Checks whether a token is present, non-expired, and role-matched. */
+export const isTokenValid = (token, expectedRole) => {
+  if (!token || typeof token !== 'string' || !token.trim()) return false;
+  const parts = token.split('.');
+  if (parts.length === 3) {
+    try {
+      const payload = parseJwt(token);
+      if (payload) {
+        if (expectedRole && payload.role && payload.role !== expectedRole) return false;
+        if (payload.exp && payload.exp * 1000 <= Date.now()) return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return true;
+};
+
 export const getCurrentCustomer = () => {
-  return JSON.parse(localStorage.getItem(CURRENT_CUSTOMER_KEY) || 'null');
+  try {
+    const raw = localStorage.getItem(CURRENT_CUSTOMER_KEY);
+    const token = authSessions.get('customer');
+    if (!raw || !token || !isTokenValid(token, 'customer')) {
+      if (raw || token) {
+        localStorage.removeItem(CURRENT_CUSTOMER_KEY);
+        authSessions.clear('customer');
+      }
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 };
 
 export const setCurrentCustomer = (customer) => {
@@ -245,31 +296,50 @@ export const updateCustomerProfile = (updates) => {
  * cached profile with its token so api.js can attach it per role.
  */
 export const saveCustomerSession = (customer, token) => {
-  setCurrentCustomer(customer);
-  authSessions.set('customer', token || '');
+  if (customer && token) {
+    setCurrentCustomer(customer);
+    authSessions.set('customer', token);
+  } else {
+    setCurrentCustomer(null);
+    authSessions.clear('customer');
+  }
 };
 
-export const logoutCustomer = () => {
-  setCurrentCustomer(null);
-  authSessions.clear('customer');
-};
+export const logoutCustomer = () => saveCustomerSession(null, '');
 
 export const saveVendorSession = (vendor, token) => {
-  if (vendor) {
+  if (vendor && token) {
     localStorage.setItem('ecshopping_current_vendor', JSON.stringify(vendor));
-    authSessions.set('vendor', token || '');
+    authSessions.set('vendor', token);
   } else {
     localStorage.removeItem('ecshopping_current_vendor');
     authSessions.clear('vendor');
   }
 };
 
+export const getCurrentVendor = () => {
+  try {
+    const raw = localStorage.getItem('ecshopping_current_vendor');
+    const token = authSessions.get('vendor');
+    if (!raw || !token || !isTokenValid(token, 'vendor')) {
+      if (raw || token) {
+        localStorage.removeItem('ecshopping_current_vendor');
+        authSessions.clear('vendor');
+      }
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 export const logoutVendor = () => saveVendorSession(null, '');
 
 export const saveAdminSession = (admin, token) => {
-  if (admin) {
+  if (admin && token) {
     localStorage.setItem(CURRENT_ADMIN_KEY, JSON.stringify(admin));
-    authSessions.set('admin', token || '');
+    authSessions.set('admin', token);
   } else {
     localStorage.removeItem(CURRENT_ADMIN_KEY);
     authSessions.clear('admin');
@@ -278,7 +348,22 @@ export const saveAdminSession = (admin, token) => {
 
 export const getCurrentAdmin = () => {
   try {
-    return JSON.parse(localStorage.getItem(CURRENT_ADMIN_KEY) || 'null');
+    const raw = localStorage.getItem(CURRENT_ADMIN_KEY);
+    const token = authSessions.get('admin');
+    if (!raw || !token || !isTokenValid(token, 'admin')) {
+      if (raw || token) {
+        localStorage.removeItem(CURRENT_ADMIN_KEY);
+        authSessions.clear('admin');
+      }
+      return null;
+    }
+    const admin = JSON.parse(raw);
+    if (!admin || admin.role !== 'admin') {
+      localStorage.removeItem(CURRENT_ADMIN_KEY);
+      authSessions.clear('admin');
+      return null;
+    }
+    return admin;
   } catch {
     return null;
   }

@@ -14,8 +14,10 @@ import {
   MapPin,
   Ban,
   AlertCircle,
-  Check
+  Check,
+  PlayCircle
 } from 'lucide-react';
+import { getYoutubeEmbedUrl } from './vendor/AddProduct';
 import { mapServerProduct } from '../data/mapProduct';
 import { fetchRelatedProducts } from '../data/storefront';
 import { categoryDisplayForName } from '../data/content';
@@ -303,6 +305,21 @@ export default function ProductDetails({ onAddToCart }) {
                 ))}
               </div>
             )}
+
+            {product.videoUrl && (
+              <button
+                type="button"
+                className="pdp-watch-video-btn"
+                onClick={() => {
+                  setTab('video');
+                  const el = document.getElementById('pdp-tabs');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <PlayCircle size={16} />
+                <span>Watch Product Video</span>
+              </button>
+            )}
           </div>
 
           {/* ---------- Info ---------- */}
@@ -477,6 +494,7 @@ export default function ProductDetails({ onAddToCart }) {
             tabs={[
               { id: 'description', label: 'Description' },
               { id: 'specs', label: 'Specifications' },
+              ...(product.videoUrl ? [{ id: 'video', label: 'Product Video 🎬' }] : []),
               { id: 'reviews', label: reviews.length > 0 ? `Reviews (${reviews.length})` : 'Reviews' }
             ]}
             active={tab}
@@ -516,6 +534,35 @@ export default function ProductDetails({ onAddToCart }) {
               )}
             </div>
           </TabPanel>
+
+          {product.videoUrl && (
+            <TabPanel active={tab} id="video">
+              <div className="pdp-panel pdp-video-tab-content">
+                <h3 className="h4" style={{ marginBottom: '1rem' }}>Product Demonstration Video</h3>
+                <div className="pdp-video-wrap">
+                  {getYoutubeEmbedUrl(product.videoUrl) ? (
+                    <iframe
+                      src={getYoutubeEmbedUrl(product.videoUrl)}
+                      title={`${product.title || product.name} Video`}
+                      className="pdp-video-iframe"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      src={product.videoUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="pdp-video-player"
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  )}
+                </div>
+              </div>
+            </TabPanel>
+          )}
 
           <TabPanel active={tab} id="reviews">
             <div className="pdp-panel">

@@ -25,12 +25,14 @@ import {
   X
 } from 'lucide-react';
 import brandLogoWithBg from '../../assets/logo/logo.png';
-import CategoryManager from './CategoryManager';
-import AddProduct from './AddProduct';
-import AllProducts from './AllProducts';
-import EditProduct from './EditProduct';
 import Pagination from '../../components/ui/Pagination';
+import { DashboardSkeleton, FormSkeleton, TableSkeleton } from '../../components/ui/States';
 import api, { authSessions } from '../../utils/api';
+
+const CategoryManager = React.lazy(() => import('./CategoryManager'));
+const AddProduct = React.lazy(() => import('./AddProduct'));
+const AllProducts = React.lazy(() => import('./AllProducts'));
+const EditProduct = React.lazy(() => import('./EditProduct'));
 import { 
   getProducts, 
   addProduct, 
@@ -343,7 +345,18 @@ export default function VendorDashboard({ vendor, onLogout }) {
           {list.map((p) => (
             <tr key={p.id}>
               <td>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    cursor: ['pending', 'rejected'].includes(p.status) ? 'pointer' : 'default'
+                  }}
+                  onClick={() => {
+                    if (['pending', 'rejected'].includes(p.status)) setEditingProductId(p.id);
+                  }}
+                  title={['pending', 'rejected'].includes(p.status) ? 'Click to view / edit product' : undefined}
+                >
                   {p.image && (
                     <img
                       src={p.image}
@@ -415,11 +428,22 @@ export default function VendorDashboard({ vendor, onLogout }) {
       <aside className={`vendor-sidebar ${sidebarOpen ? 'open' : ''}`}>
         {/* 1. Brand Logo */}
         <div className="vendor-sidebar-header">
-          <Link to="/" className="vendor-brand-logo-link" title="Go to Storefront">
-            <div className="vendor-brand-logo-card">
-              <img src={brandLogoWithBg} alt="EcShopping Logo" className="vendor-brand-logo-img-bg" />
-            </div>
-          </Link>
+          <div className="vendor-sidebar-header-top">
+            <Link to="/" className="vendor-brand-logo-link" title="Go to Storefront">
+              <div className="vendor-brand-logo-card">
+                <img src={brandLogoWithBg} alt="EcShopping Logo" className="vendor-brand-logo-img-bg" />
+              </div>
+            </Link>
+            <button
+              type="button"
+              className="vendor-sidebar-close-btn"
+              onClick={() => setSidebarOpen(false)}
+              title="Close navigation menu"
+              aria-label="Close navigation menu"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
           {/* Vendor profile status */}
           <div className="vendor-sidebar-user">
@@ -634,15 +658,17 @@ export default function VendorDashboard({ vendor, onLogout }) {
         {/* Content Body based on activeTab */}
         <div className="vendor-content-body">
           {editingProductId ? (
-            <EditProduct
-              productId={editingProductId}
-              vendor={vendor}
-              onBack={() => setEditingProductId(null)}
-              onSaved={() => {
-                setEditingProductId(null);
-                loadData();
-              }}
-            />
+            <React.Suspense fallback={<FormSkeleton fields={5} />}>
+              <EditProduct
+                productId={editingProductId}
+                vendor={vendor}
+                onBack={() => setEditingProductId(null)}
+                onSaved={() => {
+                  setEditingProductId(null);
+                  loadData();
+                }}
+              />
+            </React.Suspense>
           ) : (
             <>
 
@@ -753,17 +779,23 @@ export default function VendorDashboard({ vendor, onLogout }) {
 
           {/* ---------------- 2. PRODUCTS: CATEGORY VIEW (Split Component) ---------------- */}
           {activeTab === 'products-category' && (
-            <CategoryManager vendor={vendor} />
+            <React.Suspense fallback={<TableSkeleton rows={4} cols={4} />}>
+              <CategoryManager vendor={vendor} />
+            </React.Suspense>
           )}
 
           {/* ---------------- 3. PRODUCTS: ADD PRODUCT VIEW (Split Component) ---------------- */}
           {activeTab === 'products-add' && (
-            <AddProduct vendor={vendor} />
+            <React.Suspense fallback={<FormSkeleton fields={6} />}>
+              <AddProduct vendor={vendor} />
+            </React.Suspense>
           )}
 
           {/* ---------------- 4. PRODUCTS: ALL PRODUCTS VIEW (Split Component) ---------------- */}
           {activeTab === 'products-all' && (
-            <AllProducts vendor={vendor} onProductsUpdated={loadData} />
+            <React.Suspense fallback={<TableSkeleton rows={6} cols={5} />}>
+              <AllProducts vendor={vendor} onProductsUpdated={loadData} />
+            </React.Suspense>
           )}
 
           {/* ---------------- 4a. PRODUCTS RECEIVED (PENDING ADMIN APPROVAL) ---------------- */}

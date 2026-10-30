@@ -1,12 +1,19 @@
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import AuthForm from '../components/auth/AuthForm';
-import userLoginImg from '../assets/login-page/user-login.png';
+import UnifiedAuthModal from '../components/auth/UnifiedAuthModal';
 import './Login.css';
 
-export default function Login({ onCustomerLogin, loggedInCustomer }) {
+/**
+ * Unified authentication page for /login and /register routes.
+ * Renders the centered rounded popup modal with blurred storefront backdrop.
+ */
+export default function Login({ onCustomerLogin, onVendorLogin, loggedInCustomer }) {
   const navigate = useNavigate();
   const location = useLocation();
+
+  const isRegisterRoute = location.pathname === '/register';
+  const roleQuery = new URLSearchParams(location.search).get('role');
+  const initialRole = roleQuery === 'vendor' ? 'vendor' : 'customer';
 
   useEffect(() => {
     if (loggedInCustomer) navigate('/profile', { replace: true });
@@ -14,42 +21,15 @@ export default function Login({ onCustomerLogin, loggedInCustomer }) {
 
   if (loggedInCustomer) return null;
 
-  const isRegisterRoute = location.pathname === '/register';
-
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        {/* Left side: brand panel */}
-        <aside className="auth-brand-side">
-          <span className="auth-brand-tag">
-            <span className="brand-dot" aria-hidden="true" />
-            Customer portal
-          </span>
-
-          <div className="auth-visual">
-            <img
-              src={userLoginImg}
-              alt="Customer shopping at EcShopping"
-              className="auth-side-img"
-            />
-          </div>
-
-          <div className="auth-caption">
-            <h2>Fresh &amp; organic, every day</h2>
-            <p>
-              Shop farm-fresh produce, groceries and household essentials straight from local sellers.
-            </p>
-          </div>
-        </aside>
-
-        {/* Right side: login / sign-up form */}
-        <main className="auth-form-side">
-          <AuthForm
-            onCustomerLogin={onCustomerLogin}
-            initialMode={isRegisterRoute ? 'signup' : 'login'}
-          />
-        </main>
-      </div>
-    </div>
+    <UnifiedAuthModal
+      isPage={true}
+      open={true}
+      initialMode={isRegisterRoute ? 'signup' : 'login'}
+      initialRole={initialRole}
+      onCustomerLogin={onCustomerLogin}
+      onVendorLogin={onVendorLogin}
+      onClose={() => navigate('/', { replace: true })}
+    />
   );
 }

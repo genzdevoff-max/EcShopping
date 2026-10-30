@@ -140,6 +140,7 @@ export const initDatabase = async () => {
         strike_price DECIMAL(10,2) DEFAULT NULL,
         unit VARCHAR(100) DEFAULT '',
         image TEXT DEFAULT NULL,
+        video_url VARCHAR(1000) DEFAULT NULL,
         stock_status VARCHAR(50) DEFAULT 'in_stock',
         status VARCHAR(50) DEFAULT 'pending',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -273,6 +274,12 @@ export const initDatabase = async () => {
     if (!(await columnExists(connection, 'categories', 'image_url'))) {
       await connection.query('ALTER TABLE categories ADD COLUMN image_url VARCHAR(500) NULL');
       console.log('✅ Added categories.image_url');
+    }
+
+    // Additive migration: product video link support
+    if (!(await columnExists(connection, 'products', 'video_url'))) {
+      await connection.query('ALTER TABLE products ADD COLUMN video_url VARCHAR(1000) NULL DEFAULT NULL');
+      console.log('✅ Added products.video_url');
     }
 
     // Additive migration: widen image columns to MEDIUMTEXT to prevent payload truncation

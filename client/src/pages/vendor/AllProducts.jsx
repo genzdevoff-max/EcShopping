@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Boxes,
@@ -23,7 +23,12 @@ import {
   Sparkles,
   TrendingUp,
   PackageCheck,
-  PackageX
+  PackageX,
+  Video,
+  PlayCircle,
+  Cloud,
+  UploadCloud,
+  Loader2
 } from 'lucide-react';
 import api from '../../utils/api';
 import {
@@ -32,8 +37,10 @@ import {
   updateProduct,
   syncProductsFromServer
 } from '../../utils/storage';
+import { isValidVideoUrl, getYoutubeEmbedUrl } from './AddProduct';
 import Pagination from '../../components/ui/Pagination';
 import './AllProducts.css';
+import './AddProduct.css';
 
 export default function AllProducts({ vendor, onProductsUpdated }) {
   const navigate = useNavigate();
@@ -158,6 +165,76 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
     }
   };
 
+  // Video management state for inline edit modal
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoUploadError, setVideoUploadError] = useState('');
+  const [videoInputMode, setVideoInputMode] = useState('url');
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const [videoUrlError, setVideoUrlError] = useState('');
+  const videoFileInputRef = useRef(null);
+
+  const openEditModal = (prod) => {
+    const currentVid = prod.videoUrl || prod.video_url || '';
+    setEditingProduct({ ...prod, videoUrl: currentVid });
+    setVideoUrlInput(currentVid);
+    setVideoUrlError('');
+    setVideoUploadError('');
+  };
+
+  const handleApplyVideoUrl = () => {
+    setVideoUrlError('');
+    const trimmed = videoUrlInput.trim();
+    if (!trimmed) {
+      setEditingProduct(prev => (prev ? { ...prev, videoUrl: '' } : null));
+      return;
+    }
+    if (!isValidVideoUrl(trimmed)) {
+      setVideoUrlError('Please enter a valid YouTube, Vimeo, or direct video (.mp4, .webm) URL.');
+      return;
+    }
+    setEditingProduct(prev => (prev ? { ...prev, videoUrl: trimmed } : null));
+    showToast('Product video link applied!', 'success');
+  };
+
+  const handleVideoFileUpload = async (file) => {
+    if (!file) return;
+    setVideoUploadError('');
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'];
+    const ext = (file.name || '').split('.').pop().toLowerCase();
+    const allowedExts = ['mp4', 'webm', 'mov', 'ogg', 'm4v'];
+
+    if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
+      setVideoUploadError('Unsupported format. Please select an MP4, WebM, MOV, or OGG video.');
+      showToast('Unsupported video format', 'error');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setVideoUploadError('Video file exceeds maximum allowed size of 50MB.');
+      showToast('Video exceeds 50MB limit', 'error');
+      return;
+    }
+
+    setVideoUploading(true);
+    try {
+      const data = await api.uploadVideo(file, 'vendor');
+      if (data?.success && data.url) {
+        setEditingProduct(prev => (prev ? { ...prev, videoUrl: data.url } : null));
+        setVideoUrlInput(data.url);
+        showToast('Video uploaded successfully! 🎬', 'success');
+      } else {
+        const err = data?.error || 'Video upload failed';
+        setVideoUploadError(err);
+        showToast(err, 'error');
+      }
+    } catch (err) {
+      const msg = err.message || 'Video upload failed';
+      setVideoUploadError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setVideoUploading(false);
+    }
+  };
+
   // Edit form save handler — server update is awaited first; the local cache
   // is only mutated after the API accepts the change.
   const [savingEdit, setSavingEdit] = useState(false);
@@ -184,7 +261,8 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
       category: editingProduct.category || 'General',
       unit: editingProduct.unit || '1 unit',
       description: editingProduct.description || '',
-      stockStatus: editingProduct.stockStatus || 'in_stock'
+      stockStatus: editingProduct.stockStatus || 'in_stock',
+      videoUrl: editingProduct.videoUrl ? editingProduct.videoUrl.trim() : null
     };
 
     setSavingEdit(true);
@@ -551,7 +629,7 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
                           <button 
                             type="button"
                             className="action-icon-btn edit"
-                            onClick={() => setEditingProduct({ ...p })}
+                            onClick={() => openEditModal(p)}
                             title="Edit Product"
                           >
                             <Edit3 size={15} />
@@ -653,7 +731,7 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
                     <button 
                       type="button"
                       className="card-action-btn edit"
-                      onClick={() => setEditingProduct({ ...p })}
+                      onClick={() => openEditModal(p)}
                       title="Edit Product"
                     >
                       <Edit3 size={15} />
@@ -740,6 +818,35 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
                   </div>
                 )}
 
+                {(previewProduct.videoUrl || previewProduct.video_url) && (
+                  <div className="preview-desc-box" style={{ marginTop: '12px' }}>
+                    <strong style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Video size={15} />
+                      <span>Product Video:</span>
+                    </strong>
+                    <div style={{ marginTop: '8px', borderRadius: '8px', overflow: 'hidden' }}>
+                      {getYoutubeEmbedUrl(previewProduct.videoUrl || previewProduct.video_url) ? (
+                        <iframe
+                          src={getYoutubeEmbedUrl(previewProduct.videoUrl || previewProduct.video_url)}
+                          title="Preview Product Video"
+                          style={{ width: '100%', height: '220px', border: 'none', borderRadius: '8px' }}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <video
+                          src={previewProduct.videoUrl || previewProduct.video_url}
+                          controls
+                          playsInline
+                          style={{ width: '100%', maxHeight: '220px', borderRadius: '8px', background: '#000' }}
+                        >
+                          Your browser does not support the video tag.
+                        </video>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="preview-modal-actions">
                   <button 
                     type="button" 
@@ -747,7 +854,7 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
                     onClick={() => {
                       const toEdit = { ...previewProduct };
                       setPreviewProduct(null);
-                      setEditingProduct(toEdit);
+                      openEditModal(toEdit);
                     }}
                   >
                     <Edit3 size={15} />
@@ -864,6 +971,131 @@ export default function AllProducts({ vendor, onProductsUpdated }) {
                   value={editingProduct.description || ''}
                   onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
                 ></textarea>
+              </div>
+
+              {/* Product Video Section */}
+              <div className="edit-form-field" style={{ marginTop: '8px' }}>
+                <label className="edit-form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Video size={16} />
+                  <span>Product Demonstration Video (Optional)</span>
+                </label>
+
+                <div className="prod-video-mode-selector" style={{ marginBottom: '10px' }}>
+                  <button
+                    type="button"
+                    className={`prod-video-mode-btn ${videoInputMode === 'url' ? 'active' : ''}`}
+                    onClick={() => setVideoInputMode('url')}
+                  >
+                    Add Video URL
+                  </button>
+                  <button
+                    type="button"
+                    className={`prod-video-mode-btn ${videoInputMode === 'upload' ? 'active' : ''}`}
+                    onClick={() => setVideoInputMode('upload')}
+                  >
+                    Upload Video (MP4/WebM)
+                  </button>
+                </div>
+
+                {videoInputMode === 'url' && (
+                  <div className="prod-video-url-block">
+                    <div className="prod-video-url-input-row">
+                      <input
+                        type="url"
+                        className="edit-form-input"
+                        placeholder="https://www.youtube.com/watch?v=... or direct MP4 URL"
+                        value={videoUrlInput}
+                        onChange={(e) => {
+                          setVideoUrlInput(e.target.value);
+                          setVideoUrlError('');
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="prod-video-apply-btn"
+                        onClick={handleApplyVideoUrl}
+                      >
+                        Apply Link
+                      </button>
+                    </div>
+                    {videoUrlError && <p className="prod-video-error-text">{videoUrlError}</p>}
+                  </div>
+                )}
+
+                {videoInputMode === 'upload' && (
+                  <div className="prod-video-upload-block">
+                    <input
+                      type="file"
+                      ref={videoFileInputRef}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleVideoFileUpload(f);
+                      }}
+                      accept="video/mp4,video/webm,video/quicktime,video/ogg"
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      className={`add-prod-dropzone ${videoUploading ? 'uploading' : ''}`}
+                      onClick={() => !videoUploading && videoFileInputRef.current?.click()}
+                      style={{ padding: '16px', textAlign: 'center', cursor: videoUploading ? 'default' : 'pointer' }}
+                    >
+                      {videoUploading ? (
+                        <div>
+                          <Loader2 size={24} className="dropzone-spin" />
+                          <p style={{ margin: '6px 0 0', fontSize: '13px', fontWeight: 600 }}>Uploading to Cloud CDN…</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <Cloud size={24} style={{ color: '#0d5c3a' }} />
+                          <p style={{ margin: '4px 0 0', fontSize: '13px' }}><strong>Click to upload video file</strong> (Max 50MB)</p>
+                          <span style={{ fontSize: '11px', color: '#64748b' }}>Cloudinary persistent storage</span>
+                        </div>
+                      )}
+                    </div>
+                    {videoUploadError && <p className="prod-video-error-text">{videoUploadError}</p>}
+                  </div>
+                )}
+
+                {editingProduct.videoUrl && (
+                  <div className="prod-video-preview-card" style={{ marginTop: '10px' }}>
+                    <div className="prod-video-preview-header">
+                      <div className="prod-video-preview-title">
+                        <PlayCircle size={15} className="video-preview-icon" />
+                        <span>Attached Video</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="action-icon-btn delete"
+                        onClick={() => {
+                          setEditingProduct(prev => (prev ? { ...prev, videoUrl: '' } : null));
+                          setVideoUrlInput('');
+                        }}
+                        title="Remove video"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <div className="prod-video-player-container">
+                      {getYoutubeEmbedUrl(editingProduct.videoUrl) ? (
+                        <iframe
+                          src={getYoutubeEmbedUrl(editingProduct.videoUrl)}
+                          title="Video Preview"
+                          className="prod-video-iframe"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <video
+                          src={editingProduct.videoUrl}
+                          controls
+                          playsInline
+                          className="prod-video-html5"
+                        >
+                          Your browser does not support the video tag.
+                        </video>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="modal-footer-actions">

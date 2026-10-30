@@ -177,6 +177,14 @@
 }
 
 @media (max-width: 560px) {
-  .oc-hero-actions .btn { flex: 1; min-width: 150px; }
+  .oc-hero-actions {
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+  }
+  .oc-hero-actions .btn {
+    width: 100%;
+    min-width: 0;
+  }
   .oc-items li { flex-wrap: wrap; }
 }

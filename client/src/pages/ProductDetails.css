@@ -334,3 +334,52 @@
   cursor: not-allowed !important;
   opacity: 0.85;
 }
+
+/* ---------------- PDP VIDEO SECTION ---------------- */
+.pdp-watch-video-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: #ffffff;
+  color: #0e5c4a;
+  border: 1.5px solid #0e5c4a;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pdp-watch-video-btn:hover {
+  background: #0e5c4a;
+  color: #ffffff;
+}
+
+.pdp-video-wrap {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  aspect-ratio: 16 / 9;
+  position: relative;
+}
+
+.pdp-video-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.pdp-video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000000;
+}
