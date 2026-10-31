@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import api from '../utils/api';
 import {
   PromotionalBanner,
   CircularCategoryShowcase,
@@ -24,7 +25,8 @@ export default function Home({ onAddToCart }) {
     rails: [],
     productsTotal: null,
     categoriesCount: null,
-    dealsCount: null
+    dealsCount: null,
+    banners: undefined
   });
   const [attempt, setAttempt] = useState(0);
 
@@ -32,13 +34,26 @@ export default function Home({ onAddToCart }) {
     const results = await Promise.allSettled([
       fetchStorefrontCategories(),
       fetchStorefrontProducts({ limit: RAIL_POOL_LIMIT }),
-      fetchStorefrontProducts({ hasDiscount: '1', limit: 8 })
+      fetchStorefrontProducts({ hasDiscount: '1', limit: 8 }),
+      api.getBanners().catch(() => null)
     ]);
 
-    const [catRes, listRes, dealRes] = results;
+    const [catRes, listRes, dealRes, bannerRes] = results;
     const categories = catRes.status === 'fulfilled' ? catRes.value : [];
     const listings = listRes.status === 'fulfilled' ? listRes.value : { ok: false, products: [], total: null };
     const deals = dealRes.status === 'fulfilled' ? dealRes.value : { ok: false, products: [] };
+    const bannerPayload = bannerRes.status === 'fulfilled' && bannerRes.value?.success && Array.isArray(bannerRes.value.banners) && bannerRes.value.banners.length > 0
+      ? bannerRes.value.banners.map((b) => ({
+          id: b.id,
+          tag: b.tag || 'Direct Farm Harvest',
+          title: b.title,
+          subtitle: b.subtitle || '',
+          primaryCta: { label: b.cta_text || 'Shop Now', to: b.cta_link || '/shop' },
+          secondaryCta: b.secondary_cta_text ? { label: b.secondary_cta_text, to: b.secondary_cta_link || '/shop' } : null,
+          badge: b.badge || '',
+          image: b.image_url
+        }))
+      : undefined;
 
     const items = listings.ok ? listings.products : [];
     const rails = categories.map((category) => ({
@@ -59,7 +74,8 @@ export default function Home({ onAddToCart }) {
       rails,
       productsTotal: listRes.status === 'fulfilled' && listings.ok ? listings.total : null,
       categoriesCount: catRes.status === 'fulfilled' ? categories.length : null,
-      dealsCount: dealRes.status === 'fulfilled' && deals.ok ? deals.total : null
+      dealsCount: dealRes.status === 'fulfilled' && deals.ok ? deals.total : null,
+      banners: bannerPayload
     });
   }, []);
 
@@ -80,7 +96,7 @@ export default function Home({ onAddToCart }) {
   return (
     <>
       {/* 1. Wide Promotional Campaign Banner directly below Header */}
-      <PromotionalBanner />
+      <PromotionalBanner campaigns={state.banners} />
 
       {/* 2. Circular Category Showcase directly below Banner with Show more action */}
       <CircularCategoryShowcase

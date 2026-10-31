@@ -3,7 +3,8 @@ import {
   LogOut, RefreshCw, CheckCircle, XCircle, Package, Users as UsersIcon,
   ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Trash2,
   Menu, X, CreditCard, ShieldCheck, Globe, AlertTriangle, Save, Eye, EyeOff, Lock, CheckCircle2,
-  UploadCloud, Link as LinkIcon, Play, FileVideo, Film, Store
+  UploadCloud, Link as LinkIcon, Play, FileVideo, Film, Store,
+  Image as ImageIcon, ArrowUp, ArrowDown, Sparkles
 } from 'lucide-react';
 import api, { authSessions } from '../../utils/api';
 import { getCurrentAdmin } from '../../utils/storage';
@@ -23,7 +24,7 @@ const fmtINR = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 export default function AdminDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [state, setState] = useState({ loading: true, error: null, vendors: [], products: [], orders: [], users: [], categories: [], videos: [] });
+  const [state, setState] = useState({ loading: true, error: null, vendors: [], products: [], orders: [], users: [], categories: [], videos: [], banners: [] });
   const [attempt, setAttempt] = useState(0);
 
   /* Admin Add Product state */
@@ -115,6 +116,32 @@ export default function AdminDashboard({ onLogout }) {
   const [videoPage, setVideoPage] = useState(1);
   const [videoPageSize, setVideoPageSize] = useState(10);
 
+  /* Homepage Banner Management state */
+  const [bannerModalOpen, setBannerModalOpen] = useState(false);
+  const [editingBannerId, setEditingBannerId] = useState(null);
+  const [bannerForm, setBannerForm] = useState({
+    title: '',
+    subtitle: '',
+    imageUrl: '',
+    imagePublicId: '',
+    ctaText: 'Shop Now',
+    ctaLink: '/shop',
+    secondaryCtaText: '',
+    secondaryCtaLink: '',
+    tag: 'Direct Farm Harvest',
+    badge: '100% Certified Organic • Free Delivery over ₹499',
+    displayOrder: 0,
+    isActive: true
+  });
+  const [bannerFormMsg, setBannerFormMsg] = useState({ type: null, text: '' });
+  const [bannerUploadingImg, setBannerUploadingImg] = useState(false);
+  const [bannerSaving, setBannerSaving] = useState(false);
+  const [bannerSearch, setBannerSearch] = useState('');
+  const [bannerStatusFilter, setBannerStatusFilter] = useState('all');
+  const [bannerToDelete, setBannerToDelete] = useState(null);
+  const [bannerDeleteLoading, setBannerDeleteLoading] = useState(false);
+  const bannerFileInputRef = useRef(null);
+
   /* Payment Gateway Configuration audit & edit state */
   const [paymentConfig, setPaymentConfig] = useState({ loading: false, data: null, error: null });
   const [paymentForm, setPaymentForm] = useState({
@@ -142,13 +169,14 @@ export default function AdminDashboard({ onLogout }) {
     (async () => {
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const [vendorRes, productRes, orderRes, userRes, catRes, videoRes] = await Promise.all([
+        const [vendorRes, productRes, orderRes, userRes, catRes, videoRes, bannerRes] = await Promise.all([
           api.getVendors(),
           api.getProducts({}, 'admin'),
           api.getOrders({}, 'admin'),
           api.getUsers(),
           api.getCategories({}, 'admin'),
-          api.getVideos().catch(() => ({ success: true, videos: [] }))
+          api.getVideos().catch(() => ({ success: true, videos: [] })),
+          api.getAdminBanners().catch(() => ({ success: true, banners: [] }))
         ]);
         if (cancelled) return;
         if (!vendorRes.success || !productRes.success || !orderRes.success || !userRes.success || !catRes.success) {
@@ -162,7 +190,8 @@ export default function AdminDashboard({ onLogout }) {
           orders: orderRes.orders || [],
           users: userRes.users || [],
           categories: catRes.categories || [],
-          videos: videoRes?.videos || []
+          videos: videoRes?.videos || [],
+          banners: bannerRes?.banners || []
         });
       } catch (err) {
         if (cancelled) return;
@@ -525,7 +554,196 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
+  /* Banner action handlers */
+  const handleOpenAddBanner = () => {
+    setEditingBannerId(null);
+    setBannerForm({
+      title: '',
+      subtitle: '',
+      imageUrl: '',
+      imagePublicId: '',
+      ctaText: 'Shop Now',
+      ctaLink: '/shop',
+      secondaryCtaText: '',
+      secondaryCtaLink: '',
+      tag: 'Direct Farm Harvest',
+      badge: '100% Certified Organic • Free Delivery over ₹499',
+      displayOrder: (state.banners || []).length,
+      isActive: true
+    });
+    setBannerFormMsg({ type: null, text: '' });
+    setBannerModalOpen(true);
+  };
+
+  const handleOpenEditBanner = (b) => {
+    setEditingBannerId(b.id);
+    setBannerForm({
+      title: b.title || '',
+      subtitle: b.subtitle || '',
+      imageUrl: b.image_url || b.imageUrl || '',
+      imagePublicId: b.image_public_id || b.imagePublicId || '',
+      ctaText: b.cta_text || b.ctaText || 'Shop Now',
+      ctaLink: b.cta_link || b.ctaLink || '/shop',
+      secondaryCtaText: b.secondary_cta_text || b.secondaryCtaText || '',
+      secondaryCtaLink: b.secondary_cta_link || b.secondaryCtaLink || '',
+      tag: b.tag || 'Direct Farm Harvest',
+      badge: b.badge || '',
+      displayOrder: b.display_order ?? b.displayOrder ?? 0,
+      isActive: Boolean(b.is_active ?? b.isActive ?? 1)
+    });
+    setBannerFormMsg({ type: null, text: '' });
+    setBannerModalOpen(true);
+  };
+
+  const handleBannerImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+    if (!validTypes.includes(file.type)) {
+      setBannerFormMsg({ type: 'error', text: 'Please select a valid image file (JPEG, PNG, WEBP, AVIF).' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setBannerFormMsg({ type: 'error', text: 'Image file size exceeds 10MB limit.' });
+      return;
+    }
+
+    setBannerUploadingImg(true);
+    setBannerFormMsg({ type: null, text: '' });
+    try {
+      const res = await api.uploadImage(file, 'admin');
+      if (res?.success && res.url) {
+        setBannerForm((prev) => ({
+          ...prev,
+          imageUrl: res.url,
+          imagePublicId: res.public_id || res.publicId || ''
+        }));
+        setBannerFormMsg({ type: 'success', text: 'Image uploaded to Cloudinary CDN successfully!' });
+      } else {
+        setBannerFormMsg({ type: 'error', text: res?.error || 'Failed to upload image' });
+      }
+    } catch (err) {
+      setBannerFormMsg({ type: 'error', text: err.message || 'Image upload failed' });
+    } finally {
+      setBannerUploadingImg(false);
+    }
+  };
+
+  const handleSaveBanner = async (e) => {
+    e.preventDefault();
+    if (!bannerForm.title.trim()) {
+      setBannerFormMsg({ type: 'error', text: 'Banner title is required.' });
+      return;
+    }
+    if (!bannerForm.imageUrl.trim()) {
+      setBannerFormMsg({ type: 'error', text: 'Banner image is required (upload or enter URL).' });
+      return;
+    }
+
+    setBannerSaving(true);
+    setBannerFormMsg({ type: null, text: '' });
+    try {
+      const payload = {
+        title: bannerForm.title.trim(),
+        subtitle: bannerForm.subtitle.trim(),
+        imageUrl: bannerForm.imageUrl.trim(),
+        imagePublicId: bannerForm.imagePublicId.trim() || null,
+        ctaText: bannerForm.ctaText.trim() || 'Shop Now',
+        ctaLink: bannerForm.ctaLink.trim() || '/shop',
+        secondaryCtaText: bannerForm.secondaryCtaText.trim() || null,
+        secondaryCtaLink: bannerForm.secondaryCtaLink.trim() || null,
+        tag: bannerForm.tag.trim() || 'Direct Farm Harvest',
+        badge: bannerForm.badge.trim(),
+        displayOrder: parseInt(bannerForm.displayOrder, 10) || 0,
+        isActive: Boolean(bannerForm.isActive)
+      };
+
+      if (editingBannerId) {
+        const res = await api.updateBanner(editingBannerId, payload);
+        if (!res?.success) throw new Error(res?.error || 'Failed to update banner');
+      } else {
+        const res = await api.createBanner(payload);
+        if (!res?.success) throw new Error(res?.error || 'Failed to create banner');
+      }
+
+      setBannerModalOpen(false);
+      setAttempt((n) => n + 1);
+    } catch (err) {
+      setBannerFormMsg({ type: 'error', text: err.message || 'Failed to save banner' });
+    } finally {
+      setBannerSaving(false);
+    }
+  };
+
+  const handleToggleBannerStatus = async (banner) => {
+    const currentActive = Boolean(banner.is_active ?? banner.isActive ?? 1);
+    await runRowAction(banner.id, async () => {
+      const res = await api.updateBanner(banner.id, { isActive: !currentActive });
+      if (!res?.success) throw new Error(res?.error || 'Failed to toggle banner status');
+    }, 'Failed to toggle banner status');
+  };
+
+  const handleMoveBanner = async (banner, direction) => {
+    const sorted = [...(state.banners || [])].sort((a, b) => (a.display_order ?? a.displayOrder ?? 0) - (b.display_order ?? b.displayOrder ?? 0));
+    const currentIndex = sorted.findIndex((b) => b.id === banner.id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+    const temp = sorted[currentIndex];
+    sorted[currentIndex] = sorted[targetIndex];
+    sorted[targetIndex] = temp;
+
+    const orderPayload = sorted.map((b, idx) => ({
+      id: b.id,
+      displayOrder: idx
+    }));
+
+    await runRowAction(banner.id, async () => {
+      const res = await api.reorderBanners(orderPayload);
+      if (!res?.success) throw new Error(res?.error || 'Failed to reorder banners');
+    }, 'Failed to reorder banners');
+  };
+
+  const handleConfirmDeleteBanner = async () => {
+    if (!bannerToDelete) return;
+    setBannerDeleteLoading(true);
+    try {
+      const res = await api.deleteBanner(bannerToDelete.id);
+      if (res?.success) {
+        setBannerToDelete(null);
+        setAttempt((n) => n + 1);
+      } else {
+        alert(res?.error || 'Failed to delete banner');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete banner');
+    } finally {
+      setBannerDeleteLoading(false);
+    }
+  };
+
   /* ---------------- FILTERING LOGIC ---------------- */
+
+  // Homepage Banners
+  const filteredBanners = (state.banners || [])
+    .filter((b) => {
+      const query = bannerSearch.toLowerCase();
+      const matchesSearch = !bannerSearch ||
+        (b.title || '').toLowerCase().includes(query) ||
+        (b.subtitle || '').toLowerCase().includes(query) ||
+        (b.tag || '').toLowerCase().includes(query) ||
+        (b.badge || '').toLowerCase().includes(query);
+      const active = Boolean(b.is_active ?? b.isActive ?? 1);
+      const matchesStatus =
+        bannerStatusFilter === 'all' ||
+        (bannerStatusFilter === 'active' && active) ||
+        (bannerStatusFilter === 'inactive' && !active);
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => (a.display_order ?? a.displayOrder ?? 0) - (b.display_order ?? b.displayOrder ?? 0));
 
   // Categories
   const filteredCategories = state.categories.filter((cat) => {
@@ -671,6 +889,7 @@ export default function AdminDashboard({ onLogout }) {
             ['vendors', 'Vendors', state.vendors.length],
             ['products', 'Products', state.products.length],
             ['videos', 'Video Reviews', (state.videos || []).length],
+            ['banners', 'Homepage Banners', (state.banners || []).length],
             ['customers', 'Customers', state.users.length],
             ['payment', 'Payment Gateway', null]
           ].map(([key, label, count]) => (
@@ -730,6 +949,7 @@ export default function AdminDashboard({ onLogout }) {
               {activeTab === 'products' && 'Product approvals'}
               {activeTab === 'customers' && 'Customer accounts'}
               {activeTab === 'videos' && 'Homepage Shorts & Video Reviews'}
+              {activeTab === 'banners' && 'Homepage Banner Management'}
               {activeTab === 'payment' && 'Payment Gateway Configuration'}
             </h1>
           </div>
@@ -1951,6 +2171,231 @@ export default function AdminDashboard({ onLogout }) {
               </div>
             )}
 
+            {/* ---------------- HOMEPAGE BANNERS TAB ---------------- */}
+            {activeTab === 'banners' && (
+              <div className="admin-banners-section">
+                <div className="vendors-header">
+                  <div>
+                    <h2>Homepage Promotional Banners</h2>
+                    <p>Manage dynamic campaign hero banners displayed on the customer storefront carousel</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-sidebar-add-btn"
+                    style={{ background: '#0e5c4a', color: 'white', borderRadius: 8, padding: '10px 18px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    onClick={handleOpenAddBanner}
+                  >
+                    <Plus size={16} /> Add New Banner
+                  </button>
+                </div>
+
+                {/* Metrics Grid */}
+                <div className="admin-banners-metrics-grid">
+                  <div className="admin-banner-metric-card">
+                    <span className="admin-banner-metric-label">Total Banners</span>
+                    <div className="admin-banner-metric-value-wrap">
+                      <span className="admin-banner-metric-value">{(state.banners || []).length}</span>
+                      <span className="admin-banner-metric-badge info">In Database</span>
+                    </div>
+                  </div>
+
+                  <div className="admin-banner-metric-card">
+                    <span className="admin-banner-metric-label">Active on Storefront</span>
+                    <div className="admin-banner-metric-value-wrap">
+                      <span className="admin-banner-metric-value" style={{ color: '#059669' }}>
+                        {(state.banners || []).filter((b) => Boolean(b.is_active ?? b.isActive ?? 1)).length}
+                      </span>
+                      <span className="admin-banner-metric-badge">
+                        Recommended: 3–4 banners
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="admin-banner-metric-card">
+                    <span className="admin-banner-metric-label">Inactive / Drafts</span>
+                    <div className="admin-banner-metric-value-wrap">
+                      <span className="admin-banner-metric-value" style={{ color: '#94a3b8' }}>
+                        {(state.banners || []).filter((b) => !(b.is_active ?? b.isActive ?? 1)).length}
+                      </span>
+                      <span className="admin-banner-metric-badge info">Hidden from Store</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="admin-filter-bar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    className="admin-filter-input"
+                    style={{ flex: '1 1 240px' }}
+                    placeholder="Search banners by title, subtitle, tag, or badge..."
+                    value={bannerSearch}
+                    onChange={(e) => setBannerSearch(e.target.value)}
+                  />
+                  <select
+                    className="admin-filter-select"
+                    value={bannerStatusFilter}
+                    onChange={(e) => setBannerStatusFilter(e.target.value)}
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active Only</option>
+                    <option value="inactive">Inactive Only</option>
+                  </select>
+                </div>
+
+                {/* Banner Cards List */}
+                <div className="admin-banner-cards-grid">
+                  {filteredBanners.map((banner, index) => {
+                    const isActive = Boolean(banner.is_active ?? banner.isActive ?? 1);
+                    return (
+                      <div
+                        key={banner.id}
+                        className={`admin-banner-card ${!isActive ? 'inactive' : ''}`}
+                      >
+                        <div className="admin-banner-thumbnail-wrap">
+                          <img
+                            src={banner.image_url || banner.imageUrl}
+                            alt={banner.title}
+                            className="admin-banner-thumbnail"
+                            loading="lazy"
+                          />
+                          <div className="admin-banner-thumbnail-order">
+                            #{index + 1} • Order: {banner.display_order ?? banner.displayOrder ?? 0}
+                          </div>
+                        </div>
+
+                        <div className="admin-banner-details">
+                          <div className="admin-banner-header-row">
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                {banner.tag && (
+                                  <span className="admin-banner-tag-pill">{banner.tag}</span>
+                                )}
+                                {isActive ? (
+                                  <span className="status-badge status-approved" style={{ fontSize: 11, padding: '2px 8px' }}>
+                                    <CheckCircle size={12} style={{ marginRight: 4 }} /> Active
+                                  </span>
+                                ) : (
+                                  <span className="status-badge status-rejected" style={{ fontSize: 11, padding: '2px 8px' }}>
+                                    <XCircle size={12} style={{ marginRight: 4 }} /> Inactive
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="admin-banner-title">{banner.title}</h3>
+                              {banner.subtitle && (
+                                <p className="admin-banner-subtitle">{banner.subtitle}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {banner.badge && (
+                            <div className="admin-banner-tags-row">
+                              <span className="admin-banner-badge-pill">
+                                <Sparkles size={12} style={{ marginRight: 4, display: 'inline' }} />
+                                {banner.badge}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="admin-banner-cta-row">
+                            <span className="admin-banner-cta-item">
+                              Primary CTA: <strong>{banner.cta_text || banner.ctaText || 'Shop Now'}</strong> ({banner.cta_link || banner.ctaLink || '/shop'})
+                            </span>
+                            {(banner.secondary_cta_text || banner.secondaryCtaText) && (
+                              <span className="admin-banner-cta-item">
+                                Secondary CTA: <strong>{banner.secondary_cta_text || banner.secondaryCtaText}</strong> ({banner.secondary_cta_link || banner.secondaryCtaLink || '/shop'})
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="admin-banner-actions-bar">
+                            <div className="admin-banner-reorder-group">
+                              <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginRight: 4 }}>
+                                Reorder:
+                              </span>
+                              <button
+                                type="button"
+                                className="admin-banner-reorder-btn"
+                                title="Move Banner Up"
+                                disabled={index === 0 || busyId === banner.id}
+                                onClick={() => handleMoveBanner(banner, 'up')}
+                              >
+                                <ArrowUp size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-banner-reorder-btn"
+                                title="Move Banner Down"
+                                disabled={index === filteredBanners.length - 1 || busyId === banner.id}
+                                onClick={() => handleMoveBanner(banner, 'down')}
+                              >
+                                <ArrowDown size={14} />
+                              </button>
+                            </div>
+
+                            <div className="admin-banner-button-group">
+                              <button
+                                type="button"
+                                className={isActive ? 'reject-btn' : 'approve-btn'}
+                                style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                disabled={busyId === banner.id}
+                                onClick={() => handleToggleBannerStatus(banner)}
+                              >
+                                {busyId === banner.id ? (
+                                  <Loader2 size={13} className="spin" />
+                                ) : isActive ? (
+                                  <EyeOff size={13} />
+                                ) : (
+                                  <Eye size={13} />
+                                )}
+                                <span>{isActive ? 'Deactivate' : 'Activate'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn-secondary-sm"
+                                style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                onClick={() => handleOpenEditBanner(banner)}
+                              >
+                                <Edit2 size={13} /> Edit
+                              </button>
+
+                              <button
+                                type="button"
+                                className="reject-btn"
+                                style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center' }}
+                                onClick={() => setBannerToDelete(banner)}
+                                title={`Delete banner "${banner.title}"`}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {filteredBanners.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '48px 20px', background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', color: '#64748b' }}>
+                      <ImageIcon size={36} style={{ margin: '0 auto 12px auto', color: '#94a3b8' }} />
+                      <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#334155' }}>No homepage banners found</h4>
+                      <p style={{ margin: '6px 0 16px 0', fontSize: 13.5 }}>
+                        {bannerSearch || bannerStatusFilter !== 'all' ? 'Try adjusting your search or filters.' : 'Add your first promotional banner to showcase on the storefront carousel.'}
+                      </p>
+                      <button
+                        type="button"
+                        className="approve-btn"
+                        onClick={handleOpenAddBanner}
+                      >
+                        <Plus size={14} /> Add First Banner
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* ---------------- 7. CUSTOMERS TAB ---------------- */}
             {activeTab === 'customers' && (
               <div className="admin-vendors-section">
@@ -2461,6 +2906,362 @@ export default function AdminDashboard({ onLogout }) {
                     ) : (
                       <>
                         <Trash2 size={15} /> Confirm Remove / Deactivate
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- ADD / EDIT BANNER MODAL ---------------- */}
+        {bannerModalOpen && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-banner-modal-title">
+            <div className="admin-modal-backdrop" onClick={() => !bannerSaving && setBannerModalOpen(false)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 680 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge">
+                    <Sparkles size={14} /> Homepage Merchandising
+                  </div>
+                  <h2 id="admin-banner-modal-title">
+                    {editingBannerId ? 'Edit Promotional Banner' : 'Create New Promotional Banner'}
+                  </h2>
+                  <p>Configure banner creative, typography, tags, and click-through destination</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  disabled={bannerSaving}
+                  onClick={() => setBannerModalOpen(false)}
+                  aria-label="Close dialog"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="admin-modal-body" style={{ padding: '20px 24px', maxHeight: '80vh', overflowY: 'auto' }}>
+                {bannerFormMsg.text && (
+                  <div className={`admin-modal-alert ${bannerFormMsg.type}`}>
+                    {bannerFormMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                    <span>{bannerFormMsg.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveBanner} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Recommended Aspect Ratio Guidance */}
+                  <div className="admin-banner-aspect-notice">
+                    <ImageIcon size={18} style={{ flexShrink: 0 }} />
+                    <div>
+                      <strong>Recommended Dimensions:</strong> 1600 × 380 px (~4.2:1 aspect ratio). High-resolution image (JPEG, WebP, PNG) with centered subject for responsive mobile cropping.
+                    </div>
+                  </div>
+
+                  {/* Image Upload / URL Section */}
+                  <div className="cat-form-field">
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                      Banner Image *
+                    </label>
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                      <input
+                        type="file"
+                        ref={bannerFileInputRef}
+                        accept="image/jpeg,image/png,image/webp,image/avif"
+                        style={{ display: 'none' }}
+                        onChange={handleBannerImageUpload}
+                        disabled={bannerUploadingImg}
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary-sm"
+                        disabled={bannerUploadingImg}
+                        onClick={() => bannerFileInputRef.current?.click()}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px' }}
+                      >
+                        {bannerUploadingImg ? (
+                          <>
+                            <Loader2 size={15} className="spin" /> Uploading to Cloudinary...
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud size={15} /> Upload Image File
+                          </>
+                        )}
+                      </button>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>or provide direct image URL below:</span>
+                    </div>
+
+                    <input
+                      type="url"
+                      className="admin-filter-input"
+                      style={{ width: '100%' }}
+                      placeholder="https://images.unsplash.com/... or https://res.cloudinary.com/..."
+                      value={bannerForm.imageUrl}
+                      onChange={(e) => setBannerForm({ ...bannerForm, imageUrl: e.target.value })}
+                      required
+                    />
+
+                    {/* Live Image Preview */}
+                    {bannerForm.imageUrl && (
+                      <div className="admin-banner-preview-box">
+                        <img
+                          src={bannerForm.imageUrl}
+                          alt="Banner Preview"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Title & Subtitle */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Banner Title *
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="e.g. Pure Organic Produce & Farm Harvests"
+                        value={bannerForm.title}
+                        onChange={(e) => setBannerForm({ ...bannerForm, title: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Subtitle / Description
+                      </label>
+                      <textarea
+                        className="admin-filter-input"
+                        rows={2}
+                        style={{ width: '100%', resize: 'vertical' }}
+                        placeholder="e.g. Residue-free vegetables, cold-pressed oils & raw forest honey directly from certified local farmers."
+                        value={bannerForm.subtitle}
+                        onChange={(e) => setBannerForm({ ...bannerForm, subtitle: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Tag and Badge */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Category Tag Pill
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="e.g. Direct Farm Harvest"
+                        value={bannerForm.tag}
+                        onChange={(e) => setBannerForm({ ...bannerForm, tag: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Special Offer Badge
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="e.g. 100% Certified Organic • Free Delivery over ₹499"
+                        value={bannerForm.badge}
+                        onChange={(e) => setBannerForm({ ...bannerForm, badge: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Primary CTA */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Primary Button Text *
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="e.g. Shop Now"
+                        value={bannerForm.ctaText}
+                        onChange={(e) => setBannerForm({ ...bannerForm, ctaText: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Primary Destination URL / Route *
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="e.g. /shop or /products?category=produce"
+                        value={bannerForm.ctaLink}
+                        onChange={(e) => setBannerForm({ ...bannerForm, ctaLink: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Secondary CTA */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Secondary Button Text (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="e.g. Explore Deals"
+                        value={bannerForm.secondaryCtaText}
+                        onChange={(e) => setBannerForm({ ...bannerForm, secondaryCtaText: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Secondary Destination URL (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="e.g. /collection/deals"
+                        value={bannerForm.secondaryCtaLink}
+                        onChange={(e) => setBannerForm({ ...bannerForm, secondaryCtaLink: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Display Order and Active Status */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'center' }}>
+                    <div className="cat-form-field">
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Display Order (Lower appears first)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={bannerForm.displayOrder}
+                        onChange={(e) => setBannerForm({ ...bannerForm, displayOrder: e.target.value })}
+                      />
+                    </div>
+
+                    <div style={{ paddingTop: 20 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, color: '#1e293b' }}>
+                        <input
+                          type="checkbox"
+                          checked={bannerForm.isActive}
+                          onChange={(e) => setBannerForm({ ...bannerForm, isActive: e.target.checked })}
+                          style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                        />
+                        <span>Active on Storefront Carousel</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="admin-modal-footer-actions" style={{ marginTop: 24 }}>
+                    <button
+                      type="button"
+                      className="admin-modal-btn cancel"
+                      disabled={bannerSaving}
+                      onClick={() => setBannerModalOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="admin-modal-btn danger"
+                      style={{ background: '#0e5c4a' }}
+                      disabled={bannerSaving || bannerUploadingImg}
+                    >
+                      {bannerSaving ? (
+                        <>
+                          <Loader2 size={15} className="spin" /> Saving Banner...
+                        </>
+                      ) : (
+                        <>
+                          <Save size={15} /> {editingBannerId ? 'Update Banner' : 'Create Banner'}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- DELETE BANNER MODAL ---------------- */}
+        {bannerToDelete && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-delete-banner-title">
+            <div className="admin-modal-backdrop" onClick={() => !bannerDeleteLoading && setBannerToDelete(null)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 500 }}>
+              <div className="admin-modal-header" style={{ borderBottomColor: '#fee2e2' }}>
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge" style={{ color: '#dc2626' }}>
+                    <AlertTriangle size={14} /> Catalog Merchandising
+                  </div>
+                  <h2 id="admin-delete-banner-title" style={{ color: '#991b1b' }}>
+                    Delete Promotional Banner
+                  </h2>
+                  <p>Are you sure you want to remove banner &quot;{bannerToDelete.title}&quot;?</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  disabled={bannerDeleteLoading}
+                  onClick={() => setBannerToDelete(null)}
+                  aria-label="Close dialog"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="admin-modal-body" style={{ padding: '20px 24px' }}>
+                <div className="admin-danger-notice">
+                  <h4>Consequences:</h4>
+                  <ul>
+                    <li>This banner will immediately cease displaying on the homepage carousel.</li>
+                    <li>If hosted on Cloudinary, the associated cloud asset will be permanently removed.</li>
+                    <li>This action cannot be undone.</li>
+                  </ul>
+                </div>
+
+                <div className="admin-modal-footer-actions">
+                  <button
+                    type="button"
+                    className="admin-modal-btn cancel"
+                    disabled={bannerDeleteLoading}
+                    onClick={() => setBannerToDelete(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-modal-btn danger"
+                    disabled={bannerDeleteLoading}
+                    onClick={handleConfirmDeleteBanner}
+                  >
+                    {bannerDeleteLoading ? (
+                      <>
+                        <Loader2 size={15} className="spin" /> Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 size={15} /> Confirm Delete
                       </>
                     )}
                   </button>

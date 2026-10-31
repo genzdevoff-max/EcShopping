@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Globe, Phone, MapPin, Check, ArrowRight } from 'lucide-react';
+import { Globe, Phone, MapPin, Check, ArrowRight, Mail } from 'lucide-react';
 import brandLogo from '../assets/logo/without-bg-logo.png';
 import { useStorefrontCategories } from '../data/storefront';
 import { socialLinks } from '../data/content';
@@ -114,6 +114,13 @@ export default function Footer() {
                 <Phone size={15} className="footer-contact-icon" aria-hidden="true" />
                 <span className="footer-cell-label">Cell:</span>
                 <a href="tel:9786070708" className="footer-cell-link">9786070708</a>
+              </div>
+              <div className="footer-contact-email">
+                <Mail size={15} className="footer-contact-icon" aria-hidden="true" />
+                <span className="footer-email-label">Email:</span>
+                <a href="mailto:econnectshopping@gmail.com" className="footer-email-link" aria-label="Email EcShopping at econnectshopping@gmail.com">
+                  econnectshopping@gmail.com
+                </a>
               </div>
             </div>
 

@@ -180,6 +180,14 @@ export const api = {
   updateVideo: (id, updates) => request(`/api/videos/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role: 'admin' }),
   deleteVideo: (id) => request(`/api/videos/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
 
+  /* Homepage Banners (Admin & Public) */
+  getBanners: () => request('/api/banners'),
+  getAdminBanners: () => request('/api/admin/banners', { role: 'admin' }),
+  createBanner: (bannerData) => request('/api/admin/banners', { method: 'POST', body: bannerData, role: 'admin' }),
+  updateBanner: (id, bannerData) => request(`/api/admin/banners/${encodeURIComponent(id)}`, { method: 'PUT', body: bannerData, role: 'admin' }),
+  deleteBanner: (id) => request(`/api/admin/banners/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
+  reorderBanners: (order) => request('/api/admin/banners/order', { method: 'PUT', body: { order }, role: 'admin' }),
+
   /* Upload (vendor or admin) */
   uploadImage: (file, role = 'vendor') => api.upload(file, role),
   uploadVideo: (file, role = 'vendor', onProgress = null) => api.uploadVideoFile(file, role, onProgress),

@@ -72,7 +72,7 @@ export const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c)
  * Always resolves to the official configured Admin account.
  */
 export const getAdminSender = () => {
-  const adminEmail = process.env.SMTP_EMAIL || process.env.ADMIN_EMAIL || 'support@ecshopping.in';
+  const adminEmail = process.env.SMTP_EMAIL || process.env.ADMIN_EMAIL || 'econnectshopping@gmail.com';
   const brandName = process.env.SENDER_NAME || 'EcShopping';
   const displayName = brandName.toLowerCase().includes('admin')
     ? brandName
@@ -91,14 +91,14 @@ export const getAdminSender = () => {
  * Resolves the Admin recipient for administrative notifications (e.g. new vendor product submission).
  */
 export const getAdminNotificationRecipient = () => {
-  return process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL || 'admin@ecshopping.in';
+  return process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL || 'econnectshopping@gmail.com';
 };
 
 /**
  * Resolves the official customer support reply-to email.
  */
 export const getSupportReplyTo = () => {
-  return process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL || 'support@ecshopping.in';
+  return process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL || 'econnectshopping@gmail.com';
 };
 
 /**

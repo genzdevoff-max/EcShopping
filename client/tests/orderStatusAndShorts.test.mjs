@@ -4,6 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CLIENT_ROOT = path.resolve(__dirname, '..');
+
 import {
   ORDER_STATUS_FLOW,
   ORDER_STATUS_LABELS,
@@ -84,31 +88,31 @@ test('statusBadgeClass and statusLabel handle canonical and case-insensitive sta
 });
 
 test('App.jsx mounts ScrollToTop inside Router', () => {
-  const appSrc = fs.readFileSync('src/App.jsx', 'utf8');
+  const appSrc = fs.readFileSync(path.join(CLIENT_ROOT, 'src/App.jsx'), 'utf8');
   assert.ok(appSrc.includes('import ScrollToTop from \'./components/ui/ScrollToTop\';'));
   assert.ok(appSrc.includes('<ScrollToTop />'));
 });
 
 test('Checkout.jsx integrates saved delivery addresses', () => {
-  const checkoutSrc = fs.readFileSync('src/pages/Checkout.jsx', 'utf8');
+  const checkoutSrc = fs.readFileSync(path.join(CLIENT_ROOT, 'src/pages/Checkout.jsx'), 'utf8');
   assert.ok(checkoutSrc.includes('api.getUserAddresses()'));
   assert.ok(checkoutSrc.includes('savedAddresses'));
   assert.ok(checkoutSrc.includes('co-saved-addresses-grid'));
 });
 
 test('ShortsAndVideos component is mounted on Home page and backed by API', () => {
-  const homeSrc = fs.readFileSync('src/pages/Home.jsx', 'utf8');
+  const homeSrc = fs.readFileSync(path.join(CLIENT_ROOT, 'src/pages/Home.jsx'), 'utf8');
   assert.ok(homeSrc.includes('import ShortsAndVideos from \'../components/home/ShortsAndVideos\';'));
   assert.ok(homeSrc.includes('<ShortsAndVideos />'));
 
-  const apiSrc = fs.readFileSync('src/utils/api.js', 'utf8');
+  const apiSrc = fs.readFileSync(path.join(CLIENT_ROOT, 'src/utils/api.js'), 'utf8');
   assert.ok(apiSrc.includes('getPublicVideos: () => request(\'/api/videos/public\')'));
   assert.ok(apiSrc.includes('getVideos: () => request(\'/api/videos\', { role: \'admin\' })'));
   assert.ok(apiSrc.includes('createVideo: (data) => request(\'/api/videos\''));
 });
 
 test('OrderDetails and Orders prevent re-fetch loop and provide order cancellation', () => {
-  const odSrc = fs.readFileSync('src/pages/OrderDetails.jsx', 'utf8');
+  const odSrc = fs.readFileSync(path.join(CLIENT_ROOT, 'src/pages/OrderDetails.jsx'), 'utf8');
   // Loop prevention: effect dependency array MUST NOT depend on `order`
   assert.ok(!odSrc.includes('[orderId, loggedInCustomer, order]'), 'OrderDetails effect must not depend on mutable order');
   assert.ok(odSrc.includes('[orderId, loggedInCustomer?.email]'), 'OrderDetails effect must depend only on identity keys');
@@ -117,7 +121,7 @@ test('OrderDetails and Orders prevent re-fetch loop and provide order cancellati
   assert.ok(odSrc.includes('api.cancelCustomerOrder'), 'OrderDetails must call api.cancelCustomerOrder');
   assert.ok(odSrc.includes('Cancel Order'), 'OrderDetails must display Cancel Order button');
 
-  const ordersSrc = fs.readFileSync('src/pages/Orders.jsx', 'utf8');
+  const ordersSrc = fs.readFileSync(path.join(CLIENT_ROOT, 'src/pages/Orders.jsx'), 'utf8');
   assert.ok(ordersSrc.includes('handleOpenCancelModal'), 'Orders must allow opening cancellation modal');
   assert.ok(ordersSrc.includes('api.cancelCustomerOrder'), 'Orders must call api.cancelCustomerOrder');
   assert.ok(ordersSrc.includes('btn-cancel-order'), 'Orders must have cancel button on cancellable order cards');

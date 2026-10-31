@@ -25,9 +25,9 @@ test('Footer.jsx displays only required contact details with readable address li
   assert.ok(footerJsx.includes('href="tel:9786070708"'), 'Must provide tel: link for phone number');
   assert.ok(footerJsx.includes('9786070708'), 'Must display 9786070708');
 
-  // Must NOT have invented placeholder email in the contact block
+  // Must include the official EcShopping Admin email mailto link
   assert.ok(!footerJsx.includes('support@ecshopping.example'), 'Must not display invented email address');
-  assert.ok(!footerJsx.includes('mailto:'), 'Must not display unprovided mailto links');
+  assert.ok(footerJsx.includes('mailto:econnectshopping@gmail.com'), 'Must display official mailto link for econnectshopping@gmail.com');
 });
 
 test('Footer.css defines clean typography, readable address lines, and accessible touch targets', () => {

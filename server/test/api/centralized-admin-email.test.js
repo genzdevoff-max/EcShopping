@@ -8,12 +8,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 process.env.NODE_ENV = 'test';
-process.env.ADMIN_EMAIL = 'rameshthooyavan@gmail.com';
-process.env.SMTP_EMAIL = 'genzdevoff@gmail.com';
+process.env.ADMIN_EMAIL = 'econnectshopping@gmail.com';
+process.env.SMTP_EMAIL = 'econnectshopping@gmail.com';
+process.env.SMTP_FROM = 'EcShopping <econnectshopping@gmail.com>';
 process.env.SMTP_PASSWORD = 'test-smtp-password';
 process.env.SENDER_NAME = 'EcShopping';
 process.env.SUPPORT_EMAIL = 'support@ecshopping.in';
-process.env.ADMIN_NOTIFICATION_EMAIL = 'rameshthooyavan@gmail.com';
+process.env.ADMIN_NOTIFICATION_EMAIL = 'econnectshopping@gmail.com';
 process.env.FRONTEND_URL = 'https://ecshopping.in';
 
 const {

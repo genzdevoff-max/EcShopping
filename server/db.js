@@ -369,6 +369,46 @@ export const initDatabase = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Additive table: Homepage Banners (Admin Homepage Banner Management)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS homepage_banners (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        subtitle TEXT DEFAULT NULL,
+        image_url VARCHAR(1024) NOT NULL,
+        image_public_id VARCHAR(255) DEFAULT NULL,
+        cta_text VARCHAR(100) DEFAULT 'Shop Now',
+        cta_link VARCHAR(255) DEFAULT '/shop',
+        secondary_cta_text VARCHAR(100) DEFAULT NULL,
+        secondary_cta_link VARCHAR(255) DEFAULT NULL,
+        tag VARCHAR(100) DEFAULT NULL,
+        badge VARCHAR(255) DEFAULT NULL,
+        display_order INT DEFAULT 0,
+        is_active TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_banners_order (display_order),
+        INDEX idx_banners_active_order (is_active, display_order)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Seed default promotional banners if table is empty
+    try {
+      const [bCount] = await connection.query('SELECT COUNT(*) as count FROM homepage_banners');
+      if (bCount[0].count === 0) {
+        await connection.query(`
+          INSERT INTO homepage_banners (id, title, subtitle, image_url, cta_text, cta_link, secondary_cta_text, secondary_cta_link, tag, badge, display_order, is_active)
+          VALUES
+            ('banner-harvest-fresh', 'Pure Organic Produce & Farm Harvests', 'Residue-free vegetables, cold-pressed oils & raw forest honey directly from certified local farmers.', 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1600&q=80', 'Shop Fresh Harvest', '/shop', 'Explore Deals', '/collection/deals', 'Direct Farm Harvest', '100% Certified Organic • Free Delivery over ₹499', 0, 1),
+            ('banner-wood-pressed-oils', 'Authentic Wood-Pressed Oils & Pure Desi Ghee', 'Stone-ground sesame, groundnut, and coconut oils crafted by artisanal Tamil Nadu producers.', 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=1600&q=80', 'Shop Pantry Staples', '/category/pantry-staples', 'Browse Catalog', '/shop', 'Traditional Cold-Pressed', 'Zero Chemical Refining • Pure Nutrient Retention', 1, 1),
+            ('banner-weekend-deals', 'Save on Daily Essentials & Farm Bundles', 'Enjoy verified seller discounts on heritage rice, organic country eggs, and pure palm jaggery.', 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=1600&q=80', 'View Today’s Deals', '/collection/deals', 'All Products', '/shop', 'Weekly Farmer Special', 'Limited Stock • Direct Farmer Support', 2, 1)
+        `);
+        console.log('✅ Seeded default promotional banners into homepage_banners table');
+      }
+    } catch {
+      /* ignore seed failure */
+    }
+
     // Additive migration: performance indexes (products status+category, orders customer+status)
     try {
       await connection.query('CREATE INDEX idx_products_status_category ON products (status, category)');

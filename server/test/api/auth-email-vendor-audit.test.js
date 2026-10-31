@@ -11,8 +11,9 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_secret_for_unit_tests_only_32_chars_long';
-process.env.ADMIN_EMAIL = 'rameshthooyavan@gmail.com';
-process.env.SMTP_EMAIL = 'genzdevoff@gmail.com';
+process.env.ADMIN_EMAIL = 'econnectshopping@gmail.com';
+process.env.SMTP_EMAIL = 'econnectshopping@gmail.com';
+process.env.SMTP_FROM = 'EcShopping <econnectshopping@gmail.com>';
 process.env.SMTP_PASSWORD = 'test-smtp-password';
 process.env.SENDER_NAME = 'EcShopping Test';
 process.env.FRONTEND_URL = 'https://ecshopping.in';

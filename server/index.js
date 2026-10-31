@@ -3622,6 +3622,255 @@ app.delete('/api/videos/:id', requireAuth('admin'), async (req, res) => {
   }
 });
 
+// ============================================================
+// HOMEPAGE BANNER MANAGEMENT (Admin & Public)
+// ============================================================
+
+// Public active banners for homepage carousel
+app.get('/api/banners', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, title, subtitle, image_url AS image_url, image_public_id AS image_public_id,
+              cta_text, cta_link, secondary_cta_text, secondary_cta_link,
+              tag, badge, display_order, is_active, created_at, updated_at
+       FROM homepage_banners
+       WHERE is_active = 1
+       ORDER BY display_order ASC, created_at ASC`
+    );
+    return res.status(200).json({ success: true, banners: rows });
+  } catch (err) {
+    console.error('❌ Get public banners error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to load banners' });
+  }
+});
+
+// Admin list all banners (active + inactive)
+app.get('/api/admin/banners', requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, title, subtitle, image_url, image_public_id,
+              cta_text, cta_link, secondary_cta_text, secondary_cta_link,
+              tag, badge, display_order, is_active, created_at, updated_at
+       FROM homepage_banners
+       ORDER BY display_order ASC, created_at ASC`
+    );
+    return res.status(200).json({ success: true, banners: rows });
+  } catch (err) {
+    console.error('❌ Admin get banners error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to load banners' });
+  }
+});
+
+// Admin create banner
+app.post('/api/admin/banners', requireAdmin, async (req, res) => {
+  const {
+    title,
+    subtitle,
+    image_url,
+    imageUrl,
+    image_public_id,
+    imagePublicId,
+    cta_text,
+    ctaText,
+    cta_link,
+    ctaLink,
+    secondary_cta_text,
+    secondaryCtaText,
+    secondary_cta_link,
+    secondaryCtaLink,
+    tag,
+    badge,
+    display_order,
+    displayOrder,
+    is_active,
+    isActive
+  } = req.body || {};
+
+  const cleanTitle = String(title || '').trim();
+  const cleanImgUrl = String(image_url || imageUrl || '').trim();
+
+  if (!cleanTitle || cleanTitle.length < 2) {
+    return res.status(400).json({ success: false, error: 'Banner title must be at least 2 characters long' });
+  }
+  if (!cleanImgUrl) {
+    return res.status(400).json({ success: false, error: 'Banner image URL is required' });
+  }
+
+  const id = 'banner_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+  const cleanSubtitle = subtitle ? String(subtitle).trim() : '';
+  const cleanTag = tag ? String(tag).trim() : 'Featured';
+  const cleanBadge = badge ? String(badge).trim() : '';
+  const cleanCtaText = cta_text !== undefined ? String(cta_text).trim() : (ctaText !== undefined ? String(ctaText).trim() : 'Shop Now');
+  const cleanCtaLink = cta_link !== undefined ? String(cta_link).trim() : (ctaLink !== undefined ? String(ctaLink).trim() : '/shop');
+  const cleanSecCtaText = secondary_cta_text !== undefined ? String(secondary_cta_text).trim() : (secondaryCtaText !== undefined ? String(secondaryCtaText).trim() : null);
+  const cleanSecCtaLink = secondary_cta_link !== undefined ? String(secondary_cta_link).trim() : (secondaryCtaLink !== undefined ? String(secondaryCtaLink).trim() : null);
+  const cleanPublicId = image_public_id || imagePublicId || null;
+  const activeVal = is_active !== undefined ? (is_active ? 1 : 0) : (isActive !== undefined ? (isActive ? 1 : 0) : 1);
+  const orderVal = display_order !== undefined ? parseInt(display_order, 10) : (displayOrder !== undefined ? parseInt(displayOrder, 10) : 0);
+
+  try {
+    await pool.query(
+      `INSERT INTO homepage_banners
+        (id, title, subtitle, image_url, image_public_id, cta_text, cta_link, secondary_cta_text, secondary_cta_link, tag, badge, display_order, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        cleanTitle,
+        cleanSubtitle,
+        cleanImgUrl,
+        cleanPublicId,
+        cleanCtaText,
+        cleanCtaLink,
+        cleanSecCtaText,
+        cleanSecCtaLink,
+        cleanTag,
+        cleanBadge,
+        isNaN(orderVal) ? 0 : orderVal,
+        activeVal
+      ]
+    );
+
+    const [rows] = await pool.query('SELECT * FROM homepage_banners WHERE id = ?', [id]);
+    console.log(`✅ [TiDB] Banner created: ${cleanTitle} (ID: ${id})`);
+    return res.status(201).json({ success: true, banner: rows[0] });
+  } catch (err) {
+    console.error('❌ Create banner error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to save banner' });
+  }
+});
+
+// Admin reorder banners
+app.put('/api/admin/banners/order', requireAdmin, async (req, res) => {
+  const { order } = req.body || {};
+  if (!Array.isArray(order) || order.length === 0) {
+    return res.status(400).json({ success: false, error: 'Order array of banner IDs is required' });
+  }
+
+  try {
+    for (let i = 0; i < order.length; i++) {
+      const bannerId = typeof order[i] === 'object' ? order[i].id : order[i];
+      const targetOrder = typeof order[i] === 'object' && order[i].display_order !== undefined ? order[i].display_order : i;
+      if (bannerId) {
+        await pool.query('UPDATE homepage_banners SET display_order = ? WHERE id = ?', [targetOrder, bannerId]);
+      }
+    }
+    console.log('✅ [TiDB] Banners reordered successfully');
+    return res.status(200).json({ success: true, message: 'Banners reordered successfully' });
+  } catch (err) {
+    console.error('❌ Reorder banners error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to reorder banners' });
+  }
+});
+
+// Admin update banner
+app.put('/api/admin/banners/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const {
+    title,
+    subtitle,
+    image_url,
+    imageUrl,
+    image_public_id,
+    imagePublicId,
+    cta_text,
+    ctaText,
+    cta_link,
+    ctaLink,
+    secondary_cta_text,
+    secondaryCtaText,
+    secondary_cta_link,
+    secondaryCtaLink,
+    tag,
+    badge,
+    display_order,
+    displayOrder,
+    is_active,
+    isActive
+  } = req.body || {};
+
+  try {
+    const [existing] = await pool.query('SELECT * FROM homepage_banners WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, error: 'Banner not found' });
+    }
+
+    const current = existing[0];
+    const newTitle = title !== undefined ? String(title).trim() : current.title;
+    const newSubtitle = subtitle !== undefined ? String(subtitle).trim() : current.subtitle;
+    const newImageUrl = (image_url !== undefined || imageUrl !== undefined) ? String(image_url || imageUrl).trim() : current.image_url;
+    const newPublicId = (image_public_id !== undefined || imagePublicId !== undefined) ? (image_public_id || imagePublicId || null) : current.image_public_id;
+    const newCtaText = (cta_text !== undefined || ctaText !== undefined) ? String(cta_text !== undefined ? cta_text : ctaText).trim() : current.cta_text;
+    const newCtaLink = (cta_link !== undefined || ctaLink !== undefined) ? String(cta_link !== undefined ? cta_link : ctaLink).trim() : current.cta_link;
+    const newSecCtaText = (secondary_cta_text !== undefined || secondaryCtaText !== undefined) ? String(secondary_cta_text !== undefined ? secondary_cta_text : secondaryCtaText).trim() : current.secondary_cta_text;
+    const newSecCtaLink = (secondary_cta_link !== undefined || secondaryCtaLink !== undefined) ? String(secondary_cta_link !== undefined ? secondary_cta_link : secondaryCtaLink).trim() : current.secondary_cta_link;
+    const newTag = tag !== undefined ? String(tag).trim() : current.tag;
+    const newBadge = badge !== undefined ? String(badge).trim() : current.badge;
+    const newOrder = (display_order !== undefined || displayOrder !== undefined) ? parseInt(display_order !== undefined ? display_order : displayOrder, 10) : current.display_order;
+    const newActive = (is_active !== undefined || isActive !== undefined) ? ((is_active !== undefined ? is_active : isActive) ? 1 : 0) : current.is_active;
+
+    await pool.query(
+      `UPDATE homepage_banners
+       SET title = ?, subtitle = ?, image_url = ?, image_public_id = ?,
+           cta_text = ?, cta_link = ?, secondary_cta_text = ?, secondary_cta_link = ?,
+           tag = ?, badge = ?, display_order = ?, is_active = ?
+       WHERE id = ?`,
+      [
+        newTitle,
+        newSubtitle,
+        newImageUrl,
+        newPublicId,
+        newCtaText,
+        newCtaLink,
+        newSecCtaText,
+        newSecCtaLink,
+        newTag,
+        newBadge,
+        isNaN(newOrder) ? 0 : newOrder,
+        newActive,
+        id
+      ]
+    );
+
+    const [updated] = await pool.query('SELECT * FROM homepage_banners WHERE id = ?', [id]);
+    console.log(`✅ [TiDB] Banner updated: ${newTitle} (ID: ${id})`);
+    return res.status(200).json({ success: true, banner: updated[0] });
+  } catch (err) {
+    console.error('❌ Update banner error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to update banner' });
+  }
+});
+
+// Admin delete banner
+app.delete('/api/admin/banners/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [existing] = await pool.query('SELECT * FROM homepage_banners WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, error: 'Banner not found' });
+    }
+
+    const banner = existing[0];
+    await pool.query('DELETE FROM homepage_banners WHERE id = ?', [id]);
+
+    // Cleanup Cloudinary asset if applicable
+    if (banner.image_public_id && cloudinary?.uploader?.destroy) {
+      try {
+        await cloudinary.uploader.destroy(banner.image_public_id);
+        console.log(`🧹 Cleaned up Cloudinary image ${banner.image_public_id} after banner deletion`);
+      } catch (cleanErr) {
+        console.warn('Failed to cleanup Cloudinary banner image:', cleanErr?.message);
+      }
+    }
+
+    console.log(`✅ [TiDB] Banner deleted: ${banner.title} (ID: ${id})`);
+    return res.status(200).json({ success: true, message: 'Banner deleted successfully' });
+  } catch (err) {
+    console.error('❌ Delete banner error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to delete banner' });
+  }
+});
+
 // ================= PAYMENT GATEWAY CONFIG (ADMIN READ & UPDATE) =================
 // Strictly admin-only; reports runtime gateway mode, sandbox/production status,
 // masked credentials, and whitelist guidance. NEVER returns secret keys or raw salts.
