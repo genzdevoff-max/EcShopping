@@ -125,15 +125,20 @@ export const api = {
   adminLogin: (email, password) => request('/api/auth/admin/login', { method: 'POST', body: { email, password } }),
 
   /* Password recovery and reset (customer, vendor, admin) */
-  forgotPassword: (email, role) => request('/api/auth/forgot-password', { method: 'POST', body: { email, role } }),
+  forgotPassword: (email, role = 'customer') => request('/api/auth/forgot-password', { method: 'POST', body: { email, role } }),
   verifyResetToken: (token, role) => request('/api/auth/verify-reset-token', { method: 'POST', body: { token, role } }),
   resetPassword: (token, role, newPassword) => request('/api/auth/reset-password', { method: 'POST', body: { token, role, newPassword } }),
+
+  /* Email verification (customer, vendor) */
+  verifyEmail: (token, role) => request('/api/auth/verify-email', { method: 'POST', body: { token, role } }),
+  resendVerification: (email, role) => request('/api/auth/resend-verification', { method: 'POST', body: { email, role } }),
 
   /* Vendors + customers (admin) */
   getVendors: (params) => request(`/api/vendors${qs(params)}`, { role: 'admin' }),
   getUsers: () => request('/api/users', { role: 'admin' }),
   updateVendorStatus: (id, status) => request(`/api/vendors/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status }, role: 'admin' }),
   updateVendorDirectSelling: (id, directSelling) => request(`/api/vendors/${encodeURIComponent(id)}/direct-selling`, { method: 'PUT', body: { directSelling }, role: 'admin' }),
+  deleteVendor: (id) => request(`/api/vendors/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
 
   /* Categories (vendor or admin) */
   getCategories: (params = {}, role = 'vendor') => request(`/api/categories${qs(params)}`, { role }),

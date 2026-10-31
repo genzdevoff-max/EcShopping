@@ -114,44 +114,55 @@ initDatabase()
   })
   .catch((err) => console.error('Error hydrating platform settings:', err.message));
 
-const smtpPort = Number(process.env.SMTP_PORT) || 465;
-const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-const isSmtpSecure = process.env.SMTP_SECURE !== undefined
-  ? String(process.env.SMTP_SECURE).trim().toLowerCase() === 'true'
-  : smtpPort === 465;
+// Centralized Admin Email Service
+import {
+  transporter,
+  escapeHtml,
+  getAdminSender,
+  getAdminNotificationRecipient,
+  getSupportReplyTo,
+  getFrontendUrl,
+  sendAdminEmail,
+  sendCustomerWelcomeEmail,
+  sendVendorWelcomeEmail,
+  sendCustomerVerificationEmail,
+  sendVendorVerificationEmail,
+  sendResendVerificationEmail,
+  sendPasswordResetEmail,
+  sendVendorProductSubmissionNotification,
+  sendProductApprovalStatusEmail,
+  sendOrderConfirmationEmail,
+  sendPaymentStatusEmail,
+  sendOrderFulfillmentStatusEmail,
+  sendOrderCancellationEmail,
+  sendVendorAccountStatusEmail
+} from './services/emailService.js';
 
-const transportConfig = process.env.SMTP_HOST || process.env.SMTP_PORT
-  ? {
-      host: smtpHost,
-      port: smtpPort,
-      secure: isSmtpSecure,
-      family: 4,
-      auth: {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_PASSWORD
-      }
-    }
-  : {
-      service: process.env.SMTP_SERVICE || 'gmail',
-      auth: {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_PASSWORD
-      }
-    };
+export {
+  transporter,
+  escapeHtml,
+  getAdminSender,
+  getAdminNotificationRecipient,
+  getSupportReplyTo,
+  sendCustomerWelcomeEmail,
+  sendVendorWelcomeEmail,
+  sendCustomerVerificationEmail,
+  sendVendorVerificationEmail,
+  sendResendVerificationEmail,
+  sendPasswordResetEmail,
+  sendVendorProductSubmissionNotification,
+  sendProductApprovalStatusEmail,
+  sendOrderConfirmationEmail,
+  sendPaymentStatusEmail,
+  sendOrderFulfillmentStatusEmail,
+  sendOrderCancellationEmail,
+  sendVendorAccountStatusEmail
+};
 
-export const transporter = nodemailer.createTransport(transportConfig);
-
-if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-  transporter.verify()
-    .then(() => console.log(`✅ SMTP connected as ${process.env.SMTP_EMAIL} (${smtpHost}:${smtpPort}, secure=${isSmtpSecure})`))
-    .catch((err) => console.error('❌ SMTP connection failed:', err.message));
-} else {
-  console.warn('⚠️ SMTP not configured (SMTP_EMAIL / SMTP_PASSWORD) — emails will be skipped.');
-}
-
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-}[c]));
+// Aliases for compatibility
+export const sendVerificationEmail = sendResendVerificationEmail;
+export const sendVendorStatusNotificationEmail = sendVendorAccountStatusEmail;
+export const sendProductStatusNotificationEmail = sendProductApprovalStatusEmail;
 
 // Cloudinary Image Upload Endpoint (sellers/admins only)
 app.post('/api/upload', requireVendorOrAdmin, upload.single('image'), async (req, res) => {
@@ -428,6 +439,22 @@ app.post('/api/auth/user/register', registerLimiter, async (req, res) => {
       phone: cleanPhone
     };
 
+    // Generate email verification token and dispatch welcome/verification email
+    const rawVerToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawVerToken).digest('hex');
+    const verId = 'ev_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    try {
+      await pool.query(
+        'INSERT INTO email_verifications (id, email, role, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
+        [verId, newUser.email, 'customer', tokenHash, expiresAt]
+      );
+      await sendVerificationEmail({ email: newUser.email, role: 'customer', userName: newUser.name, rawToken: rawVerToken });
+    } catch (err) {
+      console.error('⚠️ Customer verification email setup error:', err.message);
+    }
+
     console.log(`✅ [TiDB] User registered: ${newUser.name} (${newUser.email})`);
     return res.status(201).json({ success: true, user: newUser, token });
   } catch (err) {
@@ -451,18 +478,35 @@ app.post('/api/auth/user/login', authLimiter, async (req, res) => {
     );
 
     if (rows.length === 0) {
+      // Check if user exists as a vendor or admin to give a clear, helpful message
+      try {
+        const [vendorMatch] = await pool.query('SELECT id FROM vendors WHERE LOWER(email) = LOWER(?)', [email.trim()]);
+        if (vendorMatch.length > 0) {
+          return res.status(401).json({
+            success: false,
+            error: 'No customer account found with this email. This email is registered as a seller account — please use the Seller Login tab.'
+          });
+        }
+      } catch {}
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
 
     const user = rows[0];
 
-    // Prefer the bcrypt hash. Plaintext rows (legacy imports / old accounts)
-    // are upgraded to a hash on the first successful login.
+    // Prefer the bcrypt hash; support bcrypt hash in legacy password column; legacy plaintext rows upgrade on success.
     let authenticated = await verifyHash(password, user.password_hash);
-    if (!authenticated && !isHashed(user.password) && user.password) {
-      if (timingSafeEqualStrings(password, user.password)) {
+    if (!authenticated && user.password) {
+      if (isHashed(user.password)) {
+        authenticated = await verifyHash(password, user.password);
+        if (authenticated) {
+          await pool.query('UPDATE users SET password_hash = ?, password = "" WHERE id = ?', [
+            user.password,
+            user.id
+          ]);
+        }
+      } else if (timingSafeEqualStrings(password, user.password)) {
         authenticated = true;
-        await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [
+        await pool.query('UPDATE users SET password_hash = ?, password = "" WHERE id = ?', [
           await hashPassword(password),
           user.id
         ]);
@@ -821,6 +865,22 @@ app.post('/api/auth/vendor/register', registerLimiter, async (req, res) => {
       directSelling: false
     };
 
+    // Generate email verification token and dispatch welcome/verification email
+    const rawVerToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawVerToken).digest('hex');
+    const verId = 'ev_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    try {
+      await pool.query(
+        'INSERT INTO email_verifications (id, email, role, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
+        [verId, newVendor.email, 'vendor', tokenHash, expiresAt]
+      );
+      await sendVerificationEmail({ email: newVendor.email, role: 'vendor', userName: newVendor.name, rawToken: rawVerToken });
+    } catch (err) {
+      console.error('⚠️ Vendor verification email setup error:', err.message);
+    }
+
     console.log(`✅ [TiDB] Vendor registered (pending approval): ${newVendor.name} (${newVendor.email})`);
     return res.status(201).json({ success: true, vendor: newVendor });
   } catch (err) {
@@ -844,17 +904,35 @@ app.post('/api/auth/vendor/login', authLimiter, async (req, res) => {
     );
 
     if (rows.length === 0) {
+      // Check if user exists as a customer or admin to give a clear, helpful message
+      try {
+        const [customerMatch] = await pool.query('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [email.trim()]);
+        if (customerMatch.length > 0) {
+          return res.status(401).json({
+            success: false,
+            error: 'No seller account found with this email. This email is registered as a customer account — please use the Customer Login tab.'
+          });
+        }
+      } catch {}
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
 
     const vendor = rows[0];
 
-    // Prefer the bcrypt hash; legacy plaintext rows upgrade on success.
+    // Prefer the bcrypt hash; support bcrypt hash in legacy password column; legacy plaintext rows upgrade on success.
     let authenticated = await verifyHash(password, vendor.password_hash);
-    if (!authenticated && !isHashed(vendor.password) && vendor.password) {
-      if (timingSafeEqualStrings(password, vendor.password)) {
+    if (!authenticated && vendor.password) {
+      if (isHashed(vendor.password)) {
+        authenticated = await verifyHash(password, vendor.password);
+        if (authenticated) {
+          await pool.query('UPDATE vendors SET password_hash = ?, password = "" WHERE id = ?', [
+            vendor.password,
+            vendor.id
+          ]);
+        }
+      } else if (timingSafeEqualStrings(password, vendor.password)) {
         authenticated = true;
-        await pool.query('UPDATE vendors SET password_hash = ? WHERE id = ?', [
+        await pool.query('UPDATE vendors SET password_hash = ?, password = "" WHERE id = ?', [
           await hashPassword(password),
           vendor.id
         ]);
@@ -871,6 +949,10 @@ app.post('/api/auth/vendor/login', authLimiter, async (req, res) => {
 
     if (vendor.status === 'rejected') {
       return res.status(403).json({ success: false, error: 'Your seller account has been rejected' });
+    }
+
+    if (vendor.status === 'deactivated' || vendor.status === 'suspended') {
+      return res.status(403).json({ success: false, error: 'Your seller account has been deactivated. Please contact support.' });
     }
 
     const token = signToken({ sub: vendor.id, role: 'vendor', email: vendor.email, name: vendor.name });
@@ -954,15 +1036,13 @@ app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   const { email, role } = req.body || {};
 
   const cleanEmail = String(email || '').trim().toLowerCase();
-  const cleanRole = String(role || '').trim().toLowerCase();
+  const inputRole = String(role || '').trim().toLowerCase();
 
-  const allowedRoles = ['customer', 'vendor', 'admin'];
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  if (!cleanEmail || !emailRegex.test(cleanEmail) || !allowedRoles.includes(cleanRole)) {
+  if (!cleanEmail || !emailRegex.test(cleanEmail)) {
     return res.status(400).json({
       success: false,
-      error: 'Valid email and role (customer, vendor, admin) are required'
+      error: 'A valid email address is required'
     });
   }
 
@@ -972,37 +1052,63 @@ app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   try {
     let accountExists = false;
     let userName = '';
+    let resolvedRole = inputRole;
 
-    if (cleanRole === 'customer') {
-      const [rows] = await pool.query(
-        'SELECT id, name FROM users WHERE LOWER(email) = ?',
-        [cleanEmail]
-      );
-      if (rows.length > 0) {
-        accountExists = true;
-        userName = rows[0].name || 'Customer';
+    const findCustomer = async () => {
+      const [rows] = await pool.query('SELECT id, name FROM users WHERE LOWER(email) = ?', [cleanEmail]);
+      if (rows.length > 0) return { exists: true, name: rows[0].name || 'Customer' };
+      return { exists: false };
+    };
+
+    const findVendor = async () => {
+      const [rows] = await pool.query('SELECT id, name FROM vendors WHERE LOWER(email) = ?', [cleanEmail]);
+      if (rows.length > 0) return { exists: true, name: rows[0].name || 'Seller' };
+      return { exists: false };
+    };
+
+    const findAdmin = async () => {
+      const [rows] = await pool.query('SELECT id FROM admins WHERE LOWER(email) = ?', [cleanEmail]);
+      if (rows.length > 0) return { exists: true, name: 'Administrator' };
+      return { exists: false };
+    };
+
+    if (inputRole === 'vendor') {
+      const v = await findVendor();
+      if (v.exists) { accountExists = true; userName = v.name; resolvedRole = 'vendor'; }
+      else {
+        const c = await findCustomer();
+        if (c.exists) { accountExists = true; userName = c.name; resolvedRole = 'customer'; }
       }
-    } else if (cleanRole === 'vendor') {
-      const [rows] = await pool.query(
-        'SELECT id, name FROM vendors WHERE LOWER(email) = ?',
-        [cleanEmail]
-      );
-      if (rows.length > 0) {
-        accountExists = true;
-        userName = rows[0].name || 'Vendor';
+    } else if (inputRole === 'admin') {
+      const a = await findAdmin();
+      if (a.exists) { accountExists = true; userName = a.name; resolvedRole = 'admin'; }
+    } else if (inputRole === 'customer') {
+      const c = await findCustomer();
+      if (c.exists) { accountExists = true; userName = c.name; resolvedRole = 'customer'; }
+      else {
+        // Fallback: check if registered as vendor
+        const v = await findVendor();
+        if (v.exists) { accountExists = true; userName = v.name; resolvedRole = 'vendor'; }
       }
-    } else if (cleanRole === 'admin') {
-      const [rows] = await pool.query(
-        'SELECT id FROM admins WHERE LOWER(email) = ?',
-        [cleanEmail]
-      );
-      if (rows.length > 0) {
-        accountExists = true;
-        userName = 'Administrator';
+    } else {
+      // Auto-detect role: check vendor, customer, then admin
+      const v = await findVendor();
+      if (v.exists) {
+        accountExists = true; userName = v.name; resolvedRole = 'vendor';
+      } else {
+        const c = await findCustomer();
+        if (c.exists) {
+          accountExists = true; userName = c.name; resolvedRole = 'customer';
+        } else {
+          const a = await findAdmin();
+          if (a.exists) {
+            accountExists = true; userName = a.name; resolvedRole = 'admin';
+          }
+        }
       }
     }
 
-    if (accountExists) {
+    if (accountExists && resolvedRole) {
       const rawToken = crypto.randomBytes(32).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
       const resetId = 'pr_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
@@ -1011,62 +1117,29 @@ app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
       // Invalidate existing active tokens for this email and role
       await pool.query(
         'UPDATE password_resets SET used_at = NOW() WHERE LOWER(email) = ? AND role = ? AND used_at IS NULL',
-        [cleanEmail, cleanRole]
+        [cleanEmail, resolvedRole]
       );
 
       // Record new reset token
       await pool.query(
         'INSERT INTO password_resets (id, email, role, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
-        [resetId, cleanEmail, cleanRole, tokenHash, expiresAt]
+        [resetId, cleanEmail, resolvedRole, tokenHash, expiresAt]
       );
 
-      // Construct reset URL safely
-      const frontendUrl = getFrontendOrigin(process.env);
-      const resetLink = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(rawToken)}&role=${encodeURIComponent(cleanRole)}`;
+      // Dispatch centralized reset email (From: EcShopping Admin)
+      const emailResult = await sendPasswordResetEmail({
+        email: cleanEmail,
+        name: userName,
+        role: resolvedRole,
+        rawToken
+      });
 
-      // Dispatch reset email
-      if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-        const fromAddress = process.env.SMTP_FROM || `"${process.env.SENDER_NAME || 'EcShopping Support'}" <${process.env.SMTP_EMAIL}>`;
-        try {
-          await transporter.sendMail({
-            from: fromAddress,
-            to: cleanEmail,
-            subject: 'Reset your EcShopping password',
-            text: `Hello ${userName},\n\nA password reset was requested for your EcShopping ${cleanRole} account.\n\nReset your password here: ${resetLink}\n\nThis link will expire in 60 minutes.\n\nIf you did not request this, please disregard this email.\n\nEcShopping Team`,
-            html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 8px; color: #1f2937;">
-                <div style="text-align: center; margin-bottom: 24px;">
-                  <h1 style="color: #0e5c4a; margin: 0; font-size: 24px; font-weight: 700;">EcShopping</h1>
-                  <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Password Reset Request</p>
-                </div>
-                <p style="font-size: 15px; line-height: 1.5; color: #374151;">
-                  Hello <strong>${escapeHtml(userName)}</strong>,
-                </p>
-                <p style="font-size: 15px; line-height: 1.5; color: #374151;">
-                  We received a request to reset the password for your EcShopping <strong>${escapeHtml(cleanRole)}</strong> account.
-                </p>
-                <div style="text-align: center; margin: 32px 0;">
-                  <a href="${resetLink}" style="display: inline-block; background-color: #0e5c4a; color: #ffffff; text-decoration: none; padding: 12px 28px; font-weight: 600; font-size: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(14,92,74,0.2);">
-                    Reset Password
-                  </a>
-                </div>
-                <p style="font-size: 13px; line-height: 1.5; color: #6b7280;">
-                  If the button doesn't work, copy and paste this link into your browser:<br/>
-                  <a href="${resetLink}" style="color: #0e5c4a; word-break: break-all;">${resetLink}</a>
-                </p>
-                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-                <p style="font-size: 12px; color: #9ca3af; margin: 0;">
-                  This link expires in 60 minutes. If you did not request a password reset, you can safely ignore this email — your account remains secure.
-                </p>
-              </div>
-            `
-          });
-          console.log(`✅ Password reset email sent to ${cleanEmail} (${cleanRole})`);
-        } catch (mailErr) {
-          console.error(`⚠️ Failed to send password reset email to ${cleanEmail}:`, mailErr.message);
-        }
-      } else {
-        console.warn(`⚠️ SMTP not configured — password reset token generated for ${cleanEmail} (${cleanRole})`);
+      if (!emailResult || !emailResult.success) {
+        console.error(`❌ [Forgot-Password] Delivery failure to ${cleanEmail} (${resolvedRole}):`, emailResult?.error || 'Unknown dispatch error');
+        return res.status(503).json({
+          success: false,
+          error: 'Email delivery service is currently unavailable. Please try again later or contact support.'
+        });
       }
     }
 
@@ -1233,6 +1306,185 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
   }
 });
 
+// ================= EMAIL VERIFICATION FLOWS (TiDB Cloud) =================
+
+// 1. Verify email address using token
+app.post('/api/auth/verify-email', authLimiter, async (req, res) => {
+  const { token, role } = req.body || {};
+  const cleanToken = String(token || '').trim();
+  const cleanRole = String(role || '').trim().toLowerCase();
+
+  if (!cleanToken) {
+    return res.status(400).json({ success: false, error: 'Verification token is required' });
+  }
+
+  try {
+    const tokenHash = crypto.createHash('sha256').update(cleanToken).digest('hex');
+    let query = 'SELECT id, email, role, expires_at, verified_at FROM email_verifications WHERE token_hash = ?';
+    const params = [tokenHash];
+    if (cleanRole) {
+      query += ' AND role = ?';
+      params.push(cleanRole);
+    }
+    const [rows] = await pool.query(query, params);
+
+    if (rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid verification token or link' });
+    }
+
+    const record = rows[0];
+
+    if (record.verified_at !== null) {
+      return res.status(200).json({
+        success: true,
+        alreadyVerified: true,
+        message: 'Email address has already been verified.',
+        email: record.email,
+        role: record.role
+      });
+    }
+
+    if (new Date(record.expires_at) < new Date()) {
+      return res.status(400).json({
+        success: false,
+        expired: true,
+        error: 'Verification link has expired. Please request a new verification email.'
+      });
+    }
+
+    // Mark as verified
+    await pool.query('UPDATE email_verifications SET verified_at = NOW() WHERE id = ?', [record.id]);
+    console.log(`✅ [TiDB] Email verified for ${record.email} (${record.role})`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Your email address has been verified successfully! You can now log in.',
+      email: record.email,
+      role: record.role
+    });
+  } catch (err) {
+    console.error('❌ Verify email error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to verify email address right now. Please try again.' });
+  }
+});
+
+// 2. Resend email verification link
+app.post('/api/auth/resend-verification', authLimiter, async (req, res) => {
+  const { email, role } = req.body || {};
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  let cleanRole = String(role || '').trim().toLowerCase();
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+    return res.status(400).json({ success: false, error: 'A valid email address is required' });
+  }
+
+  const standardResponse = {
+    success: true,
+    message: 'If an account exists with that email address, a fresh verification link has been sent.'
+  };
+
+  try {
+    // Cooldown check: prevent requesting more than once per minute
+    const [recent] = await pool.query(
+      'SELECT id, created_at FROM email_verifications WHERE LOWER(email) = ? AND created_at > (NOW() - INTERVAL 1 MINUTE)',
+      [cleanEmail]
+    );
+    if (recent.length > 0) {
+      return res.status(429).json({
+        success: false,
+        error: 'Please wait a minute before requesting another verification email.'
+      });
+    }
+
+    // Verify account exists
+    let accountExists = false;
+    let userName = '';
+    let resolvedRole = cleanRole;
+
+    if (cleanRole === 'vendor') {
+      const [vRows] = await pool.query('SELECT id, name FROM vendors WHERE LOWER(email) = ?', [cleanEmail]);
+      if (vRows.length > 0) {
+        accountExists = true;
+        userName = vRows[0].name;
+        resolvedRole = 'vendor';
+      }
+    } else if (cleanRole === 'customer') {
+      const [uRows] = await pool.query('SELECT id, name FROM users WHERE LOWER(email) = ?', [cleanEmail]);
+      if (uRows.length > 0) {
+        accountExists = true;
+        userName = uRows[0].name;
+        resolvedRole = 'customer';
+      }
+    } else {
+      // Auto-detect: check vendor then user
+      const [vRows] = await pool.query('SELECT id, name FROM vendors WHERE LOWER(email) = ?', [cleanEmail]);
+      if (vRows.length > 0) {
+        accountExists = true;
+        userName = vRows[0].name;
+        resolvedRole = 'vendor';
+      } else {
+        const [uRows] = await pool.query('SELECT id, name FROM users WHERE LOWER(email) = ?', [cleanEmail]);
+        if (uRows.length > 0) {
+          accountExists = true;
+          userName = uRows[0].name;
+          resolvedRole = 'customer';
+        }
+      }
+    }
+
+    if (!accountExists) {
+      return res.status(200).json(standardResponse);
+    }
+
+    // Check if already verified
+    const [alreadyVer] = await pool.query(
+      'SELECT id FROM email_verifications WHERE LOWER(email) = ? AND role = ? AND verified_at IS NOT NULL LIMIT 1',
+      [cleanEmail, resolvedRole]
+    );
+    if (alreadyVer.length > 0) {
+      return res.status(200).json({
+        success: true,
+        alreadyVerified: true,
+        message: 'This email address is already verified. You can log in.'
+      });
+    }
+
+    // Invalidate existing active tokens
+    await pool.query(
+      'UPDATE email_verifications SET expires_at = NOW() WHERE LOWER(email) = ? AND role = ? AND verified_at IS NULL',
+      [cleanEmail, resolvedRole]
+    );
+
+    // Create fresh token
+    const rawVerToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawVerToken).digest('hex');
+    const verId = 'ev_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await pool.query(
+      'INSERT INTO email_verifications (id, email, role, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
+      [verId, cleanEmail, resolvedRole, tokenHash, expiresAt]
+    );
+
+    await sendVerificationEmail({
+      email: cleanEmail,
+      role: resolvedRole,
+      userName: userName || (resolvedRole === 'vendor' ? 'Seller' : 'Customer'),
+      rawToken: rawVerToken,
+      isResend: true
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'A fresh email verification link has been sent to your inbox.'
+    });
+  } catch (err) {
+    console.error('❌ Resend verification error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to resend verification email right now. Please try again.' });
+  }
+});
+
 // List vendors (admin) — password intentionally omitted
 app.get('/api/vendors', requireAdmin, async (req, res) => {
   const { status } = req.query;
@@ -1274,25 +1526,106 @@ app.get('/api/vendors/:id', requireAdmin, async (req, res) => {
 });
 
 
-// Approve / reject / reset a vendor (admin)
+// Approve / reject / reset / deactivate a vendor (admin)
 app.put('/api/vendors/:id/status', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  if (!['pending', 'approved', 'rejected'].includes(status)) {
+  if (!['pending', 'approved', 'rejected', 'deactivated', 'suspended'].includes(status)) {
     return res.status(400).json({ success: false, error: 'Invalid vendor status' });
   }
 
   try {
-    const [result] = await pool.query('UPDATE vendors SET status = ? WHERE id = ?', [status, id]);
-    if (result.affectedRows === 0) {
+    const [vRows] = await pool.query('SELECT id, name, email, status FROM vendors WHERE id = ?', [id]);
+    if (vRows.length === 0) {
       return res.status(404).json({ success: false, error: 'Vendor not found' });
     }
+    const vendor = vRows[0];
+
+    const [result] = await pool.query('UPDATE vendors SET status = ? WHERE id = ?', [status, id]);
+
+    if (status === 'deactivated') {
+      await pool.query('UPDATE products SET status = "archived" WHERE vendor_id = ?', [id]);
+    }
+
+    // Dispatch status email
+    sendVendorStatusNotificationEmail({ email: vendor.email, name: vendor.name, status })
+      .catch((err) => console.error('⚠️ Vendor status email error:', err.message));
+
     console.log(`✅ [TiDB] Vendor ${id} status -> ${status}`);
-    return res.status(200).json({ success: true, message: 'Vendor status updated' });
+    return res.status(200).json({ success: true, message: `Vendor status updated to ${status}` });
   } catch (err) {
     console.error('❌ Update vendor status DB error:', err);
     return res.status(500).json({ success: false, error: 'Unable to update the vendor right now. Please try again.' });
+  }
+});
+
+// Delete / Deactivate Vendor (admin only)
+app.delete('/api/vendors/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [vRows] = await pool.query('SELECT id, name, email, status FROM vendors WHERE id = ?', [id]);
+    if (vRows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Vendor not found' });
+    }
+    const vendor = vRows[0];
+
+    // Check active / unfulfilled orders
+    const [activeOrders] = await pool.query(`
+      SELECT DISTINCT oi.order_id, o.status
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.vendor_id = ? AND o.status NOT IN ('Delivered', 'Cancelled', 'Refunded')
+    `, [id]);
+
+    if (activeOrders.length > 0) {
+      const orderIds = activeOrders.map((o) => o.order_id).slice(0, 5).join(', ');
+      return res.status(400).json({
+        success: false,
+        error: `Cannot remove vendor. There are active, unfulfilled customer orders (${activeOrders.length}: ${orderIds}${activeOrders.length > 5 ? '...' : ''}) associated with this vendor. Please fulfill or cancel these orders before removing the vendor.`
+      });
+    }
+
+    // Check if vendor has ANY products or historical orders
+    const [prodCount] = await pool.query('SELECT COUNT(*) AS count FROM products WHERE vendor_id = ?', [id]);
+    const [itemCount] = await pool.query('SELECT COUNT(*) AS count FROM order_items WHERE vendor_id = ?', [id]);
+
+    const hasProducts = Number(prodCount[0].count) > 0;
+    const hasOrderHistory = Number(itemCount[0].count) > 0;
+
+    if (hasProducts || hasOrderHistory) {
+      // Soft-deactivation to preserve database referential integrity & customer order history
+      await pool.query('UPDATE vendors SET status = "deactivated" WHERE id = ?', [id]);
+      if (hasProducts) {
+        await pool.query('UPDATE products SET status = "archived" WHERE vendor_id = ?', [id]);
+      }
+      console.log(`✅ [TiDB] Vendor ${id} (${vendor.email}) deactivated and ${prodCount[0].count} products archived`);
+
+      sendVendorStatusNotificationEmail({ email: vendor.email, name: vendor.name, status: 'deactivated' })
+        .catch(() => {});
+
+      return res.status(200).json({
+        success: true,
+        mode: 'deactivated',
+        message: `Vendor "${vendor.name}" has been deactivated and ${prodCount[0].count} product(s) unpublished. Historical order data has been preserved.`
+      });
+    }
+
+    // Hard-delete if 0 products and 0 orders
+    await pool.query('DELETE FROM email_verifications WHERE LOWER(email) = LOWER(?) AND role = "vendor"', [vendor.email]);
+    await pool.query('DELETE FROM password_resets WHERE LOWER(email) = LOWER(?) AND role = "vendor"', [vendor.email]);
+    await pool.query('DELETE FROM vendors WHERE id = ?', [id]);
+
+    console.log(`✅ [TiDB] Vendor ${id} (${vendor.email}) permanently deleted`);
+    return res.status(200).json({
+      success: true,
+      mode: 'deleted',
+      message: `Vendor "${vendor.name}" has been permanently removed.`
+    });
+  } catch (err) {
+    console.error('❌ Delete vendor error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to remove vendor right now. Please try again.' });
   }
 });
 
@@ -1997,39 +2330,15 @@ const handleCreateProduct = async (req, res, isAdminEndpoint = false) => {
         }
       }
 
-      const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
-      if (adminEmail && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-        const senderName = process.env.SENDER_NAME || 'EcShopping';
-        const senderFrom = ownVendorEmail
-          ? `"${ownVendorName || 'Vendor'}" <${ownVendorEmail}>`
-          : `"${senderName}" <${process.env.SMTP_EMAIL}>`;
-
-        transporter.sendMail({
-          from: senderFrom,
-          to: adminEmail,
-          replyTo: ownVendorEmail || undefined,
-          subject: `New product awaiting approval: ${String(title).trim()}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-              <h2 style="color: #0e5c4a;">New product awaiting approval</h2>
-              <p>A vendor has submitted a new product on ${senderName}.</p>
-              <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-                <tr><td style="padding: 6px 0;"><strong>Product:</strong></td><td>${escapeHtml(title)}</td></tr>
-                <tr><td style="padding: 6px 0;"><strong>Vendor:</strong></td><td>${escapeHtml(ownVendorName || ownVendorId || 'Unknown')}</td></tr>
-                ${ownVendorEmail ? `<tr><td style="padding: 6px 0;"><strong>Vendor Email:</strong></td><td>${escapeHtml(ownVendorEmail)}</td></tr>` : ''}
-                <tr><td style="padding: 6px 0;"><strong>Category:</strong></td><td>${escapeHtml(finalCategory)}</td></tr>
-                <tr><td style="padding: 6px 0;"><strong>Price:</strong></td><td>₹${escapeHtml(numericPrice)}</td></tr>
-              </table>
-              <p>Log in to the admin dashboard to approve or reject this listing.</p>
-              <p style="color: #64748b; font-size: 13px;">Product ID: ${escapeHtml(productId)}</p>
-            </div>
-          `
-        })
-          .then(() => console.log(`📧 Admin approval email sent to: ${adminEmail}`))
-          .catch((err) => console.error('⚠️ Admin approval email failed:', err.message));
-      } else {
-        console.warn('⚠️ Admin approval email skipped: set SMTP_EMAIL, SMTP_PASSWORD and ADMIN_EMAIL.');
-      }
+      // Centralized notification: Send admin approval notification (From: EcShopping Admin)
+      sendVendorProductSubmissionNotification({
+        vendorName: ownVendorName,
+        vendorEmail: ownVendorEmail,
+        productTitle: title,
+        productId,
+        category: finalCategory,
+        price: numericPrice
+      }).catch((err) => console.error('⚠️ Admin product submission notification failed:', err.message));
     }
 
     return res.status(201).json({ success: true, product: rows[0] });
@@ -2128,13 +2437,13 @@ app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
   }
 });
 
-// Admin approves / rejects / re-pends a product
+// Admin approves / rejects / re-pends / archives a product
 app.put('/api/products/:id/status', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body || {};
+  const { status, reason } = req.body || {};
 
-  if (!['pending', 'approved', 'rejected'].includes(status)) {
-    return res.status(400).json({ success: false, error: 'Status must be pending, approved or rejected' });
+  if (!['pending', 'approved', 'rejected', 'archived'].includes(status)) {
+    return res.status(400).json({ success: false, error: 'Status must be pending, approved, rejected, or archived' });
   }
 
   try {
@@ -2144,8 +2453,30 @@ app.put('/api/products/:id/status', requireAdmin, async (req, res) => {
     }
 
     const [rows] = await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products WHERE id = ?`, [id]);
+    const updatedProduct = rows[0];
+    const vendorId = updatedProduct?.vendorId || updatedProduct?.vendor_id;
+
+    // Bi-directional notification: notify vendor when product is approved or rejected
+    if (updatedProduct && vendorId && (status === 'approved' || status === 'rejected')) {
+      try {
+        const [vRows] = await pool.query('SELECT name, email FROM vendors WHERE id = ?', [vendorId]);
+        if (vRows.length > 0 && vRows[0].email) {
+          await sendProductStatusNotificationEmail({
+            vendorEmail: vRows[0].email,
+            vendorName: vRows[0].name,
+            productTitle: updatedProduct.title || updatedProduct.name,
+            productId: updatedProduct.id,
+            status,
+            reason: reason || ''
+          });
+        }
+      } catch (lookupErr) {
+        console.error('⚠️ Vendor lookup for product notification error:', lookupErr.message);
+      }
+    }
+
     console.log(`✅ [TiDB] Product ${id} status -> ${status}`);
-    return res.status(200).json({ success: true, product: rows[0] });
+    return res.status(200).json({ success: true, product: updatedProduct });
   } catch (err) {
     console.error('❌ Update product status DB error:', err);
     return res.status(500).json({ success: false, error: 'Unable to update the product status right now. Please try again.' });
@@ -2524,6 +2855,17 @@ app.post('/api/orders', optionalAuth, async (req, res) => {
       const [rows] = await pool.query(`SELECT ${ORDER_COLUMNS} FROM orders WHERE id = ?`, [orderId]);
       const [order] = await hydrateOrders(rows);
       console.log(`✅ [TiDB] Order placed: ${orderId} (${lines.length} lines, total ₹${total})`);
+
+      // Centralized confirmation email (From: EcShopping Admin)
+      if (email) {
+        sendOrderConfirmationEmail({
+          order,
+          items: lines,
+          customerEmail: email,
+          customerName
+        }).catch((mailErr) => console.error('⚠️ Order confirmation email failed:', mailErr.message));
+      }
+
       return res.status(201).json({ success: true, order });
     } catch (err) {
       try {
@@ -2569,7 +2911,7 @@ app.put('/api/orders/:id/status', requireAuth('vendor', 'admin'), async (req, re
       }
     }
 
-    const [existingOrders] = await pool.query('SELECT id, status FROM orders WHERE id = ?', [id]);
+    const [existingOrders] = await pool.query('SELECT id, customer_name, customer_email, total, status FROM orders WHERE id = ?', [id]);
     if (existingOrders.length === 0) {
       return res.status(404).json({ success: false, error: 'Order not found' });
     }
@@ -2595,6 +2937,26 @@ app.put('/api/orders/:id/status', requireAuth('vendor', 'admin'), async (req, re
         }
       }
       console.log(`🔄 [TiDB] Stock restored for cancelled order ${id}`);
+
+      // Centralized notification: cancellation email (From: EcShopping Admin)
+      if (existingOrders[0].customer_email) {
+        sendOrderCancellationEmail({
+          order: existingOrders[0],
+          customerEmail: existingOrders[0].customer_email,
+          customerName: existingOrders[0].customer_name,
+          reason: 'Order cancelled by merchant/admin'
+        }).catch((err) => console.error('⚠️ Order cancellation email error:', err.message));
+      }
+    } else if (status === 'Shipped' || status === 'Delivered') {
+      // Centralized notification: fulfillment status email (From: EcShopping Admin)
+      if (existingOrders[0].customer_email) {
+        sendOrderFulfillmentStatusEmail({
+          order: existingOrders[0],
+          newStatus: status,
+          customerEmail: existingOrders[0].customer_email,
+          customerName: existingOrders[0].customer_name
+        }).catch((err) => console.error('⚠️ Order fulfillment email error:', err.message));
+      }
     }
 
     console.log(`✅ [TiDB] Order ${id} status -> ${status}`);
@@ -2612,7 +2974,7 @@ app.post('/api/orders/:id/cancel', requireCustomer, async (req, res) => {
 
   try {
     const [orders] = await pool.query(
-      'SELECT id, customer_email, status FROM orders WHERE id = ?',
+      'SELECT id, customer_name, customer_email, total, status FROM orders WHERE id = ?',
       [id]
     );
     if (orders.length === 0) {
@@ -2653,6 +3015,16 @@ app.post('/api/orders/:id/cancel', requireCustomer, async (req, res) => {
     console.log(`🔄 [TiDB] Stock restored for customer-cancelled order ${id}`);
 
     console.log(`✅ [TiDB] Order ${id} cancelled by customer ${req.auth.email}. Reason: ${reason}`);
+
+    // Centralized notification: customer cancellation confirmation (From: EcShopping Admin)
+    if (order.customer_email) {
+      sendOrderCancellationEmail({
+        order,
+        customerEmail: order.customer_email,
+        customerName: order.customer_name || req.auth.name,
+        reason
+      }).catch((err) => console.error('⚠️ Customer order cancellation email error:', err.message));
+    }
     return res.status(200).json({
       success: true,
       message: 'Order cancelled successfully',
@@ -2862,6 +3234,19 @@ app.post('/api/payments/phonepe/verify', requireCustomerOrAnon, paymentLimiter, 
 
     const [rows] = await pool.query(`SELECT ${ORDER_COLUMNS} FROM orders WHERE id = ?`, [order.id]);
     const [freshOrder] = await hydrateOrders(rows);
+
+    // Centralized notification: payment confirmation email (From: EcShopping Admin)
+    if (paymentStatus === 'paid' && freshOrder?.customerEmail) {
+      sendPaymentStatusEmail({
+        order: freshOrder,
+        paymentStatus: 'paid',
+        paymentMethod: 'PhonePe',
+        transactionReference: reference || '',
+        customerEmail: freshOrder.customerEmail,
+        customerName: freshOrder.customerName
+      }).catch((err) => console.error('⚠️ Payment confirmation email error:', err.message));
+    }
+
     return res.status(200).json({
       success: true,
       paymentStatus,
@@ -2932,6 +3317,17 @@ app.post('/api/payments/phonepe/callback', paymentLimiter, async (req, res) => {
         [transactionId ? `phonepe-txn:${transactionId}` : null, order.id]
       );
       console.log(`✅ [PhonePe Webhook] Order ${order.id} marked as PAID via server callback`);
+
+      if (order.customerEmail) {
+        sendPaymentStatusEmail({
+          order,
+          paymentStatus: 'paid',
+          paymentMethod: 'PhonePe',
+          transactionReference: transactionId || '',
+          customerEmail: order.customerEmail,
+          customerName: order.customerEmail.split('@')[0]
+        }).catch((err) => console.error('⚠️ [PhonePe Webhook] Payment confirmation email error:', err.message));
+      }
     } else if (normalizedStatus === 'failed' && order.paymentStatus !== 'paid') {
       await pool.query(`UPDATE orders SET payment_status = 'failed' WHERE id = ?`, [order.id]);
       console.log(`⚠️ [PhonePe Webhook] Order ${order.id} marked as FAILED via server callback`);

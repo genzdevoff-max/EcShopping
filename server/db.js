@@ -251,6 +251,21 @@ export const initDatabase = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Create Email Verifications table (customer & vendor registration email verification)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS email_verifications (
+        id VARCHAR(64) PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        token_hash VARCHAR(255) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        verified_at TIMESTAMP DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_verifications_token (token_hash),
+        INDEX idx_verifications_email_role (email, role)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     // Additive migration: hashed password columns for existing users/vendors.
     // The legacy `password` columns are kept until a separate cleanup is
     // approved so this upgrade can never destroy existing data.

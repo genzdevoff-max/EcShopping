@@ -24,6 +24,7 @@ const Checkout = lazy(() => import('./pages/Checkout'));
 const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation'));
 const CustomerProfile = lazy(() => import('./pages/CustomerProfile'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 const Orders = lazy(() => import('./pages/Orders'));
 const OrderDetails = lazy(() => import('./pages/OrderDetails'));
 const TrackOrder = lazy(() => import('./pages/TrackOrder'));
@@ -325,6 +326,10 @@ function App() {
                       <Route
                         path="/reset-password"
                         element={<ResetPassword />}
+                      />
+                      <Route
+                        path="/verify-email"
+                        element={<VerifyEmail />}
                       />
                       <Route path="/orders" element={<Orders loggedInCustomer={loggedInCustomer} onOpenLogin={() => setLoginOpen(true)} />} />
                       <Route path="/orders/:orderId" element={<OrderDetails loggedInCustomer={loggedInCustomer} onOpenLogin={() => setLoginOpen(true)} />} />

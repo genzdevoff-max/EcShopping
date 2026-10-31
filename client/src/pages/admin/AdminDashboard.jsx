@@ -92,6 +92,12 @@ export default function AdminDashboard({ onLogout }) {
   const [vendorPage, setVendorPage] = useState(1);
   const [vendorPageSize, setVendorPageSize] = useState(10);
 
+  /* Vendor removal / deactivation modal state */
+  const [vendorToRemove, setVendorToRemove] = useState(null);
+  const [vendorRemoveLoading, setVendorRemoveLoading] = useState(false);
+  const [vendorRemoveError, setVendorRemoveError] = useState('');
+  const [vendorRemoveSuccess, setVendorRemoveSuccess] = useState('');
+
   /* Orders filters and pagination */
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
@@ -494,6 +500,30 @@ export default function AdminDashboard({ onLogout }) {
   };
 
   const retry = () => setAttempt((n) => n + 1);
+
+  const handleConfirmRemoveVendor = async () => {
+    if (!vendorToRemove) return;
+    setVendorRemoveLoading(true);
+    setVendorRemoveError('');
+    setVendorRemoveSuccess('');
+    try {
+      const res = await api.deleteVendor(vendorToRemove.id);
+      if (res?.success) {
+        setVendorRemoveSuccess(res.message || 'Vendor action completed.');
+        setAttempt((n) => n + 1);
+        setTimeout(() => {
+          setVendorToRemove(null);
+          setVendorRemoveSuccess('');
+        }, 1500);
+      } else {
+        setVendorRemoveError(res?.error || 'Failed to remove vendor.');
+      }
+    } catch (err) {
+      setVendorRemoveError(err.message || 'Failed to remove vendor.');
+    } finally {
+      setVendorRemoveLoading(false);
+    }
+  };
 
   /* ---------------- FILTERING LOGIC ---------------- */
 
@@ -1108,6 +1138,7 @@ export default function AdminDashboard({ onLogout }) {
                     <option value="pending">Pending Approval</option>
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
+                    <option value="deactivated">Deactivated</option>
                   </select>
                 </div>
 
@@ -1132,45 +1163,62 @@ export default function AdminDashboard({ onLogout }) {
                             </span>
                           </td>
                           <td>
-                            {vendor.status === 'pending' && (
-                              <div className="action-buttons">
-                                <button
-                                  type="button"
-                                  className="approve-btn"
-                                  disabled={busyId === vendor.id}
-                                  onClick={() => runRowAction(vendor.id, () => api.updateVendorStatus(vendor.id, 'approved'), 'Vendor approval failed')}
-                                >
-                                  <CheckCircle size={15} /> Approve
-                                </button>
-                                <button
-                                  type="button"
-                                  className="reject-btn"
-                                  disabled={busyId === vendor.id}
-                                  onClick={() => runRowAction(vendor.id, () => api.updateVendorStatus(vendor.id, 'rejected'), 'Vendor rejection failed')}
-                                >
-                                  <XCircle size={15} /> Reject
-                                </button>
-                              </div>
-                            )}
-                            {vendor.status === 'approved' && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span className="text-muted">Approved</span>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', cursor: 'pointer' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(vendor.directSelling)}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              {vendor.status === 'pending' && (
+                                <div className="action-buttons">
+                                  <button
+                                    type="button"
+                                    className="approve-btn"
                                     disabled={busyId === vendor.id}
-                                    onChange={() => runRowAction(
-                                      vendor.id,
-                                      () => api.updateVendorDirectSelling(vendor.id, !vendor.directSelling),
-                                      'Direct-selling update failed'
-                                    )}
-                                  />
-                                  Direct selling
-                                </label>
-                              </div>
-                            )}
-                            {vendor.status === 'rejected' && <span className="text-muted">Rejected</span>}
+                                    onClick={() => runRowAction(vendor.id, () => api.updateVendorStatus(vendor.id, 'approved'), 'Vendor approval failed')}
+                                  >
+                                    <CheckCircle size={15} /> Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="reject-btn"
+                                    disabled={busyId === vendor.id}
+                                    onClick={() => runRowAction(vendor.id, () => api.updateVendorStatus(vendor.id, 'rejected'), 'Vendor rejection failed')}
+                                  >
+                                    <XCircle size={15} /> Reject
+                                  </button>
+                                </div>
+                              )}
+                              {vendor.status === 'approved' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span className="text-muted">Approved</span>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', cursor: 'pointer' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(vendor.directSelling)}
+                                      disabled={busyId === vendor.id}
+                                      onChange={() => runRowAction(
+                                        vendor.id,
+                                        () => api.updateVendorDirectSelling(vendor.id, !vendor.directSelling),
+                                        'Direct-selling update failed'
+                                      )}
+                                    />
+                                    Direct selling
+                                  </label>
+                                </div>
+                              )}
+                              {vendor.status === 'rejected' && <span className="text-muted">Rejected</span>}
+                              {vendor.status === 'deactivated' && <span className="text-muted">Deactivated</span>}
+
+                              <button
+                                type="button"
+                                className="remove-vendor-btn"
+                                title="Remove or deactivate vendor"
+                                disabled={busyId === vendor.id}
+                                onClick={() => {
+                                  setVendorToRemove(vendor);
+                                  setVendorRemoveError('');
+                                  setVendorRemoveSuccess('');
+                                }}
+                              >
+                                <Trash2 size={13} /> Remove
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2332,6 +2380,90 @@ export default function AdminDashboard({ onLogout }) {
                   {previewingVideo.duration && <span>Duration: <strong>{previewingVideo.duration}s</strong></span>}
                   {previewingVideo.bytes && <span>Size: <strong>{(previewingVideo.bytes / (1024 * 1024)).toFixed(2)} MB</strong></span>}
                   {previewingVideo.publicId && <span>Cloudinary ID: <code>{previewingVideo.publicId}</code></span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- VENDOR REMOVAL / DEACTIVATION MODAL ---------------- */}
+        {vendorToRemove && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-remove-vendor-title">
+            <div className="admin-modal-backdrop" onClick={() => !vendorRemoveLoading && setVendorToRemove(null)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 540 }}>
+              <div className="admin-modal-header" style={{ borderBottomColor: '#fee2e2' }}>
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge" style={{ color: '#dc2626' }}>
+                    <AlertTriangle size={14} /> Security & Vendor Management
+                  </div>
+                  <h2 id="admin-remove-vendor-title" style={{ color: '#991b1b' }}>
+                    Remove or Deactivate Vendor
+                  </h2>
+                  <p>
+                    Target Account: <strong>{vendorToRemove.name}</strong> ({vendorToRemove.email})
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  disabled={vendorRemoveLoading}
+                  onClick={() => setVendorToRemove(null)}
+                  aria-label="Close dialog"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="admin-modal-body" style={{ padding: '20px 24px' }}>
+                <div className="admin-danger-notice">
+                  <h4>Consequences of this action:</h4>
+                  <ul>
+                    <li><strong>Portal Access:</strong> The vendor will be immediately deactivated and locked out of the Seller Portal.</li>
+                    <li><strong>Store Listings:</strong> All active products owned by this seller will be archived and hidden from the storefront.</li>
+                    <li><strong>Order History:</strong> Customer orders containing items from this vendor are safely preserved in the database for auditing and fulfillment.</li>
+                    <li><strong>Active Orders:</strong> If this vendor has pending/unfulfilled orders, removal will be prevented until those orders are completed or cancelled.</li>
+                  </ul>
+                </div>
+
+                {vendorRemoveError && (
+                  <div className="admin-modal-alert error">
+                    <AlertTriangle size={16} />
+                    <span>{vendorRemoveError}</span>
+                  </div>
+                )}
+
+                {vendorRemoveSuccess && (
+                  <div className="admin-modal-alert success">
+                    <CheckCircle2 size={16} />
+                    <span>{vendorRemoveSuccess}</span>
+                  </div>
+                )}
+
+                <div className="admin-modal-footer-actions">
+                  <button
+                    type="button"
+                    className="admin-modal-btn cancel"
+                    disabled={vendorRemoveLoading}
+                    onClick={() => setVendorToRemove(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-modal-btn danger"
+                    disabled={vendorRemoveLoading || Boolean(vendorRemoveSuccess)}
+                    onClick={handleConfirmRemoveVendor}
+                  >
+                    {vendorRemoveLoading ? (
+                      <>
+                        <Loader2 size={15} className="spin" /> Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 size={15} /> Confirm Remove / Deactivate
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>

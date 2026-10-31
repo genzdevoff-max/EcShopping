@@ -330,11 +330,11 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
         <div className="no-orders">
           <User size={48} color="#cbd5e1" />
           <p>You are not signed in yet.</p>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button type="button" className="btn-place-order" style={{ display: 'inline-block', border: 'none', cursor: 'pointer' }} onClick={() => onOpenLogin?.()}>
+          <div className="empty-profile-actions">
+            <button type="button" className="btn-place-order" onClick={() => onOpenLogin?.()}>
               Sign in
             </button>
-            <Link to="/shop" style={{ display: 'inline-block', padding: '12px 24px', border: '1px solid #e2e8f0', borderRadius: '6px', textDecoration: 'none', fontWeight: 600, color: '#334155' }}>
+            <Link to="/shop" className="btn-secondary-link">
               Continue shopping
             </Link>
           </div>
@@ -361,7 +361,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
               <h3>{loggedInCustomer.name}</h3>
               <p className="profile-email">{loggedInCustomer.email}</p>
               {loggedInCustomer.phone && (
-                <p className="profile-phone"><Phone size={13} style={{ display: 'inline', marginRight: 4 }} />{loggedInCustomer.phone}</p>
+                <p className="profile-phone"><Phone size={13} />{loggedInCustomer.phone}</p>
               )}
               <div className="profile-badge">
                 <ShieldCheck size={14} color="#16a34a" /> Verified Customer
@@ -369,9 +369,11 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
             </div>
           </div>
 
-          <nav className="profile-nav">
+          <nav className="profile-nav" role="tablist" aria-label="Account navigation">
             <button 
               type="button"
+              role="tab"
+              aria-selected={activeTab === 'orders'}
               className={activeTab === 'orders' ? 'active' : ''} 
               onClick={() => setActiveTab('orders')}
             >
@@ -379,6 +381,8 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
             </button>
             <button 
               type="button"
+              role="tab"
+              aria-selected={activeTab === 'addresses'}
               className={activeTab === 'addresses' ? 'active' : ''} 
               onClick={() => setActiveTab('addresses')}
             >
@@ -386,12 +390,14 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
             </button>
             <button 
               type="button"
+              role="tab"
+              aria-selected={activeTab === 'details'}
               className={activeTab === 'details' ? 'active' : ''} 
               onClick={() => setActiveTab('details')}
             >
               <User size={18} /> Profile & Security
             </button>
-            <button type="button" className="logout-btn" onClick={onLogout}>
+            <button type="button" className="logout-btn" onClick={onLogout} aria-label="Log out of account">
               <LogOut size={18} /> Logout
             </button>
           </nav>
@@ -436,7 +442,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                     return (
                       <div className="order-card" key={order.id}>
                         <div className="order-card-header">
-                          <div>
+                          <div className="order-header-info">
                             <Link to={`/orders/${order.id}`} className="order-id" style={{ textDecoration: 'none' }}>
                               Order #{order.orderNumber || order.id}
                             </Link>
@@ -516,8 +522,8 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
           {/* TAB 2: ADDRESS MANAGEMENT */}
           {activeTab === 'addresses' && (
             <div className="addresses-section">
-              <div className="section-toolbar">
-                <div>
+              <div className="section-toolbar addresses-toolbar">
+                <div className="toolbar-header-text">
                   <h2>Saved Delivery Addresses</h2>
                   <p className="section-subtext">Manage your shipping destinations for faster checkout.</p>
                 </div>
@@ -750,13 +756,13 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
           <div className="modal-dialog">
             <div className="modal-header">
               <h3>{editingAddressId ? 'Edit Delivery Address' : 'Add New Delivery Address'}</h3>
-              <button type="button" className="close-btn" onClick={() => setAddressModalOpen(false)}>
+              <button type="button" className="close-btn" onClick={() => setAddressModalOpen(false)} aria-label="Close dialog">
                 <X size={20} />
               </button>
             </div>
 
             {addressError && (
-              <div className="alert-banner error" style={{ margin: '15px 20px 0' }}>
+              <div className="alert-banner error modal-alert">
                 <AlertCircle size={18} /> {addressError}
               </div>
             )}
@@ -873,29 +879,29 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
           <div className="modal-dialog">
             <div className="modal-header">
               <h3>Cancel Order #{cancellingOrder.orderNumber || cancellingOrder.id}</h3>
-              <button type="button" className="close-btn" onClick={() => setCancellingOrder(null)}>
+              <button type="button" className="close-btn" onClick={() => setCancellingOrder(null)} aria-label="Close dialog">
                 <X size={20} />
               </button>
             </div>
 
             {cancelError && (
-              <div className="alert-banner error" style={{ margin: '15px 20px 0' }}>
+              <div className="alert-banner error modal-alert">
                 <AlertCircle size={18} /> {cancelError}
               </div>
             )}
 
-            <div style={{ padding: '20px' }}>
-              <p style={{ color: '#475569', fontSize: '14px', lineHeight: 1.5 }}>
+            <div className="cancel-modal-body">
+              <p className="cancel-notice">
                 Are you sure you want to cancel this order? Once cancelled, this action cannot be undone. If you already made an online payment, a refund request will be initiated.
               </p>
 
-              <div className="form-group" style={{ marginTop: '15px' }}>
-                <label htmlFor="cancelReasonSelect" style={{ fontWeight: 600, fontSize: '13px', display: 'block', marginBottom: '6px' }}>Reason for Cancellation</label>
+              <div className="form-group cancel-form-group">
+                <label htmlFor="cancelReasonSelect" className="cancel-label">Reason for Cancellation</label>
                 <select 
                   id="cancelReasonSelect"
                   value={cancelReason} 
                   onChange={(e) => setCancelReason(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  className="cancel-select"
                 >
                   <option value="Changed my mind">Changed my mind</option>
                   <option value="Ordered by mistake">Ordered by mistake</option>

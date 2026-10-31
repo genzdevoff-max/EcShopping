@@ -106,7 +106,7 @@ test('Feature B1: Forgot password generates token and sends email for valid cust
 
     assert.ok(sentMailOptions, 'transporter.sendMail should be invoked');
     assert.equal(sentMailOptions.to, testCustomer.email);
-    assert.match(sentMailOptions.subject, /Reset your EcShopping password/i);
+    assert.match(sentMailOptions.subject, /Reset your EcShopping.*password/i);
     assert.match(sentMailOptions.html, /\/reset-password\?token=[a-f0-9]+&role=customer/i);
 
     // Verify token exists in database
@@ -302,4 +302,73 @@ test('Feature B6: Reset password enforces 12-char minimum policy for admin accou
     .send({ email: testAdmin.email, password: testAdmin.newPassword });
   assert.equal(adminLoginRes.status, 200);
   assert.equal(adminLoginRes.body.success, true);
+});
+
+test('Feature B7: SMTP transmission failure returns 503 and does not falsely claim email was sent', async () => {
+  const originalSendMail = transporter.sendMail;
+  transporter.sendMail = async () => {
+    const err = new Error('Data command failed: 550-5.4.5 Daily user sending limit exceeded.');
+    err.code = 'EENVELOPE';
+    err.responseCode = 550;
+    err.response = '550-5.4.5 Daily user sending limit exceeded.';
+    throw err;
+  };
+
+  try {
+    const res = await request
+      .post('/api/auth/forgot-password')
+      .send({ email: testCustomer.email, role: 'customer' });
+
+    assert.equal(res.status, 503, 'Must return HTTP 503 when SMTP transmission fails');
+    assert.equal(res.body.success, false);
+    assert.match(res.body.error, /unavailable|unable to dispatch/i);
+  } finally {
+    transporter.sendMail = originalSendMail;
+  }
+});
+
+test('Feature B8: Reset link contains canonical production URL and secure token', async () => {
+  let capturedHtml = '';
+  const originalSendMail = transporter.sendMail;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+  delete process.env.FRONTEND_URL; // Test canonical default
+
+  transporter.sendMail = async (opts) => {
+    capturedHtml = opts.html || '';
+    return { messageId: 'msg-canonical-test', response: '250 OK' };
+  };
+
+  try {
+    const res = await request
+      .post('/api/auth/forgot-password')
+      .send({ email: testVendor.email, role: 'vendor' });
+
+    assert.equal(res.status, 200);
+    assert.match(capturedHtml, /https:\/\/ecshopping\.in\/reset-password\?token=[a-f0-9]{64}&role=vendor/);
+  } finally {
+    transporter.sendMail = originalSendMail;
+    if (originalFrontendUrl) process.env.FRONTEND_URL = originalFrontendUrl;
+  }
+});
+
+test('Feature B9: Auto-detection of role when role is omitted in forgot-password', async () => {
+  let capturedRole = '';
+  const originalSendMail = transporter.sendMail;
+  transporter.sendMail = async (opts) => {
+    if (opts.html.includes('role=vendor')) capturedRole = 'vendor';
+    if (opts.html.includes('role=customer')) capturedRole = 'customer';
+    return { messageId: 'msg-auto-detect', response: '250 OK' };
+  };
+
+  try {
+    // Send without role for testVendor
+    const res = await request
+      .post('/api/auth/forgot-password')
+      .send({ email: testVendor.email });
+
+    assert.equal(res.status, 200);
+    assert.equal(capturedRole, 'vendor', 'Should auto-detect vendor role when registered in vendors table');
+  } finally {
+    transporter.sendMail = originalSendMail;
+  }
 });
