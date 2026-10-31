@@ -372,3 +372,122 @@ test('Feature B9: Auto-detection of role when role is omitted in forgot-password
     transporter.sendMail = originalSendMail;
   }
 });
+
+test('Feature B10: Vendor password reset enforces policy, updates credentials, and allows successful vendor login', async () => {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const resetId = 'pr_test_vend_reset_' + Date.now();
+
+  await pool.query(
+    'INSERT INTO password_resets (id, email, role, token_hash, expires_at) VALUES (?, ?, "vendor", ?, ?)',
+    [resetId, testVendor.email, tokenHash, new Date(Date.now() + 3600000)]
+  );
+
+  // Reset vendor password
+  const resetRes = await request
+    .post('/api/auth/reset-password')
+    .send({ token: rawToken, role: 'vendor', newPassword: testVendor.newPassword });
+  assert.equal(resetRes.status, 200);
+  assert.equal(resetRes.body.success, true);
+
+  // Single-use enforcement: immediate second attempt fails
+  const reuseRes = await request
+    .post('/api/auth/reset-password')
+    .send({ token: rawToken, role: 'vendor', newPassword: testVendor.newPassword });
+  assert.equal(reuseRes.status, 400);
+
+  // Old password rejected
+  const oldLoginRes = await request
+    .post('/api/auth/vendor/login')
+    .send({ email: testVendor.email, password: testVendor.oldPassword });
+  assert.equal(oldLoginRes.status, 401);
+
+  // New password accepted
+  const newLoginRes = await request
+    .post('/api/auth/vendor/login')
+    .send({ email: testVendor.email, password: testVendor.newPassword });
+  assert.equal(newLoginRes.status, 200);
+  assert.equal(newLoginRes.body.success, true);
+  assert.ok(newLoginRes.body.token);
+
+  // Database verification: password_hash is bcrypt, legacy password cleared
+  const [rows] = await pool.query('SELECT password, password_hash FROM vendors WHERE LOWER(email) = LOWER(?)', [testVendor.email]);
+  assert.equal(rows[0].password, '');
+  assert.equal(rows[0].password_hash.startsWith('$2'), true);
+});
+
+test('Feature B11: SMTP diagnostic categorization handles authentication failure, connection timeout, and sender rejection', async () => {
+  const originalSendMail = transporter.sendMail;
+
+  try {
+    // 1. SMTP Authentication failure (EAUTH / 535)
+    transporter.sendMail = async () => {
+      const err = new Error('Invalid login: 535-5.7.8 Username and Password not accepted');
+      err.code = 'EAUTH';
+      err.responseCode = 535;
+      throw err;
+    };
+    const authFailRes = await request
+      .post('/api/auth/forgot-password')
+      .send({ email: testCustomer.email, role: 'customer' });
+    assert.equal(authFailRes.status, 503);
+    assert.equal(authFailRes.body.success, false);
+
+    // 2. SMTP Connection failure (ECONNREFUSED)
+    transporter.sendMail = async () => {
+      const err = new Error('connect ECONNREFUSED 127.0.0.1:465');
+      err.code = 'ECONNREFUSED';
+      throw err;
+    };
+    const connFailRes = await request
+      .post('/api/auth/forgot-password')
+      .send({ email: testCustomer.email, role: 'customer' });
+    assert.equal(connFailRes.status, 503);
+    assert.equal(connFailRes.body.success, false);
+
+    // 3. SMTP Sender rejection (550)
+    transporter.sendMail = async () => {
+      const err = new Error('Sender rejected: 550 5.1.0 Sender address rejected');
+      err.code = 'EENVELOPE';
+      err.responseCode = 550;
+      throw err;
+    };
+    const rejectRes = await request
+      .post('/api/auth/forgot-password')
+      .send({ email: testCustomer.email, role: 'customer' });
+    assert.equal(rejectRes.status, 503);
+    assert.equal(rejectRes.body.success, false);
+  } finally {
+    transporter.sendMail = originalSendMail;
+  }
+});
+
+test('Feature B12: No support@ecshopping.local in production-facing API responses or client sources', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+
+  // Forgot password response check
+  const forgotRes = await request
+    .post('/api/auth/forgot-password')
+    .send({ email: 'nonexistent@test.local', role: 'customer' });
+  const forgotStr = JSON.stringify(forgotRes.body);
+  assert.ok(!forgotStr.includes('support@ecshopping.local'));
+
+  // Client source files check
+  const clientFiles = [
+    'client/src/components/auth/UnifiedAuthModal.jsx',
+    'client/src/components/auth/AuthForm.jsx',
+    'client/src/pages/ResetPassword.jsx'
+  ];
+
+  for (const relPath of clientFiles) {
+    const fullPath = path.resolve(relPath);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      assert.ok(
+        !content.includes('support@ecshopping.local'),
+        `File ${relPath} must not contain obsolete support@ecshopping.local`
+      );
+    }
+  }
+});

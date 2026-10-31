@@ -129,6 +129,7 @@ import {
   sendVendorVerificationEmail,
   sendResendVerificationEmail,
   sendPasswordResetEmail,
+  maskEmail,
   sendVendorProductSubmissionNotification,
   sendProductApprovalStatusEmail,
   sendOrderConfirmationEmail,
@@ -150,6 +151,7 @@ export {
   sendVendorVerificationEmail,
   sendResendVerificationEmail,
   sendPasswordResetEmail,
+  maskEmail,
   sendVendorProductSubmissionNotification,
   sendProductApprovalStatusEmail,
   sendOrderConfirmationEmail,
@@ -1050,10 +1052,6 @@ app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   const standardMessage = 'If an account exists with that email, a password reset link has been sent.';
 
   try {
-    let accountExists = false;
-    let userName = '';
-    let resolvedRole = inputRole;
-
     const findCustomer = async () => {
       const [rows] = await pool.query('SELECT id, name FROM users WHERE LOWER(email) = ?', [cleanEmail]);
       if (rows.length > 0) return { exists: true, name: rows[0].name || 'Customer' };
@@ -1072,77 +1070,85 @@ app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
       return { exists: false };
     };
 
-    if (inputRole === 'vendor') {
-      const v = await findVendor();
-      if (v.exists) { accountExists = true; userName = v.name; resolvedRole = 'vendor'; }
-      else {
-        const c = await findCustomer();
-        if (c.exists) { accountExists = true; userName = c.name; resolvedRole = 'customer'; }
-      }
-    } else if (inputRole === 'admin') {
-      const a = await findAdmin();
-      if (a.exists) { accountExists = true; userName = a.name; resolvedRole = 'admin'; }
-    } else if (inputRole === 'customer') {
-      const c = await findCustomer();
-      if (c.exists) { accountExists = true; userName = c.name; resolvedRole = 'customer'; }
-      else {
-        // Fallback: check if registered as vendor
-        const v = await findVendor();
-        if (v.exists) { accountExists = true; userName = v.name; resolvedRole = 'vendor'; }
-      }
+    const customer = await findCustomer();
+    const vendor = await findVendor();
+    const admin = await findAdmin();
+
+    let accountExists = false;
+    let userName = '';
+    let resolvedRole = '';
+
+    // Direct role match preference
+    if (inputRole === 'customer' && customer.exists) {
+      accountExists = true; userName = customer.name; resolvedRole = 'customer';
+    } else if (inputRole === 'vendor' && vendor.exists) {
+      accountExists = true; userName = vendor.name; resolvedRole = 'vendor';
+    } else if (inputRole === 'admin' && admin.exists) {
+      accountExists = true; userName = admin.name; resolvedRole = 'admin';
     } else {
-      // Auto-detect role: check vendor, customer, then admin
-      const v = await findVendor();
-      if (v.exists) {
-        accountExists = true; userName = v.name; resolvedRole = 'vendor';
+      // Prioritized cross-role fallback
+      if (inputRole === 'admin') {
+        if (vendor.exists) { accountExists = true; userName = vendor.name; resolvedRole = 'vendor'; }
+        else if (customer.exists) { accountExists = true; userName = customer.name; resolvedRole = 'customer'; }
+      } else if (inputRole === 'vendor') {
+        if (customer.exists) { accountExists = true; userName = customer.name; resolvedRole = 'customer'; }
+        else if (admin.exists) { accountExists = true; userName = admin.name; resolvedRole = 'admin'; }
       } else {
-        const c = await findCustomer();
-        if (c.exists) {
-          accountExists = true; userName = c.name; resolvedRole = 'customer';
-        } else {
-          const a = await findAdmin();
-          if (a.exists) {
-            accountExists = true; userName = a.name; resolvedRole = 'admin';
-          }
-        }
+        // Customer or auto-detect
+        if (customer.exists) { accountExists = true; userName = customer.name; resolvedRole = 'customer'; }
+        else if (vendor.exists) { accountExists = true; userName = vendor.name; resolvedRole = 'vendor'; }
+        else if (admin.exists) { accountExists = true; userName = admin.name; resolvedRole = 'admin'; }
       }
     }
 
-    if (accountExists && resolvedRole) {
-      const rawToken = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-      const resetId = 'pr_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-      // Invalidate existing active tokens for this email and role
-      await pool.query(
-        'UPDATE password_resets SET used_at = NOW() WHERE LOWER(email) = ? AND role = ? AND used_at IS NULL',
-        [cleanEmail, resolvedRole]
-      );
-
-      // Record new reset token
-      await pool.query(
-        'INSERT INTO password_resets (id, email, role, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
-        [resetId, cleanEmail, resolvedRole, tokenHash, expiresAt]
-      );
-
-      // Dispatch centralized reset email (From: EcShopping Admin)
-      const emailResult = await sendPasswordResetEmail({
-        email: cleanEmail,
-        name: userName,
-        role: resolvedRole,
-        rawToken
+    if (!accountExists || !resolvedRole) {
+      console.log(`ℹ️ [Forgot-Password] Account not found for ${maskEmail(cleanEmail)} (requested role: ${inputRole || 'auto'})`);
+      return res.status(200).json({
+        success: true,
+        message: standardMessage
       });
-
-      if (!emailResult || !emailResult.success) {
-        console.error(`❌ [Forgot-Password] Delivery failure to ${cleanEmail} (${resolvedRole}):`, emailResult?.error || 'Unknown dispatch error');
-        return res.status(503).json({
-          success: false,
-          error: 'Email delivery service is currently unavailable. Please try again later or contact support.'
-        });
-      }
     }
 
+    console.log(`ℹ️ [Forgot-Password] Account identified for ${maskEmail(cleanEmail)} as role: ${resolvedRole}`);
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const resetId = 'pr_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Record new reset token
+    await pool.query(
+      'INSERT INTO password_resets (id, email, role, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
+      [resetId, cleanEmail, resolvedRole, tokenHash, expiresAt]
+    );
+
+    // Dispatch centralized reset email (From: EcShopping Admin)
+    const emailResult = await sendPasswordResetEmail({
+      email: cleanEmail,
+      name: userName,
+      role: resolvedRole,
+      rawToken
+    });
+
+    if (!emailResult || !emailResult.success) {
+      // Roll back un-delivered reset token to avoid leaving an unusable flow
+      try {
+        await pool.query('DELETE FROM password_resets WHERE id = ?', [resetId]);
+      } catch {}
+      console.error(`❌ [Forgot-Password] Delivery failure to ${maskEmail(cleanEmail)} (${resolvedRole}):`, emailResult?.error || 'Unknown dispatch error');
+      return res.status(503).json({
+        success: false,
+        error: 'Email delivery service is currently unavailable. Please try again later or contact support.'
+      });
+    }
+
+    // Email delivery succeeded: invalidate any older active tokens for this email and role
+    await pool.query(
+      'UPDATE password_resets SET used_at = NOW() WHERE LOWER(email) = ? AND role = ? AND id != ? AND used_at IS NULL',
+      [cleanEmail, resolvedRole, resetId]
+    );
+
+    console.log(`✅ [Forgot-Password] Reset email successfully accepted by SMTP server for ${maskEmail(cleanEmail)} (${resolvedRole}) | MsgId: ${emailResult.messageId || 'N/A'}`);
     return res.status(200).json({
       success: true,
       message: standardMessage
@@ -1163,19 +1169,19 @@ app.post('/api/auth/verify-reset-token', authLimiter, async (req, res) => {
   const cleanToken = String(token || '').trim();
   const cleanRole = String(role || '').trim().toLowerCase();
 
-  if (!cleanToken || !cleanRole) {
+  if (!cleanToken) {
     return res.status(400).json({
       success: false,
       valid: false,
-      error: 'Token and role are required'
+      error: 'Token is required'
     });
   }
 
   try {
     const tokenHash = crypto.createHash('sha256').update(cleanToken).digest('hex');
     const [rows] = await pool.query(
-      'SELECT id, email, role, expires_at, used_at FROM password_resets WHERE token_hash = ? AND role = ?',
-      [tokenHash, cleanRole]
+      'SELECT id, email, role, expires_at, used_at FROM password_resets WHERE token_hash = ?',
+      [tokenHash]
     );
 
     if (rows.length === 0 || rows[0].used_at !== null) {
@@ -1192,6 +1198,14 @@ app.post('/api/auth/verify-reset-token', authLimiter, async (req, res) => {
         success: false,
         valid: false,
         error: 'Password reset link has expired. Please request a new one.'
+      });
+    }
+
+    if (cleanRole && cleanRole !== resetRecord.role) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: 'Invalid role for this password reset link'
       });
     }
 
@@ -1218,36 +1232,18 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
   const cleanToken = String(token || '').trim();
   const cleanRole = String(role || '').trim().toLowerCase();
 
-  if (!cleanToken || !cleanRole || !newPassword) {
+  if (!cleanToken || !newPassword) {
     return res.status(400).json({
       success: false,
-      error: 'Token, role, and new password are required'
-    });
-  }
-
-  const allowedRoles = ['customer', 'vendor', 'admin'];
-  if (!allowedRoles.includes(cleanRole)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid role'
-    });
-  }
-
-  const minLength = cleanRole === 'admin' ? 12 : 8;
-  if (!passwordMeetsPolicy(newPassword, minLength)) {
-    return res.status(400).json({
-      success: false,
-      error: cleanRole === 'admin'
-        ? 'Admin password must be at least 12 characters long'
-        : 'Password must be at least 8 characters long'
+      error: 'Token and new password are required'
     });
   }
 
   try {
     const tokenHash = crypto.createHash('sha256').update(cleanToken).digest('hex');
     const [rows] = await pool.query(
-      'SELECT id, email, role, expires_at, used_at FROM password_resets WHERE token_hash = ? AND role = ?',
-      [tokenHash, cleanRole]
+      'SELECT id, email, role, expires_at, used_at FROM password_resets WHERE token_hash = ?',
+      [tokenHash]
     );
 
     if (rows.length === 0 || rows[0].used_at !== null) {
@@ -1265,34 +1261,66 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
       });
     }
 
-    // Mark token as used
-    await pool.query(
-      'UPDATE password_resets SET used_at = NOW() WHERE id = ?',
-      [resetRecord.id]
-    );
+    if (cleanRole && cleanRole !== resetRecord.role) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid role for this password reset link'
+      });
+    }
+
+    // Authoritative role stored on token
+    const targetRole = resetRecord.role;
+    const minLength = targetRole === 'admin' ? 12 : 8;
+
+    if (!passwordMeetsPolicy(newPassword, minLength)) {
+      return res.status(400).json({
+        success: false,
+        error: targetRole === 'admin'
+          ? 'Admin password must be at least 12 characters long'
+          : 'Password must be at least 8 characters long'
+      });
+    }
 
     // Hash the new password with bcrypt
     const passwordHash = await hashPassword(newPassword);
 
+    let updatedRows = 0;
     // Update password in the target role table
-    if (cleanRole === 'customer') {
-      await pool.query(
+    if (targetRole === 'customer') {
+      const [result] = await pool.query(
         'UPDATE users SET password_hash = ?, password = "" WHERE LOWER(email) = LOWER(?)',
         [passwordHash, resetRecord.email]
       );
-    } else if (cleanRole === 'vendor') {
-      await pool.query(
+      updatedRows = result.affectedRows;
+    } else if (targetRole === 'vendor') {
+      const [result] = await pool.query(
         'UPDATE vendors SET password_hash = ?, password = "" WHERE LOWER(email) = LOWER(?)',
         [passwordHash, resetRecord.email]
       );
-    } else if (cleanRole === 'admin') {
-      await pool.query(
+      updatedRows = result.affectedRows;
+    } else if (targetRole === 'admin') {
+      const [result] = await pool.query(
         'UPDATE admins SET password_hash = ? WHERE LOWER(email) = LOWER(?)',
         [passwordHash, resetRecord.email]
       );
+      updatedRows = result.affectedRows;
     }
 
-    console.log(`✅ Password successfully reset for ${resetRecord.email} (${cleanRole})`);
+    if (updatedRows === 0) {
+      console.error(`❌ [Reset-Password] No database rows updated for ${maskEmail(resetRecord.email)} in role ${targetRole}`);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to update password for this account. Please request a new reset link.'
+      });
+    }
+
+    // Invalidate this token and all other outstanding tokens for this email and role
+    await pool.query(
+      'UPDATE password_resets SET used_at = NOW() WHERE LOWER(email) = ? AND role = ? AND used_at IS NULL',
+      [resetRecord.email, targetRole]
+    );
+
+    console.log(`✅ [Reset-Password] Password updated successfully for ${maskEmail(resetRecord.email)} (${targetRole})`);
     return res.status(200).json({
       success: true,
       message: 'Password has been reset successfully. You can now log in with your new password.'
@@ -3749,7 +3777,9 @@ app.put('/api/admin/banners/order', requireAdmin, async (req, res) => {
   try {
     for (let i = 0; i < order.length; i++) {
       const bannerId = typeof order[i] === 'object' ? order[i].id : order[i];
-      const targetOrder = typeof order[i] === 'object' && order[i].display_order !== undefined ? order[i].display_order : i;
+      const targetOrder = typeof order[i] === 'object'
+        ? (order[i].display_order !== undefined ? order[i].display_order : (order[i].displayOrder !== undefined ? order[i].displayOrder : i))
+        : i;
       if (bannerId) {
         await pool.query('UPDATE homepage_banners SET display_order = ? WHERE id = ?', [targetOrder, bannerId]);
       }

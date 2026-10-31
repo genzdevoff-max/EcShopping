@@ -28,12 +28,29 @@ dotenv.config({ path: path.resolve(__dirname, '../../server/.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
 
-const getSmtpConfig = () => {
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const smtpPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 465;
+/**
+ * Masks an email address for safe logging without exposing PII.
+ */
+export const maskEmail = (email) => {
+  if (!email || typeof email !== 'string') return 'N/A';
+  const parts = email.trim().split('@');
+  if (parts.length !== 2) return 'invalid-email';
+  const name = parts[0];
+  const masked = name.length <= 2 ? name[0] + '*' : name[0] + '*'.repeat(Math.min(4, Math.max(1, name.length - 2))) + name.slice(-1);
+  return `${masked}@${parts[1]}`;
+};
+
+export const getSmtpConfig = () => {
+  const smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com';
+  const smtpPort = process.env.SMTP_PORT
+    ? Number(process.env.SMTP_PORT)
+    : (process.env.EMAIL_PORT ? Number(process.env.EMAIL_PORT) : 465);
   const isSmtpSecure = process.env.SMTP_SECURE !== undefined
     ? String(process.env.SMTP_SECURE).trim().toLowerCase() === 'true'
     : smtpPort === 465;
+
+  const user = process.env.SMTP_EMAIL || process.env.EMAIL_USER || process.env.SMTP_USER || process.env.ADMIN_EMAIL;
+  const pass = process.env.SMTP_PASSWORD || process.env.EMAIL_PASS || process.env.SMTP_PASS || process.env.SMTP_KEY;
 
   return {
     host: smtpHost,
@@ -43,18 +60,18 @@ const getSmtpConfig = () => {
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
-    auth: {
-      user: process.env.SMTP_EMAIL,
-      pass: process.env.SMTP_PASSWORD
-    }
+    auth: user && pass ? { user, pass } : undefined
   };
 };
 
 export const transporter = nodemailer.createTransport(getSmtpConfig());
 
-if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
+const activeSmtpUser = process.env.SMTP_EMAIL || process.env.EMAIL_USER || process.env.SMTP_USER || process.env.ADMIN_EMAIL;
+const activeSmtpPass = process.env.SMTP_PASSWORD || process.env.EMAIL_PASS || process.env.SMTP_PASS || process.env.SMTP_KEY;
+
+if (activeSmtpUser && activeSmtpPass) {
   transporter.verify()
-    .then(() => console.log(`✅ [Centralized Email] SMTP connected as ${process.env.SMTP_EMAIL} (${process.env.SMTP_HOST || 'smtp.gmail.com'}:${process.env.SMTP_PORT || 465})`))
+    .then(() => console.log(`✅ [Centralized Email] SMTP connected as ${maskEmail(activeSmtpUser)} (${process.env.SMTP_HOST || 'smtp.gmail.com'}:${process.env.SMTP_PORT || 465})`))
     .catch((err) => console.error('❌ [Centralized Email] SMTP connection failed:', err.message));
 } else {
   console.warn('⚠️ [Centralized Email] SMTP not configured (SMTP_EMAIL / SMTP_PASSWORD) — emails will be simulated or skipped.');
@@ -72,7 +89,7 @@ export const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c)
  * Always resolves to the official configured Admin account.
  */
 export const getAdminSender = () => {
-  const adminEmail = process.env.SMTP_EMAIL || process.env.ADMIN_EMAIL || 'econnectshopping@gmail.com';
+  const adminEmail = process.env.SMTP_EMAIL || process.env.EMAIL_USER || process.env.SMTP_USER || process.env.ADMIN_EMAIL || 'econnectshopping@gmail.com';
   const brandName = process.env.SENDER_NAME || 'EcShopping';
   const displayName = brandName.toLowerCase().includes('admin')
     ? brandName
@@ -91,14 +108,14 @@ export const getAdminSender = () => {
  * Resolves the Admin recipient for administrative notifications (e.g. new vendor product submission).
  */
 export const getAdminNotificationRecipient = () => {
-  return process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL || 'econnectshopping@gmail.com';
+  return process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL || process.env.EMAIL_USER || 'econnectshopping@gmail.com';
 };
 
 /**
  * Resolves the official customer support reply-to email.
  */
 export const getSupportReplyTo = () => {
-  return process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL || 'econnectshopping@gmail.com';
+  return process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL || process.env.EMAIL_USER || 'econnectshopping@gmail.com';
 };
 
 /**
@@ -152,18 +169,18 @@ export const sendAdminEmail = async ({ to, subject, html, text, replyTo, categor
   const adminSender = getAdminSender();
   const defaultReplyTo = replyTo || getSupportReplyTo();
 
-  if (!process.env.SMTP_EMAIL || !process.env.SMTP_PASSWORD) {
-    console.warn(`⚠️ [SMTP Notice] Email (${category}) to ${to} skipped: SMTP credentials not configured in environment.`);
-    return { success: false, skipped: true, error: 'SMTP credentials not configured in environment' };
+  const user = process.env.SMTP_EMAIL || process.env.EMAIL_USER || process.env.SMTP_USER || process.env.ADMIN_EMAIL;
+  const pass = process.env.SMTP_PASSWORD || process.env.EMAIL_PASS || process.env.SMTP_PASS || process.env.SMTP_KEY;
+
+  if (!user || !pass) {
+    console.warn(`⚠️ [SMTP Notice] Email (${category}) to ${maskEmail(to)} skipped: SMTP credentials not configured in environment (user/pass missing).`);
+    return { success: false, skipped: true, errorType: 'CONFIGURATION_MISSING', error: 'SMTP credentials not configured in environment' };
   }
 
   // Ensure transporter has active credentials from current process.env
   if (transporter && transporter.options) {
-    if (!transporter.options.auth?.user && process.env.SMTP_EMAIL) {
-      transporter.options.auth = {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_PASSWORD
-      };
+    if (!transporter.options.auth?.user || !transporter.options.auth?.pass) {
+      transporter.options.auth = { user, pass };
     }
   }
 
@@ -177,7 +194,7 @@ export const sendAdminEmail = async ({ to, subject, html, text, replyTo, categor
       html
     });
 
-    console.log(`📧 [Email: ${category}] Dispatched to ${to} | MsgId: ${result.messageId || 'N/A'} | Response: ${result.response || 'OK'} | Sender: ${adminSender.email}`);
+    console.log(`📧 [Email: ${category}] Dispatched to ${maskEmail(to)} | MsgId: ${result.messageId || 'N/A'} | Response: ${result.response || 'OK'} | Sender: ${maskEmail(adminSender.email)}`);
     return {
       success: true,
       messageId: result.messageId,
@@ -186,9 +203,29 @@ export const sendAdminEmail = async ({ to, subject, html, text, replyTo, categor
       rejected: result.rejected
     };
   } catch (err) {
-    console.error(`❌ [Email: ${category}] Delivery failed to ${to} | Code: ${err.code || 'UNKNOWN'} | ResponseCode: ${err.responseCode || 'N/A'} | Error: ${err.message}`);
+    let errorType = 'DELIVERY_ERROR';
+    const msg = String(err.message || '').toLowerCase();
+    const resp = String(err.response || '').toLowerCase();
+
+    if (err.code === 'EAUTH' || err.responseCode === 535 || msg.includes('badauth') || msg.includes('username and password not accepted')) {
+      errorType = 'AUTH_FAILURE';
+      console.error(`❌ [Email: ${category}] SMTP authentication failure (535/EAUTH) for sender account: ${maskEmail(user)}`);
+    } else if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED' || err.code === 'ECONNRESET' || err.code === 'ENOTFOUND' || err.code === 'ESOCKET') {
+      errorType = 'CONNECTION_FAILURE';
+      console.error(`❌ [Email: ${category}] SMTP connection failure (${err.code}) to server`);
+    } else if (err.responseCode >= 550 && err.responseCode <= 559 && !resp.includes('quota') && !msg.includes('limit')) {
+      errorType = 'SENDER_REJECTED';
+      console.error(`❌ [Email: ${category}] SMTP sender rejection (Code ${err.responseCode})`);
+    } else if (msg.includes('limit') || msg.includes('quota') || resp.includes('quota') || err.responseCode === 452) {
+      errorType = 'RATE_LIMIT';
+      console.error(`❌ [Email: ${category}] SMTP rate limit or daily sending quota reached: ${err.message}`);
+    } else {
+      console.error(`❌ [Email: ${category}] Delivery failed to ${maskEmail(to)} | Code: ${err.code || 'UNKNOWN'} | ResponseCode: ${err.responseCode || 'N/A'} | Error: ${err.message}`);
+    }
+
     return {
       success: false,
+      errorType,
       error: err.message,
       code: err.code,
       responseCode: err.responseCode,

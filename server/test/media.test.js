@@ -154,15 +154,21 @@ test('POST /api/upload/video: Rejects invalid video formats and missing files', 
 });
 
 test('POST /api/upload/video: Clear diagnostic error when cloud_name contains spaces', async () => {
-  const res = await request()
-    .post('/api/upload/video')
-    .set('Authorization', `Bearer ${VENDOR_TOKEN}`)
-    .attach('video', Buffer.from('dummy mp4 binary data'), 'sample.mp4');
+  const orig = process.env.CLOUDINARY_CLOUD_NAME;
+  process.env.CLOUDINARY_CLOUD_NAME = 'Ec shopping';
+  try {
+    const res = await request()
+      .post('/api/upload/video')
+      .set('Authorization', `Bearer ${VENDOR_TOKEN}`)
+      .attach('video', Buffer.from('dummy mp4 binary data'), 'sample.mp4');
 
-  // Because CLOUDINARY_CLOUD_NAME has spaces ('Ec shopping'), the backend returns 502 with clear diagnostic
-  assert.equal(res.status, 502);
-  assert.equal(res.body.success, false);
-  assert.match(res.body.error, /Cloud names cannot contain spaces|Cloudinary rejected credentials/);
+    // Because CLOUDINARY_CLOUD_NAME has spaces ('Ec shopping'), the backend returns 502 with clear diagnostic
+    assert.equal(res.status, 502);
+    assert.equal(res.body.success, false);
+    assert.match(res.body.error, /Cloud names cannot contain spaces|Cloudinary rejected credentials/);
+  } finally {
+    process.env.CLOUDINARY_CLOUD_NAME = orig;
+  }
 });
 
 test('POST /api/upload/video/delete: Enforces auth and validates publicId', async () => {

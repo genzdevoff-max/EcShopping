@@ -197,7 +197,13 @@ export default function AuthForm({ onCustomerLogin, onSuccess, initialMode = 'lo
           </div>
 
           <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: '0 0 12px' }}>
-            Need direct assistance? You can also reach our team at support@ecshopping.local
+            Need direct assistance? You can also reach our team at{' '}
+            <a
+              href="mailto:econnectshopping@gmail.com"
+              style={{ color: '#0e5c4a', fontWeight: 600, textDecoration: 'underline' }}
+            >
+              econnectshopping@gmail.com
+            </a>
           </p>
 
           <div className="auth-buttons">

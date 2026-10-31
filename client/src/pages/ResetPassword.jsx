@@ -43,6 +43,9 @@ export default function ResetPassword() {
         if (data?.valid) {
           setTokenValid(true);
           setAccountEmail(data.email || '');
+          if (data.role) {
+            setRole(data.role);
+          }
         } else {
           setTokenValid(false);
           setTokenError(data?.error || 'Invalid or expired password reset link.');

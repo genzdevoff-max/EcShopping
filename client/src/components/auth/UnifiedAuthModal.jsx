@@ -533,7 +533,13 @@ export default function UnifiedAuthModal({
               </div>
 
               <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '4px 0 8px', lineHeight: 1.45 }}>
-                Need manual verification? Our support desk can assist at <strong>support@ecshopping.local</strong>.
+                Need manual verification? Our support desk can assist at{' '}
+                <a
+                  href="mailto:econnectshopping@gmail.com"
+                  style={{ color: '#0e5c4a', fontWeight: 600, textDecoration: 'underline' }}
+                >
+                  econnectshopping@gmail.com
+                </a>.
               </p>
 
               <button type="submit" className="auth-submit-btn" disabled={loading}>
@@ -602,7 +608,7 @@ export default function UnifiedAuthModal({
                     id="auth-email"
                     type="email"
                     className="auth-unified-input"
-                    placeholder={role === 'admin' ? 'admin@ecshopping.local' : 'you@example.com'}
+                    placeholder={role === 'admin' ? 'admin@ecshopping.in' : 'you@example.com'}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required

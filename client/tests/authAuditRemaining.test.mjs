@@ -177,11 +177,15 @@ test('/vendor/register automatically opens vendor registration form', () => {
 // --------------------------------------------------------------------------
 
 test('password recovery and email verification align with documented design', () => {
-  // Login form provides support guidance notice instead of broken mock reset
+  // Login form provides official support guidance notice instead of placeholder
   const authFormSource = read('../src/components/auth/AuthForm.jsx');
   assert.ok(
-    authFormSource.includes('support@ecshopping.local'),
-    'AuthForm must provide support recovery guidance'
+    authFormSource.includes('econnectshopping@gmail.com'),
+    'AuthForm must provide official support recovery guidance'
+  );
+  assert.ok(
+    !authFormSource.includes('support@ecshopping.local'),
+    'AuthForm must not contain obsolete support@ecshopping.local'
   );
 
   // CustomerProfile provides authenticated self-service password update
