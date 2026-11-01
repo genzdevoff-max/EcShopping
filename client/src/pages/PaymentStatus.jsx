@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, Clock, CheckCircle2, XCircle, ArrowRight, RefreshCw, ShoppingBag, Receipt, AlertCircle } from 'lucide-react';
+import { Loader2, Clock, CheckCircle2, XCircle, ArrowRight, RefreshCw, ShoppingBag, Receipt, AlertCircle, Banknote } from 'lucide-react';
 import { PageHero } from '../components/ui/PageHeader';
 import PaymentStates from '../components/checkout/PaymentStates';
 import { createPhonePePayment, verifyPhonePePayment } from '../components/checkout/paymentGateway';
+import api from '../utils/api';
 import { useCart } from '../context/CartContext';
 import './PaymentStatus.css';
 
@@ -88,13 +89,26 @@ export default function PaymentStatus() {
 
   const [orderId] = useState(() => resolveOrderId(searchParams));
 
+  // Detect URL parameter indicators of gateway cancellation
+  const initialUrlCode = (searchParams.get('code') || searchParams.get('status') || '').toUpperCase();
+  const isDirectCancellation = ['PAYMENT_ERROR', 'PAYMENT_CANCELLED', 'PAYMENT_DECLINED', 'FAILED', 'CANCELLED', 'ABORTED'].includes(initialUrlCode);
+
   // States: 'confirming' | 'pending' | 'pending_settling' | 'failed' | 'error' | 'unresolved'
-  const [state, setState] = useState(() => (orderId ? 'confirming' : 'unresolved'));
+  const [state, setState] = useState(() => {
+    if (!orderId) return 'unresolved';
+    if (isDirectCancellation) return 'failed';
+    return 'confirming';
+  });
   const [attemptIndex, setAttemptIndex] = useState(0);
   const [isChecking, setIsChecking] = useState(false);
   const [payingAgain, setPayingAgain] = useState(false);
+  const [switchingToCod, setSwitchingToCod] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [failedReason, setFailedReason] = useState('');
+  const [failedReason, setFailedReason] = useState(() =>
+    isDirectCancellation
+      ? 'Your payment was cancelled or declined on the PhonePe gateway. No amount was deducted from your account.'
+      : ''
+  );
 
   const aliveRef = useRef(true);
   const finalizingRef = useRef(false);
@@ -182,7 +196,7 @@ export default function PaymentStatus() {
         setFailedReason(
           res.gatewayState
             ? `PhonePe reports this payment as ${res.gatewayState.toLowerCase().replace(/_/g, ' ')}. No amount has been deducted.`
-            : 'Your payment was declined by your bank or cancelled. No amount was deducted.'
+            : 'Your payment was cancelled or declined. No amount was deducted from your account.'
         );
         return 'failed';
       }
@@ -195,8 +209,19 @@ export default function PaymentStatus() {
       return 'pending';
     } catch (err) {
       if (!aliveRef.current) return 'cancelled';
+      const msg = String(err?.message || '');
+      const isCancellationOr404 = msg.includes('404') ||
+        msg.toLowerCase().includes('not found') ||
+        msg.toLowerCase().includes('cancelled') ||
+        msg.toLowerCase().includes('failed');
+      if (isCancellationOr404) {
+        clearPendingOrderMarkers();
+        setState('failed');
+        setFailedReason('Your payment was cancelled or could not be completed on the payment gateway. No amount was deducted from your account.');
+        return 'failed';
+      }
       setState('error');
-      setErrorMessage(err?.message || 'We could not reach the payment verification service. Your order remains safely recorded.');
+      setErrorMessage(msg || 'We could not reach the payment verification service. Your order remains safely recorded.');
       return 'error';
     } finally {
       if (aliveRef.current) {
@@ -216,6 +241,16 @@ export default function PaymentStatus() {
     let active = true;
 
     const runInitial = async () => {
+      if (isDirectCancellation) {
+        const outcome = await performVerification(false);
+        if (outcome !== 'paid' && active && aliveRef.current) {
+          clearPendingOrderMarkers();
+          setState('failed');
+          setFailedReason('Your payment was cancelled or declined on the PhonePe gateway. No amount was deducted.');
+        }
+        return;
+      }
+
       const outcome = await performVerification(false);
       if (!active || outcome !== 'pending') return;
 
@@ -251,7 +286,39 @@ export default function PaymentStatus() {
       active = false;
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-  }, [orderId, performVerification]);
+  }, [isDirectCancellation, orderId, performVerification]);
+
+  // Switch to Cash on Delivery (COD) on payment failure / cancellation
+  const handleSwitchToCod = async () => {
+    if (switchingToCod || !orderId) return;
+    setSwitchingToCod(true);
+    try {
+      const res = await api.switchToCod(orderId);
+      if (res?.success) {
+        clearPendingOrderMarkers();
+        cart?.clear?.();
+        navigate(`/order-confirmation/${orderId}`, {
+          state: {
+            order: res.order || { id: orderId, paymentMethod: 'cod', paymentStatus: 'pending' },
+            payment: {
+              status: 'success',
+              message: 'Your order is confirmed with Cash on Delivery (COD). Please pay when your shipment arrives.',
+              method: 'cod'
+            }
+          },
+          replace: true
+        });
+      } else {
+        alert(res?.error || 'Could not switch to Cash on Delivery. Please contact support.');
+      }
+    } catch (err) {
+      alert(err?.message || 'Could not switch to Cash on Delivery.');
+    } finally {
+      if (aliveRef.current) {
+        setSwitchingToCod(false);
+      }
+    }
+  };
 
   // Manual status check
   const handleManualCheck = async () => {
@@ -431,20 +498,36 @@ export default function PaymentStatus() {
                   <strong>Payment did not complete</strong>
                   <p>
                     {failedReason ||
-                      'The payment was declined by your bank or cancelled. No amount was deducted from your account.'}
+                      'The payment was cancelled or declined. No amount was deducted from your account.'}
                   </p>
                   <span className="pay-ref">Ref: {orderId}</span>
                 </div>
               </div>
 
               <p className="ps-note">
-                If money was deducted by your bank, it will be automatically refunded within 3–5 business days. You can retry paying for this order or choose another payment method.
+                You can switch this order to Cash on Delivery (COD) to complete it immediately, or retry paying online. If your bank deducted any amount, it will automatically reverse within 3–5 business days.
               </p>
 
               <div className="ps-actions">
                 <button
                   type="button"
                   className="btn btn-primary"
+                  onClick={handleSwitchToCod}
+                  disabled={switchingToCod}
+                >
+                  {switchingToCod ? (
+                    <>
+                      <Loader2 size={16} className="spin" /> Switching to COD…
+                    </>
+                  ) : (
+                    <>
+                      <Banknote size={16} /> Switch to Cash on Delivery (COD)
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
                   onClick={payAgain}
                   disabled={payingAgain}
                 >
@@ -454,12 +537,12 @@ export default function PaymentStatus() {
                     </>
                   ) : (
                     <>
-                      <RefreshCw size={16} /> Try paying again
+                      <RefreshCw size={16} /> Retry online payment
                     </>
                   )}
                 </button>
-                <Link to={`/orders/${orderId}`} className="btn btn-outline">
-                  View order
+                <Link to={`/orders/${orderId}`} className="btn btn-ghost">
+                  View order details
                 </Link>
                 <Link to="/cart" className="btn btn-ghost">
                   <ShoppingBag size={16} /> Back to cart
@@ -474,23 +557,40 @@ export default function PaymentStatus() {
               <div className="pay-state info">
                 <AlertCircle size={24} className="ps-icon-neutral" />
                 <div>
-                  <strong>Checking payment details</strong>
+                  <strong>Payment Status Notice</strong>
                   <p>
-                    {errorMessage ||
-                      'We could not reach the payment verification service. Your order remains safely recorded.'}
+                    {errorMessage?.includes('404')
+                      ? 'The online payment session was not completed or was cancelled. If no amount was deducted, you can switch to Cash on Delivery or retry paying online.'
+                      : (errorMessage || 'We could not reach the payment verification service. Your order remains safely recorded.')}
                   </p>
                   <span className="pay-ref">Ref: {orderId}</span>
                 </div>
               </div>
 
               <p className="ps-note">
-                Please do not attempt a new payment immediately. Check again in a few moments or open your order details.
+                You can switch to Cash on Delivery to confirm your delivery without delay, or check payment status again.
               </p>
 
               <div className="ps-actions">
                 <button
                   type="button"
                   className="btn btn-primary"
+                  onClick={handleSwitchToCod}
+                  disabled={switchingToCod}
+                >
+                  {switchingToCod ? (
+                    <>
+                      <Loader2 size={16} className="spin" /> Switching to COD…
+                    </>
+                  ) : (
+                    <>
+                      <Banknote size={16} /> Switch to Cash on Delivery (COD)
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
                   onClick={handleManualCheck}
                   disabled={isChecking}
                 >
@@ -504,11 +604,8 @@ export default function PaymentStatus() {
                     </>
                   )}
                 </button>
-                <Link to={`/orders/${orderId}`} className="btn btn-outline">
+                <Link to={`/orders/${orderId}`} className="btn btn-ghost">
                   View order details
-                </Link>
-                <Link to="/orders" className="btn btn-ghost">
-                  My orders
                 </Link>
               </div>
             </div>

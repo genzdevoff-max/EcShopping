@@ -80,6 +80,13 @@ export default function ProductCard({
 
   const badges = [];
   if (off > 0) badges.push(<span key="off" className="badge badge-sale">{off}% off</span>);
+  if (product.couponOffer) {
+    badges.push(
+      <span key="coupon" className="badge badge-soft" style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
+        🏷️ {product.couponOffer}
+      </span>
+    );
+  }
   if (product.badge) badges.push(
     <span key="badge" className={`badge ${off > 0 ? 'badge-hot' : 'badge-soft'}`}>{product.badge}</span>
   );

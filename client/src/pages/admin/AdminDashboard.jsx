@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import {
   LogOut, RefreshCw, CheckCircle, XCircle, Package, Users as UsersIcon,
-  ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Trash2,
-  Menu, X, CreditCard, ShieldCheck, Globe, AlertTriangle, Save, Eye, EyeOff, Lock, CheckCircle2,
+  ShoppingCart, PackageSearch, ClipboardList, Loader2, Plus, Edit2, Edit3, Trash2,
+  Menu, X, CreditCard, ShieldCheck, ShieldAlert, Globe, AlertTriangle, Save, Eye, EyeOff, Lock, CheckCircle2,
   UploadCloud, Link as LinkIcon, Play, FileVideo, Film, Store,
-  Image as ImageIcon, ArrowUp, ArrowDown, Sparkles
+  Image as ImageIcon, ArrowUp, ArrowDown, Sparkles, Tag, Flame,
+  FileText, ExternalLink, AlertCircle, Search
 } from 'lucide-react';
 import api, { authSessions } from '../../utils/api';
 import { getCurrentAdmin } from '../../utils/storage';
@@ -14,6 +15,7 @@ import { FormSkeleton } from '../../components/ui/States';
 import './AdminDashboard.css';
 
 const AddProduct = lazy(() => import('../vendor/AddProduct'));
+const EditProduct = lazy(() => import('../vendor/EditProduct'));
 
 const ORDER_STATUSES = ['Processing', 'Shipped', 'Delivered', 'Cancelled'];
 const fmtINR = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
@@ -24,11 +26,25 @@ const fmtINR = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 export default function AdminDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [state, setState] = useState({ loading: true, error: null, vendors: [], products: [], orders: [], users: [], categories: [], videos: [], banners: [] });
+  const [state, setState] = useState({
+    loading: true,
+    error: null,
+    vendors: [],
+    products: [],
+    orders: [],
+    users: [],
+    categories: [],
+    videos: [],
+    banners: [],
+    coupons: [],
+    deals: [],
+    commissionConfig: { defaultCommissionRate: 10, vendors: [] }
+  });
   const [attempt, setAttempt] = useState(0);
 
-  /* Admin Add Product state */
+  /* Admin Add & Edit Product state */
   const [addProductOpen, setAddProductOpen] = useState(false);
+  const [editingProductId, setEditingProductId] = useState(null);
   const [productCreatedMsg, setProductCreatedMsg] = useState(null);
 
   /* Per-row action bookkeeping: the in-flight action id and its latest error. */
@@ -43,12 +59,76 @@ export default function AdminDashboard({ onLogout }) {
   const [newCatImage, setNewCatImage] = useState('');
   const [creatingCat, setCreatingCat] = useState(false);
   const [catFormMsg, setCatFormMsg] = useState({ type: null, text: '' });
+  const [catUploadingImg, setCatUploadingImg] = useState(false);
+  const catFileInputRef = useRef(null);
 
   const [editingCatId, setEditingCatId] = useState(null);
   const [editCatName, setEditCatName] = useState('');
   const [editCatDesc, setEditCatDesc] = useState('');
   const [editCatStatus, setEditCatStatus] = useState('active');
   const [editCatImage, setEditCatImage] = useState('');
+
+  /* Vendor Review / Verification Modal State */
+  const [reviewingVendor, setReviewingVendor] = useState(null);
+  const [vendorReviewNotes, setVendorReviewNotes] = useState('');
+  const [vendorCustomCommission, setVendorCustomCommission] = useState('');
+  const [showBankAccount, setShowBankAccount] = useState(false);
+  const [submittingVendorReview, setSubmittingVendorReview] = useState(false);
+  const [vendorReviewMsg, setVendorReviewMsg] = useState({ type: null, text: '' });
+
+  /* Customer Management, Blocking & Deletion State */
+  const [customerToDelete, setCustomerToDelete] = useState(null);
+  const [customerDeleteLoading, setCustomerDeleteLoading] = useState(false);
+  const [customerToBlock, setCustomerToBlock] = useState(null);
+  const [customerBlockLoading, setCustomerBlockLoading] = useState(false);
+  const [customerActionMsg, setCustomerActionMsg] = useState({ type: null, text: '' });
+
+  /* Coupons Engine State */
+  const [couponModalOpen, setCouponModalOpen] = useState(false);
+  const [couponProductSearch, setCouponProductSearch] = useState('');
+  const [editingCouponCode, setEditingCouponCode] = useState(null);
+  const [couponForm, setCouponForm] = useState({
+    code: '',
+    description: '',
+    discountType: 'percent',
+    discountValue: 10,
+    maxDiscountAmount: '',
+    minOrderAmount: 299,
+    usageLimit: '',
+    startDate: '',
+    endDate: '',
+    isActive: true
+  });
+  const [couponSaving, setCouponSaving] = useState(false);
+  const [couponFormMsg, setCouponFormMsg] = useState({ type: null, text: '' });
+  const [couponSearch, setCouponSearch] = useState('');
+  const [couponToDelete, setCouponToDelete] = useState(null);
+  const [couponDeleteLoading, setCouponDeleteLoading] = useState(false);
+
+  /* Deals of the Day State */
+  const [dealModalOpen, setDealModalOpen] = useState(false);
+  const [editingDealId, setEditingDealId] = useState(null);
+  const [dealForm, setDealForm] = useState({
+    productId: '',
+    dealPrice: '',
+    stockLimit: '',
+    startTime: '',
+    endTime: '',
+    status: 'active'
+  });
+  const [dealSaving, setDealSaving] = useState(false);
+  const [dealFormMsg, setDealFormMsg] = useState({ type: null, text: '' });
+  const [dealToDelete, setDealToDelete] = useState(null);
+  const [dealDeleteLoading, setDealDeleteLoading] = useState(false);
+
+  /* Commission & Payouts State */
+  const [globalCommissionRate, setGlobalCommissionRate] = useState(10);
+  const [savingGlobalCommission, setSavingGlobalCommission] = useState(false);
+  const [commissionMsg, setCommissionMsg] = useState({ type: null, text: '' });
+  const [editingVendorCommId, setEditingVendorCommId] = useState(null);
+  const [vendorCommRateInput, setVendorCommRateInput] = useState('');
+  const [savingVendorComm, setSavingVendorComm] = useState(false);
+  const [vendorCommSearch, setVendorCommSearch] = useState('');
 
   /* Video review management form state */
   const [vidInputMode, setVidInputMode] = useState('upload'); // 'upload' | 'url'
@@ -124,6 +204,9 @@ export default function AdminDashboard({ onLogout }) {
     subtitle: '',
     imageUrl: '',
     imagePublicId: '',
+    mobileImageUrl: '',
+    tabletImageUrl: '',
+    imageAspectRatio: '16:5',
     ctaText: 'Shop Now',
     ctaLink: '/shop',
     secondaryCtaText: '',
@@ -135,6 +218,8 @@ export default function AdminDashboard({ onLogout }) {
   });
   const [bannerFormMsg, setBannerFormMsg] = useState({ type: null, text: '' });
   const [bannerUploadingImg, setBannerUploadingImg] = useState(false);
+  const [bannerUploadTarget, setBannerUploadTarget] = useState('desktop'); // 'desktop' | 'tablet' | 'mobile'
+  const [bannerAspectWarning, setBannerAspectWarning] = useState('');
   const [bannerSaving, setBannerSaving] = useState(false);
   const [bannerSearch, setBannerSearch] = useState('');
   const [bannerStatusFilter, setBannerStatusFilter] = useState('all');
@@ -169,14 +254,17 @@ export default function AdminDashboard({ onLogout }) {
     (async () => {
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const [vendorRes, productRes, orderRes, userRes, catRes, videoRes, bannerRes] = await Promise.all([
+        const [vendorRes, productRes, orderRes, userRes, catRes, videoRes, bannerRes, couponRes, dealRes, commRes] = await Promise.all([
           api.getVendors(),
           api.getProducts({}, 'admin'),
           api.getOrders({}, 'admin'),
           api.getUsers(),
           api.getCategories({}, 'admin'),
           api.getVideos().catch(() => ({ success: true, videos: [] })),
-          api.getAdminBanners().catch(() => ({ success: true, banners: [] }))
+          api.getAdminBanners().catch(() => ({ success: true, banners: [] })),
+          api.getAdminCoupons().catch(() => ({ success: true, coupons: [] })),
+          api.getAdminDeals().catch(() => ({ success: true, deals: [] })),
+          api.getCommissionConfig().catch(() => ({ success: true, defaultCommissionRate: 10, vendors: [] }))
         ]);
         if (cancelled) return;
         if (!vendorRes.success || !productRes.success || !orderRes.success || !userRes.success || !catRes.success) {
@@ -191,8 +279,14 @@ export default function AdminDashboard({ onLogout }) {
           users: userRes.users || [],
           categories: catRes.categories || [],
           videos: videoRes?.videos || [],
-          banners: bannerRes?.banners || []
+          banners: bannerRes?.banners || [],
+          coupons: couponRes?.coupons || [],
+          deals: dealRes?.deals || [],
+          commissionConfig: commRes || { defaultCommissionRate: 10, vendors: [] }
         });
+        if (commRes?.defaultCommissionRate != null) {
+          setGlobalCommissionRate(commRes.defaultCommissionRate);
+        }
       } catch (err) {
         if (cancelled) return;
         if (err?.status === 401 && typeof onLogout === 'function') {
@@ -300,15 +394,448 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
-  /* Keyboard Escape to dismiss Add Product modal */
+  /* Category Image Upload (600x600 px 1:1 guideline) */
+  const handleCatImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setCatFormMsg({ type: 'error', text: 'Please select a valid image file (PNG, JPG, WEBP).' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setCatFormMsg({ type: 'error', text: 'Category image size exceeds 5MB limit.' });
+      return;
+    }
+    setCatUploadingImg(true);
+    setCatFormMsg({ type: null, text: '' });
+    try {
+      const res = await api.uploadImage(file, 'admin');
+      if (res?.success && res.url) {
+        setNewCatImage(res.url);
+        setCatFormMsg({ type: 'success', text: 'Category image uploaded successfully!' });
+      } else {
+        setCatFormMsg({ type: 'error', text: res?.error || 'Failed to upload category image' });
+      }
+    } catch (err) {
+      setCatFormMsg({ type: 'error', text: err.message || 'Category image upload failed' });
+    } finally {
+      setCatUploadingImg(false);
+    }
+  };
+
+  /* Vendor Review & Verification handlers */
+  const handleOpenVendorReview = (vendor) => {
+    setReviewingVendor(vendor);
+    setVendorReviewNotes(vendor.verificationNotes || vendor.verification_notes || '');
+    setVendorCustomCommission(vendor.commissionRate != null ? String(vendor.commissionRate) : '');
+    setShowBankAccount(false);
+    setVendorReviewMsg({ type: null, text: '' });
+  };
+
+  const handleVendorReviewAction = async (newStatus) => {
+    if (!reviewingVendor) return;
+    setSubmittingVendorReview(true);
+    setVendorReviewMsg({ type: null, text: '' });
+    try {
+      const payload = {
+        status: newStatus,
+        verificationNotes: vendorReviewNotes.trim() || undefined,
+        commissionRate: vendorCustomCommission !== '' ? Number(vendorCustomCommission) : null
+      };
+      const res = await api.verifyVendorApplication(reviewingVendor.id, payload);
+      if (res?.success) {
+        setVendorReviewMsg({ type: 'success', text: `Vendor status successfully updated to ${newStatus}` });
+        setAttempt((n) => n + 1);
+        setTimeout(() => {
+          setReviewingVendor(null);
+          setVendorReviewMsg({ type: null, text: '' });
+        }, 1200);
+      } else {
+        setVendorReviewMsg({ type: 'error', text: res?.error || 'Failed to update vendor' });
+      }
+    } catch (err) {
+      setVendorReviewMsg({ type: 'error', text: err?.message || 'Action failed' });
+    } finally {
+      setSubmittingVendorReview(false);
+    }
+  };
+
+  /* Customer Management Actions */
+  const handleToggleCustomerStatus = async (user, nextStatus) => {
+    try {
+      const res = await api.updateCustomerStatus(user.id, nextStatus);
+      if (res?.success) {
+        setAttempt((n) => n + 1);
+        setCustomerActionMsg({ type: 'success', text: `Customer account ${nextStatus === 'active' ? 'reactivated' : 'deactivated'} successfully` });
+        setTimeout(() => setCustomerActionMsg({ type: null, text: '' }), 3000);
+      } else {
+        setCustomerActionMsg({ type: 'error', text: res?.error || 'Failed to update customer status' });
+      }
+    } catch (err) {
+      setCustomerActionMsg({ type: 'error', text: err.message || 'Failed to update customer status' });
+    }
+  };
+
+  const handleConfirmDeleteCustomer = async () => {
+    if (!customerToDelete) return;
+    setCustomerDeleteLoading(true);
+    try {
+      const res = await api.deleteCustomer(customerToDelete.id);
+      if (res?.success) {
+        setAttempt((n) => n + 1);
+        setCustomerActionMsg({ type: 'success', text: res.message || 'Customer account processed' });
+        setCustomerToDelete(null);
+        setTimeout(() => setCustomerActionMsg({ type: null, text: '' }), 3000);
+      } else {
+        setCustomerActionMsg({ type: 'error', text: res?.error || 'Failed to delete customer' });
+      }
+    } catch (err) {
+      setCustomerActionMsg({ type: 'error', text: err.message || 'Failed to delete customer' });
+    } finally {
+      setCustomerDeleteLoading(false);
+    }
+  };
+
+  const handleConfirmBlockCustomer = async () => {
+    if (!customerToBlock) return;
+    setCustomerBlockLoading(true);
+    try {
+      const isAlreadyBlocked = customerToBlock.status === 'blocked';
+      const nextStatus = isAlreadyBlocked ? 'active' : 'blocked';
+      const res = await api.updateCustomerStatus(customerToBlock.id, nextStatus);
+      if (res?.success) {
+        setAttempt((n) => n + 1);
+        setCustomerActionMsg({
+          type: 'success',
+          text: `Customer "${customerToBlock.name}" has been ${isAlreadyBlocked ? 'unblocked' : 'blocked'} successfully.`
+        });
+        setCustomerToBlock(null);
+        setTimeout(() => setCustomerActionMsg({ type: null, text: '' }), 3000);
+      } else {
+        setCustomerActionMsg({ type: 'error', text: res?.error || 'Failed to update customer status' });
+      }
+    } catch (err) {
+      setCustomerActionMsg({ type: 'error', text: err.message || 'Failed to update customer status' });
+    } finally {
+      setCustomerBlockLoading(false);
+    }
+  };
+
+  /* Coupons Action Handlers */
+  const handleOpenAddCoupon = () => {
+    setEditingCouponCode(null);
+    setCouponForm({
+      code: '',
+      description: '',
+      discountType: 'percent',
+      discountValue: 10,
+      maxDiscountAmount: '',
+      minOrderAmount: 299,
+      applicableTo: 'all',
+      selectedProducts: [],
+      perCustomerLimit: 1,
+      usageLimit: '',
+      startDate: '',
+      endDate: '',
+      isActive: true
+    });
+    setCouponFormMsg({ type: null, text: '' });
+    setCouponModalOpen(true);
+  };
+
+  const updateCouponForm = (patch) => {
+    setCouponForm((prev) => ({ ...prev, ...patch }));
+    if (couponFormMsg.text) setCouponFormMsg({ type: null, text: '' });
+  };
+
+  const handleOpenEditCoupon = (c) => {
+    setEditingCouponCode(c.code);
+    let prodIds = [];
+    if (c.productIds || c.product_ids) {
+      const raw = c.productIds || c.product_ids;
+      try {
+        prodIds = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch {
+        prodIds = [];
+      }
+    }
+    setCouponForm({
+      code: c.code,
+      description: c.description || c.title || '',
+      discountType: c.discountType || c.discount_type || c.type || 'percent',
+      discountValue: c.discountValue ?? c.discount_value ?? c.value ?? 10,
+      maxDiscountAmount: c.maxDiscountAmount ?? c.max_discount_amount ?? c.max_discount ?? '',
+      minOrderAmount: c.minOrderAmount ?? c.min_order_amount ?? c.min_order ?? 0,
+      applicableTo: c.applicableTo || c.applicable_to || (prodIds.length > 0 ? 'selected' : 'all'),
+      selectedProducts: prodIds,
+      perCustomerLimit: c.perCustomerLimit ?? c.per_customer_limit ?? 1,
+      usageLimit: c.usageLimit ?? c.usage_limit ?? '',
+      startDate: c.startDate || c.start_date ? new Date(c.startDate || c.start_date).toISOString().slice(0, 10) : '',
+      endDate: c.endDate || c.end_date ? new Date(c.endDate || c.end_date).toISOString().slice(0, 10) : '',
+      isActive: Boolean(c.isActive ?? c.is_active ?? 1)
+    });
+    setCouponFormMsg({ type: null, text: '' });
+    setCouponModalOpen(true);
+  };
+
+  const handleSaveCoupon = async (e) => {
+    e.preventDefault();
+    if (!couponForm.code.trim()) {
+      setCouponFormMsg({ type: 'error', text: 'Coupon code is required.' });
+      return;
+    }
+    setCouponSaving(true);
+    setCouponFormMsg({ type: null, text: '' });
+    try {
+      const payload = {
+        code: couponForm.code.trim().toUpperCase(),
+        title: couponForm.description.trim(),
+        description: couponForm.description.trim(),
+        discountType: couponForm.discountType,
+        discountValue: Number(couponForm.discountValue) || 0,
+        maxDiscountAmount: couponForm.maxDiscountAmount !== '' ? Number(couponForm.maxDiscountAmount) : null,
+        minOrderAmount: Number(couponForm.minOrderAmount) || 0,
+        applicableTo: couponForm.applicableTo || 'all',
+        productIds: couponForm.applicableTo === 'selected' ? couponForm.selectedProducts : [],
+        perCustomerLimit: couponForm.perCustomerLimit !== '' ? parseInt(couponForm.perCustomerLimit, 10) : 1,
+        usageLimit: couponForm.usageLimit !== '' ? parseInt(couponForm.usageLimit, 10) : null,
+        startDate: couponForm.startDate || null,
+        endDate: couponForm.endDate || null,
+        isActive: Boolean(couponForm.isActive)
+      };
+
+      if (editingCouponCode) {
+        const res = await api.updateCoupon(editingCouponCode, payload);
+        if (!res?.success) throw new Error(res?.error || 'Failed to update coupon');
+      } else {
+        const res = await api.createCoupon(payload);
+        if (!res?.success) throw new Error(res?.error || 'Failed to create coupon');
+      }
+
+      setAttempt((n) => n + 1);
+      setCouponFormMsg({ type: 'success', text: `Coupon ${payload.code} saved successfully!` });
+      setTimeout(() => {
+        setCouponModalOpen(false);
+      }, 1000);
+    } catch (err) {
+      setCouponFormMsg({ type: 'error', text: err.message || 'Failed to save coupon' });
+    } finally {
+      setCouponSaving(false);
+    }
+  };
+
+  const handleConfirmDeleteCoupon = async () => {
+    if (!couponToDelete) return;
+    setCouponDeleteLoading(true);
+    try {
+      const res = await api.deleteCoupon(couponToDelete.code);
+      if (res?.success) {
+        setAttempt((n) => n + 1);
+        setCouponToDelete(null);
+      } else {
+        alert(res?.error || 'Failed to delete coupon');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete coupon');
+    } finally {
+      setCouponDeleteLoading(false);
+    }
+  };
+
+  /* Deals of the Day Action Handlers */
+  const handleOpenAddDeal = () => {
+    setEditingDealId(null);
+    setDealForm({
+      productId: (state.products || [])[0]?.id || '',
+      dealPrice: '',
+      stockLimit: '',
+      startTime: '',
+      endTime: '',
+      status: 'active'
+    });
+    setDealFormMsg({ type: null, text: '' });
+    setDealModalOpen(true);
+  };
+
+  const handleOpenEditDeal = (d) => {
+    setEditingDealId(d.id);
+    setDealForm({
+      productId: d.productId || d.product_id,
+      dealPrice: d.dealPrice ?? d.deal_price ?? '',
+      stockLimit: d.stockLimit ?? d.stock_limit ?? '',
+      startTime: d.startTime || d.start_time ? new Date(d.startTime || d.start_time).toISOString().slice(0, 16) : '',
+      endTime: d.endTime || d.end_time ? new Date(d.endTime || d.end_time).toISOString().slice(0, 16) : '',
+      status: d.status || 'active'
+    });
+    setDealFormMsg({ type: null, text: '' });
+    setDealModalOpen(true);
+  };
+
+  const handleSaveDeal = async (e) => {
+    e.preventDefault();
+    if (!dealForm.productId) {
+      setDealFormMsg({ type: 'error', text: 'Please select a product for the deal.' });
+      return;
+    }
+    const numPrice = Number(dealForm.dealPrice);
+    if (!dealForm.dealPrice || isNaN(numPrice) || numPrice <= 0) {
+      setDealFormMsg({ type: 'error', text: 'Please enter a valid deal price.' });
+      return;
+    }
+    setDealSaving(true);
+    setDealFormMsg({ type: null, text: '' });
+    try {
+      const payload = {
+        productId: dealForm.productId,
+        dealPrice: numPrice,
+        stockLimit: dealForm.stockLimit !== '' ? parseInt(dealForm.stockLimit, 10) : null,
+        startTime: dealForm.startTime || null,
+        endTime: dealForm.endTime || null,
+        status: dealForm.status
+      };
+
+      if (editingDealId) {
+        const res = await api.updateDeal(editingDealId, payload);
+        if (!res?.success) throw new Error(res?.error || 'Failed to update deal');
+      } else {
+        const res = await api.createDeal(payload);
+        if (!res?.success) throw new Error(res?.error || 'Failed to create deal');
+      }
+
+      setAttempt((n) => n + 1);
+      setDealFormMsg({ type: 'success', text: 'Deal saved successfully!' });
+      setTimeout(() => {
+        setDealModalOpen(false);
+      }, 1000);
+    } catch (err) {
+      setDealFormMsg({ type: 'error', text: err.message || 'Failed to save deal' });
+    } finally {
+      setDealSaving(false);
+    }
+  };
+
+  /* Shipping & Handling Configuration Handlers */
+  const [shippingConfig, setShippingConfig] = useState({
+    standardCharge: 50,
+    standardFreeThreshold: 499,
+    standardDeliveryEnabled: true,
+    expressCharge: 120,
+    expressDeliveryEnabled: true,
+    handlingFee: 0,
+    handlingFeeEnabled: false
+  });
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingSaved, setShippingSaved] = useState(false);
+
   useEffect(() => {
-    if (!addProductOpen) return;
+    if (activeTab === 'shipping') {
+      setShippingLoading(true);
+      api.getAdminShippingConfig()
+        .then((res) => {
+          if (res?.success && res.config) {
+            setShippingConfig(res.config);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setShippingLoading(false));
+    }
+  }, [activeTab]);
+
+  const handleSaveShippingConfig = async (e) => {
+    e.preventDefault();
+    setShippingLoading(true);
+    setShippingSaved(false);
+    try {
+      const res = await api.updateAdminShippingConfig(shippingConfig);
+      if (res?.success) {
+        setShippingSaved(true);
+        setTimeout(() => setShippingSaved(false), 3500);
+      } else {
+        alert(res?.error || 'Failed to update delivery settings');
+      }
+    } catch (err) {
+      alert(err?.message || 'Error updating delivery settings');
+    } finally {
+      setShippingLoading(false);
+    }
+  };
+
+  const handleConfirmDeleteDeal = async () => {
+    if (!dealToDelete) return;
+    setDealDeleteLoading(true);
+    try {
+      const res = await api.deleteDeal(dealToDelete.id);
+      if (res?.success) {
+        setAttempt((n) => n + 1);
+        setDealToDelete(null);
+      } else {
+        alert(res?.error || 'Failed to delete deal');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete deal');
+    } finally {
+      setDealDeleteLoading(false);
+    }
+  };
+
+  /* Commission Handlers */
+  const handleSaveGlobalCommission = async (e) => {
+    e.preventDefault();
+    const rate = Number(globalCommissionRate);
+    if (isNaN(rate) || rate < 0 || rate > 100) {
+      setCommissionMsg({ type: 'error', text: 'Commission rate must be between 0% and 100%.' });
+      return;
+    }
+    setSavingGlobalCommission(true);
+    setCommissionMsg({ type: null, text: '' });
+    try {
+      const res = await api.updateCommissionConfig({ defaultCommissionRate: rate });
+      if (res?.success) {
+        setCommissionMsg({ type: 'success', text: `Global default commission updated to ${rate}%!` });
+        setAttempt((n) => n + 1);
+        setTimeout(() => setCommissionMsg({ type: null, text: '' }), 3000);
+      } else {
+        setCommissionMsg({ type: 'error', text: res?.error || 'Failed to update commission rate' });
+      }
+    } catch (err) {
+      setCommissionMsg({ type: 'error', text: err.message || 'Failed to update commission rate' });
+    } finally {
+      setSavingGlobalCommission(false);
+    }
+  };
+
+  const handleSaveVendorCommission = async (vendorId) => {
+    setSavingVendorComm(true);
+    try {
+      const rateVal = vendorCommRateInput === '' ? null : Number(vendorCommRateInput);
+      const res = await api.updateVendorCommission(vendorId, rateVal);
+      if (res?.success) {
+        setAttempt((n) => n + 1);
+        setEditingVendorCommId(null);
+        setVendorCommRateInput('');
+      } else {
+        alert(res?.error || 'Failed to update vendor commission');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to update vendor commission');
+    } finally {
+      setSavingVendorComm(false);
+    }
+  };
+
+  /* Keyboard Escape to dismiss Add/Edit Product modal */
+  useEffect(() => {
+    if (!addProductOpen && !editingProductId) return;
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') setAddProductOpen(false);
+      if (e.key === 'Escape') {
+        setAddProductOpen(false);
+        setEditingProductId(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [addProductOpen]);
+  }, [addProductOpen, editingProductId]);
 
   /* Handle product created by admin */
   const handleAdminProductCreated = (newProduct) => {
@@ -562,6 +1089,9 @@ export default function AdminDashboard({ onLogout }) {
       subtitle: '',
       imageUrl: '',
       imagePublicId: '',
+      mobileImageUrl: '',
+      tabletImageUrl: '',
+      imageAspectRatio: '16:5',
       ctaText: 'Shop Now',
       ctaLink: '/shop',
       secondaryCtaText: '',
@@ -571,6 +1101,8 @@ export default function AdminDashboard({ onLogout }) {
       displayOrder: (state.banners || []).length,
       isActive: true
     });
+    setBannerAspectWarning('');
+    setBannerUploadTarget('desktop');
     setBannerFormMsg({ type: null, text: '' });
     setBannerModalOpen(true);
   };
@@ -582,6 +1114,9 @@ export default function AdminDashboard({ onLogout }) {
       subtitle: b.subtitle || '',
       imageUrl: b.image_url || b.imageUrl || '',
       imagePublicId: b.image_public_id || b.imagePublicId || '',
+      mobileImageUrl: b.mobile_image_url || b.mobileImageUrl || b.mobileImage || '',
+      tabletImageUrl: b.tablet_image_url || b.tabletImageUrl || b.tabletImage || '',
+      imageAspectRatio: b.image_aspect_ratio || b.imageAspectRatio || '16:5',
       ctaText: b.cta_text || b.ctaText || 'Shop Now',
       ctaLink: b.cta_link || b.ctaLink || '/shop',
       secondaryCtaText: b.secondary_cta_text || b.secondaryCtaText || '',
@@ -591,6 +1126,8 @@ export default function AdminDashboard({ onLogout }) {
       displayOrder: b.display_order ?? b.displayOrder ?? 0,
       isActive: Boolean(b.is_active ?? b.isActive ?? 1)
     });
+    setBannerAspectWarning('');
+    setBannerUploadTarget('desktop');
     setBannerFormMsg({ type: null, text: '' });
     setBannerModalOpen(true);
   };
@@ -611,15 +1148,50 @@ export default function AdminDashboard({ onLogout }) {
 
     setBannerUploadingImg(true);
     setBannerFormMsg({ type: null, text: '' });
+    setBannerAspectWarning('');
+
+    if (typeof window !== 'undefined' && window.Image && window.URL?.createObjectURL) {
+      try {
+        const objectUrl = window.URL.createObjectURL(file);
+        const testImg = new window.Image();
+        testImg.onload = () => {
+          const ratio = testImg.width / testImg.height;
+          if (bannerUploadTarget === 'desktop' && (ratio < 2.5 || ratio > 3.8)) {
+            setBannerAspectWarning(`⚠️ Aspect Ratio Warning: Recommended desktop banner ratio is 16:5 (1920×600 px). Uploaded image is ${testImg.width}×${testImg.height} px (ratio ${(ratio).toFixed(2)}). It will be fitted without distortion.`);
+          } else if (bannerUploadTarget === 'mobile' && (ratio < 0.6 || ratio > 1.0)) {
+            setBannerAspectWarning(`⚠️ Aspect Ratio Warning: Recommended mobile banner ratio is 5:6 (750×900 px). Uploaded image is ${testImg.width}×${testImg.height} px (ratio ${(ratio).toFixed(2)}).`);
+          } else if (bannerUploadTarget === 'tablet' && (ratio < 2.0 || ratio > 2.8)) {
+            setBannerAspectWarning(`⚠️ Aspect Ratio Warning: Recommended tablet banner ratio is 12:5 (1200×500 px). Uploaded image is ${testImg.width}×${testImg.height} px (ratio ${(ratio).toFixed(2)}).`);
+          }
+          window.URL.revokeObjectURL(objectUrl);
+        };
+        testImg.src = objectUrl;
+      } catch {
+        /* ignore */
+      }
+    }
+
     try {
       const res = await api.uploadImage(file, 'admin');
       if (res?.success && res.url) {
-        setBannerForm((prev) => ({
-          ...prev,
-          imageUrl: res.url,
-          imagePublicId: res.public_id || res.publicId || ''
-        }));
-        setBannerFormMsg({ type: 'success', text: 'Image uploaded to Cloudinary CDN successfully!' });
+        if (bannerUploadTarget === 'desktop') {
+          setBannerForm((prev) => ({
+            ...prev,
+            imageUrl: res.url,
+            imagePublicId: res.public_id || res.publicId || ''
+          }));
+        } else if (bannerUploadTarget === 'tablet') {
+          setBannerForm((prev) => ({
+            ...prev,
+            tabletImageUrl: res.url
+          }));
+        } else if (bannerUploadTarget === 'mobile') {
+          setBannerForm((prev) => ({
+            ...prev,
+            mobileImageUrl: res.url
+          }));
+        }
+        setBannerFormMsg({ type: 'success', text: `${bannerUploadTarget.toUpperCase()} image uploaded to Cloudinary CDN successfully!` });
       } else {
         setBannerFormMsg({ type: 'error', text: res?.error || 'Failed to upload image' });
       }
@@ -637,7 +1209,7 @@ export default function AdminDashboard({ onLogout }) {
       return;
     }
     if (!bannerForm.imageUrl.trim()) {
-      setBannerFormMsg({ type: 'error', text: 'Banner image is required (upload or enter URL).' });
+      setBannerFormMsg({ type: 'error', text: 'Desktop banner image is required (upload or enter URL).' });
       return;
     }
 
@@ -649,6 +1221,9 @@ export default function AdminDashboard({ onLogout }) {
         subtitle: bannerForm.subtitle.trim(),
         imageUrl: bannerForm.imageUrl.trim(),
         imagePublicId: bannerForm.imagePublicId.trim() || null,
+        mobileImageUrl: bannerForm.mobileImageUrl.trim() || null,
+        tabletImageUrl: bannerForm.tabletImageUrl.trim() || null,
+        imageAspectRatio: bannerForm.imageAspectRatio || '16:5',
         ctaText: bannerForm.ctaText.trim() || 'Shop Now',
         ctaLink: bannerForm.ctaLink.trim() || '/shop',
         secondaryCtaText: bannerForm.secondaryCtaText.trim() || null,
@@ -886,11 +1461,15 @@ export default function AdminDashboard({ onLogout }) {
             ['dashboard', 'Dashboard', null],
             ['categories', 'Categories', state.categories.length],
             ['orders', 'Orders', state.orders.length],
-            ['vendors', 'Vendors', state.vendors.length],
+            ['vendors', 'Vendors & Approvals', (state.vendors || []).filter((v) => v.status === 'pending' || v.status === 'corrections_requested').length > 0 ? `${state.vendors.length} (${(state.vendors || []).filter((v) => v.status === 'pending' || v.status === 'corrections_requested').length} pending)` : state.vendors.length],
             ['products', 'Products', state.products.length],
+            ['coupons', 'Coupons', (state.coupons || []).length],
+            ['deals', 'Deals of the Day', (state.deals || []).length],
+            ['commission', 'Commission & Payouts', null],
             ['videos', 'Video Reviews', (state.videos || []).length],
             ['banners', 'Homepage Banners', (state.banners || []).length],
             ['customers', 'Customers', state.users.length],
+            ['shipping', 'Delivery & Charges', null],
             ['payment', 'Payment Gateway', null]
           ].map(([key, label, count]) => (
             <a
@@ -945,11 +1524,15 @@ export default function AdminDashboard({ onLogout }) {
               {activeTab === 'dashboard' && 'Dashboard overview'}
               {activeTab === 'categories' && 'Category & Taxonomy Management'}
               {activeTab === 'orders' && 'All customer orders'}
-              {activeTab === 'vendors' && 'Vendor management'}
+              {activeTab === 'vendors' && 'Vendor applications & seller management'}
               {activeTab === 'products' && 'Product approvals'}
+              {activeTab === 'coupons' && 'Promotional coupons & discount engine'}
+              {activeTab === 'deals' && 'Deals of the Day management'}
+              {activeTab === 'commission' && 'Platform commission & vendor settlement'}
               {activeTab === 'customers' && 'Customer accounts'}
               {activeTab === 'videos' && 'Homepage Shorts & Video Reviews'}
               {activeTab === 'banners' && 'Homepage Banner Management'}
+              {activeTab === 'shipping' && 'Delivery Methods & Handling Charges Configuration'}
               {activeTab === 'payment' && 'Payment Gateway Configuration'}
             </h1>
           </div>
@@ -1085,16 +1668,43 @@ export default function AdminDashboard({ onLogout }) {
                       />
                     </div>
 
-                    <div className="cat-form-field">
-                      <label>Image URL (Optional)</label>
+                    <div className="cat-form-field" style={{ gridColumn: 'span 2' }}>
+                      <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Category Icon / Image (600×600 px 1:1, PNG/WebP supported)</span>
+                        <span style={{ fontSize: 11, color: '#64748b' }}>Transparent PNG & WebP recommended</span>
+                      </label>
                       <input
-                        type="url"
-                        className="admin-filter-input"
-                        style={{ width: '100%' }}
-                        placeholder="https://..."
-                        value={newCatImage}
-                        onChange={(e) => setNewCatImage(e.target.value)}
+                        type="file"
+                        ref={catFileInputRef}
+                        accept="image/png,image/webp,image/jpeg"
+                        style={{ display: 'none' }}
+                        onChange={handleCatImageUpload}
                       />
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
+                        <button
+                          type="button"
+                          className="approve-btn"
+                          style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1', padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
+                          onClick={() => catFileInputRef.current?.click()}
+                          disabled={catUploadingImg}
+                        >
+                          {catUploadingImg ? <Loader2 size={13} className="spin" /> : <UploadCloud size={13} />}
+                          <span>{catUploadingImg ? 'Uploading...' : 'Upload Image'}</span>
+                        </button>
+                        <input
+                          type="url"
+                          className="admin-filter-input"
+                          style={{ flex: 1 }}
+                          placeholder="or paste image URL: https://..."
+                          value={newCatImage}
+                          onChange={(e) => setNewCatImage(e.target.value)}
+                        />
+                        {newCatImage && (
+                          <div style={{ width: 38, height: 38, borderRadius: 6, overflow: 'hidden', border: '1px solid #cbd5e1', background: '#f8fafc', flexShrink: 0 }}>
+                            <img src={newCatImage} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="cat-form-field">
@@ -1356,6 +1966,7 @@ export default function AdminDashboard({ onLogout }) {
                   >
                     <option value="all">All Statuses</option>
                     <option value="pending">Pending Approval</option>
+                    <option value="corrections_requested">Corrections Requested</option>
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
                     <option value="deactivated">Deactivated</option>
@@ -1366,33 +1977,58 @@ export default function AdminDashboard({ onLogout }) {
                   <table className="vendors-table">
                     <thead>
                       <tr>
-                        <th>Name</th><th>Email</th><th>Joined</th><th>Status</th><th>Actions</th>
+                        <th>Business / Shop</th><th>Contact</th><th>Location</th><th>Tax / Food</th><th>Joined</th><th>Status</th><th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedVendors.map((vendor) => (
                         <tr key={vendor.id}>
-                          <td>{vendor.name}{busyId === vendor.id && <Loader2 size={13} className="spin" style={{ marginLeft: 6 }} />}</td>
-                          <td>{vendor.email}</td>
+                          <td>
+                            <strong>{vendor.businessName || vendor.name}</strong>
+                            {vendor.registeredName && <div style={{ fontSize: 11, color: '#64748b' }}>{vendor.registeredName}</div>}
+                            {busyId === vendor.id && <Loader2 size={13} className="spin" style={{ marginLeft: 6 }} />}
+                          </td>
+                          <td>
+                            <div>{vendor.ownerName || vendor.name}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{vendor.email}</div>
+                            {vendor.phone && <div style={{ fontSize: 11, color: '#64748b' }}>{vendor.phone}</div>}
+                          </td>
+                          <td style={{ fontSize: 13 }}>
+                            {vendor.city ? `${vendor.city}, ${vendor.state || ''}` : '—'}
+                          </td>
+                          <td style={{ fontSize: 12 }}>
+                            {vendor.gstStatus === 'Registered' ? <span style={{ color: '#16a34a', fontWeight: 600 }}>GST: {vendor.gstin || 'Yes'}</span> : <span style={{ color: '#64748b' }}>No GST</span>}
+                            <br />
+                            {vendor.fssaiStatus === 'Applicable' ? <span style={{ color: '#0e5c4a', fontWeight: 600 }}>FSSAI: {vendor.fssaiNumber || 'Yes'}</span> : <span style={{ color: '#64748b' }}>No FSSAI</span>}
+                          </td>
                           <td style={{ fontSize: '13px', color: '#64748b' }}>
                             {vendor.createdAt ? new Date(vendor.createdAt).toLocaleDateString() : '—'}
                           </td>
                           <td>
-                            <span className={`status-badge status-${vendor.status}`}>
-                              {String(vendor.status || 'pending').toUpperCase()}
+                            <span className={`status-badge status-${vendor.status} ${vendor.status === 'corrections_requested' ? 'admin-badge-corrections' : ''}`}>
+                              {vendor.status === 'corrections_requested' ? 'CORRECTIONS' : String(vendor.status || 'pending').toUpperCase()}
                             </span>
                           </td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="approve-btn"
+                                style={{ background: '#0e5c4a', color: '#fff', padding: '5px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                onClick={() => handleOpenVendorReview(vendor)}
+                              >
+                                <FileText size={13} /> Review Details
+                              </button>
+
                               {vendor.status === 'pending' && (
-                                <div className="action-buttons">
+                                <div className="action-buttons" style={{ display: 'inline-flex', gap: 4 }}>
                                   <button
                                     type="button"
                                     className="approve-btn"
                                     disabled={busyId === vendor.id}
                                     onClick={() => runRowAction(vendor.id, () => api.updateVendorStatus(vendor.id, 'approved'), 'Vendor approval failed')}
                                   >
-                                    <CheckCircle size={15} /> Approve
+                                    <CheckCircle size={14} /> Approve
                                   </button>
                                   <button
                                     type="button"
@@ -1400,13 +2036,12 @@ export default function AdminDashboard({ onLogout }) {
                                     disabled={busyId === vendor.id}
                                     onClick={() => runRowAction(vendor.id, () => api.updateVendorStatus(vendor.id, 'rejected'), 'Vendor rejection failed')}
                                   >
-                                    <XCircle size={15} /> Reject
+                                    <XCircle size={14} /> Reject
                                   </button>
                                 </div>
                               )}
                               {vendor.status === 'approved' && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span className="text-muted">Approved</span>
                                   <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', cursor: 'pointer' }}>
                                     <input
                                       type="checkbox"
@@ -1422,8 +2057,6 @@ export default function AdminDashboard({ onLogout }) {
                                   </label>
                                 </div>
                               )}
-                              {vendor.status === 'rejected' && <span className="text-muted">Rejected</span>}
-                              {vendor.status === 'deactivated' && <span className="text-muted">Deactivated</span>}
 
                               <button
                                 type="button"
@@ -1443,7 +2076,7 @@ export default function AdminDashboard({ onLogout }) {
                         </tr>
                       ))}
                       {filteredVendors.length === 0 && (
-                        <tr><td colSpan="5" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No vendor accounts match your filter.</td></tr>
+                        <tr><td colSpan="7" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No vendor accounts match your filter.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -1602,6 +2235,25 @@ export default function AdminDashboard({ onLogout }) {
                           </td>
                           <td>
                             <div className="action-buttons">
+                              <button
+                                type="button"
+                                className="approve-btn"
+                                style={{
+                                  background: '#0e5c4a',
+                                  color: '#ffffff',
+                                  borderColor: '#0e5c4a',
+                                  padding: '5px 10px',
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                                onClick={() => setEditingProductId(product.id)}
+                                title={`Edit product "${product.title}"`}
+                              >
+                                <Edit2 size={13} /> Edit
+                              </button>
                               {product.status === 'pending' ? (
                                 <>
                                   <button
@@ -2396,13 +3048,477 @@ export default function AdminDashboard({ onLogout }) {
               </div>
             )}
 
-            {/* ---------------- 7. CUSTOMERS TAB ---------------- */}
+            {/* ---------------- 5. COUPONS TAB ---------------- */}
+            {activeTab === 'coupons' && (
+              <div className="admin-vendors-section">
+                <div className="vendors-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2>Promotional Coupons Engine</h2>
+                    <p>Create and manage discount codes, percentage cuts, minimum order values, and usage caps</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-sidebar-add-btn"
+                    style={{ background: '#0e5c4a', color: 'white', borderRadius: 8, padding: '10px 18px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    onClick={handleOpenAddCoupon}
+                  >
+                    <Plus size={16} /> Create New Coupon
+                  </button>
+                </div>
+
+                <div className="admin-filter-bar">
+                  <input
+                    type="text"
+                    className="admin-filter-input"
+                    placeholder="Search coupons by code or description..."
+                    value={couponSearch}
+                    onChange={(e) => setCouponSearch(e.target.value)}
+                  />
+                </div>
+
+                <div className="vendors-table-container">
+                  <table className="vendors-table">
+                    <thead>
+                      <tr>
+                        <th>Code</th>
+                        <th>Type & Discount</th>
+                        <th>Min Order / Max Cap</th>
+                        <th>Usage Limit</th>
+                        <th>Validity Window</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(state.coupons || [])
+                        .filter((c) => {
+                          if (!couponSearch.trim()) return true;
+                          const q = couponSearch.toLowerCase();
+                          return c.code?.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q);
+                        })
+                        .map((c) => {
+                          const isActive = Boolean(c.is_active ?? c.isActive ?? 1);
+                          return (
+                            <tr key={c.code}>
+                              <td>
+                                <strong style={{ color: '#0e5c4a', letterSpacing: 1, fontFamily: 'monospace', fontSize: 14 }}>{c.code}</strong>
+                                {c.description && <div style={{ fontSize: 12, color: '#64748b' }}>{c.description}</div>}
+                              </td>
+                              <td>
+                                <span style={{ fontWeight: 600 }}>
+                                  {(c.discount_type || c.discountType) === 'percent'
+                                    ? `${c.discount_value || c.discountValue}% OFF`
+                                    : (c.discount_type || c.discountType) === 'flat'
+                                    ? `₹${c.discount_value || c.discountValue} FLAT OFF`
+                                    : 'FREE SHIPPING'}
+                                </span>
+                              </td>
+                              <td style={{ fontSize: 13 }}>
+                                <div>Min Order: ₹{c.min_order_amount ?? c.minOrderAmount ?? 0}</div>
+                                {c.max_discount_amount || c.maxDiscountAmount ? (
+                                  <div style={{ fontSize: 11, color: '#64748b' }}>Max Cap: ₹{c.max_discount_amount ?? c.maxDiscountAmount}</div>
+                                ) : null}
+                              </td>
+                              <td style={{ fontSize: 13 }}>
+                                <div>Used: <strong>{c.used_count ?? c.usedCount ?? 0}</strong></div>
+                                <div style={{ fontSize: 11, color: '#64748b' }}>
+                                  {c.usage_limit || c.usageLimit ? `Limit: ${c.usage_limit || c.usageLimit}` : 'Unlimited'}
+                                </div>
+                              </td>
+                              <td style={{ fontSize: 12, color: '#64748b' }}>
+                                {(c.start_date || c.startDate) ? new Date(c.start_date || c.startDate).toLocaleDateString() : 'Start: Immediate'}
+                                <br />
+                                {(c.end_date || c.endDate) ? `Expires: ${new Date(c.end_date || c.endDate).toLocaleDateString()}` : 'No expiry'}
+                              </td>
+                              <td>
+                                <span className={`status-badge ${isActive ? 'status-approved' : 'status-rejected'}`}>
+                                  {isActive ? 'ACTIVE' : 'INACTIVE'}
+                                </span>
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary-sm"
+                                    style={{ fontSize: 12, padding: '4px 8px' }}
+                                    onClick={() => handleOpenEditCoupon(c)}
+                                    title="Edit coupon"
+                                  >
+                                    <Edit3 size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="reject-btn"
+                                    style={{ padding: '4px 8px', fontSize: 12 }}
+                                    onClick={() => setCouponToDelete(c)}
+                                    title="Delete coupon"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      {(!state.coupons || state.coupons.length === 0) && (
+                        <tr><td colSpan="7" style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>No coupons configured yet. Click &quot;Create New Coupon&quot; to add one.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ---------------- 6. DEALS OF THE DAY TAB ---------------- */}
+            {activeTab === 'deals' && (
+              <div className="admin-vendors-section">
+                <div className="vendors-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2>Deals of the Day & Flash Sales</h2>
+                    <p>Highlight timed promotions, countdown-driven discounts, and inventory caps</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-sidebar-add-btn"
+                    style={{ background: '#0e5c4a', color: 'white', borderRadius: 8, padding: '10px 18px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    onClick={handleOpenAddDeal}
+                  >
+                    <Plus size={16} /> Create New Deal
+                  </button>
+                </div>
+
+                <div className="vendors-table-container">
+                  <table className="vendors-table">
+                    <thead>
+                      <tr>
+                        <th>Product</th>
+                        <th>Regular Price</th>
+                        <th>Deal Price</th>
+                        <th>Discount</th>
+                        <th>Stock / Sold</th>
+                        <th>Schedule</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(state.deals || []).map((d) => {
+                        const originalPrice = Number(d.product_price ?? d.originalPrice ?? 0);
+                        const dealPrice = Number(d.deal_price ?? d.dealPrice ?? 0);
+                        const discountPct = originalPrice > 0 ? Math.round(((originalPrice - dealPrice) / originalPrice) * 100) : 0;
+                        const status = d.status || 'active';
+                        return (
+                          <tr key={d.id}>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {(d.product_image || d.productImage) && (
+                                  <img
+                                    src={d.product_image || d.productImage}
+                                    alt=""
+                                    style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6 }}
+                                  />
+                                )}
+                                <div>
+                                  <strong>{d.product_title || d.productTitle || `Product #${d.product_id || d.productId}`}</strong>
+                                  <div style={{ fontSize: 11, color: '#64748b' }}>ID: {d.product_id || d.productId}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ textDecoration: 'line-through', color: '#94a3b8' }}>
+                              ₹{originalPrice}
+                            </td>
+                            <td>
+                              <strong style={{ color: '#0e5c4a', fontSize: 15 }}>₹{dealPrice}</strong>
+                            </td>
+                            <td>
+                              <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: 12, fontWeight: 700, fontSize: 12 }}>
+                                {discountPct}% OFF
+                              </span>
+                            </td>
+                            <td style={{ fontSize: 13 }}>
+                              <div>Sold: <strong>{d.sold_count ?? d.soldCount ?? 0}</strong></div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>{d.stock_limit || d.stockLimit ? `Cap: ${d.stock_limit || d.stockLimit}` : 'No cap'}</div>
+                            </td>
+                            <td style={{ fontSize: 12, color: '#64748b' }}>
+                              {(d.start_time || d.startTime) ? `Starts: ${new Date(d.start_time || d.startTime).toLocaleDateString()}` : 'Immediate'}
+                              <br />
+                              {(d.end_time || d.endTime) ? `Ends: ${new Date(d.end_time || d.endTime).toLocaleDateString()}` : 'Indefinite'}
+                            </td>
+                            <td>
+                              <span className={`status-badge ${status === 'active' ? 'status-approved' : 'status-pending'}`}>
+                                {status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                  type="button"
+                                  className="btn-secondary-sm"
+                                  style={{ fontSize: 12, padding: '4px 8px' }}
+                                  onClick={() => handleOpenEditDeal(d)}
+                                  title="Edit deal"
+                                >
+                                  <Edit3 size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="reject-btn"
+                                  style={{ padding: '4px 8px', fontSize: 12 }}
+                                  onClick={() => setDealToDelete(d)}
+                                  title="Delete deal"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {(!state.deals || state.deals.length === 0) && (
+                        <tr><td colSpan="8" style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>No active deals found. Click &quot;Create New Deal&quot; to configure a daily deal.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ---------------- 7. COMMISSION TAB ---------------- */}
+            {activeTab === 'commission' && (
+              <div className="admin-vendors-section">
+                <div className="vendors-header">
+                  <h2>Platform Commission & Vendor Settlement</h2>
+                  <p>Configure the default marketplace commission fee and inspect or customize individual vendor percentage overrides.</p>
+                </div>
+
+                {commissionMsg.text && (
+                  <div className={`admin-modal-alert ${commissionMsg.type}`} style={{ marginBottom: 16 }}>
+                    {commissionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                    <span>{commissionMsg.text}</span>
+                  </div>
+                )}
+
+                {/* Global Default Card */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '20px 24px', marginBottom: 24, maxWidth: 640 }}>
+                  <h3 style={{ margin: '0 0 8px 0', fontSize: 16, color: '#1e293b' }}>Global Default Commission Rate</h3>
+                  <p style={{ margin: '0 0 16px 0', fontSize: 13, color: '#64748b' }}>
+                    Applied across all vendor order line items automatically, unless an individual vendor has an approved override configured below.
+                  </p>
+                  <form onSubmit={handleSaveGlobalCommission} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative', width: 140, minWidth: 120 }}>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        className="admin-number-input"
+                        style={{ width: '100%', minWidth: 0, paddingRight: 32, fontWeight: 700, fontSize: 16 }}
+                        value={globalCommissionRate}
+                        onChange={(e) => setGlobalCommissionRate(e.target.value)}
+                        required
+                      />
+                      <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>%</span>
+                    </div>
+                    <button
+                      type="submit"
+                      className="approve-btn"
+                      disabled={savingGlobalCommission}
+                      style={{ padding: '9px 20px', fontSize: 13.5, whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      {savingGlobalCommission ? <Loader2 size={15} className="spin" /> : 'Save Default Rate'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Vendor Override Header & Search */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, margin: '20px 0 12px 0' }}>
+                  <div>
+                    <h3 style={{ fontSize: 16, margin: 0 }}>Vendor Custom Commission Overrides</h3>
+                    <span style={{ fontSize: 12, color: '#64748b' }}>
+                      Configure custom commission rates per vendor store.
+                    </span>
+                  </div>
+                  <div style={{ position: 'relative', width: 320, maxWidth: '100%' }}>
+                    <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+                    <input
+                      type="text"
+                      className="admin-filter-input"
+                      style={{ width: '100%', paddingLeft: 34, paddingRight: vendorCommSearch ? 32 : 12, fontSize: 13, minWidth: 0 }}
+                      placeholder="Search vendor by name, shop, or email..."
+                      value={vendorCommSearch}
+                      onChange={(e) => setVendorCommSearch(e.target.value)}
+                    />
+                    {vendorCommSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setVendorCommSearch('')}
+                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', padding: 4 }}
+                        title="Clear vendor search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="vendors-table-container">
+                  <table className="vendors-table">
+                    <thead>
+                      <tr>
+                        <th>Vendor / Shop</th>
+                        <th>Status</th>
+                        <th>Standard Rate</th>
+                        <th>Current Custom Rate</th>
+                        <th>Effective Commission</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const list = (state.vendors || []).filter((v) => {
+                          const q = vendorCommSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            (v.businessName && v.businessName.toLowerCase().includes(q)) ||
+                            (v.name && v.name.toLowerCase().includes(q)) ||
+                            (v.email && v.email.toLowerCase().includes(q)) ||
+                            (v.phone && v.phone.includes(q)) ||
+                            (v.id && String(v.id).toLowerCase().includes(q))
+                          );
+                        });
+
+                        if (list.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={6} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                                No vendors found matching "{vendorCommSearch}".
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return list.map((v) => {
+                          const isEditing = editingVendorCommId === v.id;
+                          const hasCustom = v.commissionRate != null || v.commission_rate != null;
+                          const customVal = v.commissionRate ?? v.commission_rate;
+                          const effectiveRate = hasCustom ? customVal : (state.commissionConfig?.defaultCommissionRate ?? 10);
+                          return (
+                            <tr key={v.id}>
+                              <td>
+                                <strong>{v.businessName || v.name}</strong>
+                                <div style={{ fontSize: 12, color: '#64748b' }}>{v.email}</div>
+                              </td>
+                              <td>
+                                <span className={`status-badge status-${v.status || 'pending'}`}>
+                                  {(v.status || 'pending').toUpperCase()}
+                                </span>
+                              </td>
+                              <td style={{ color: '#64748b' }}>
+                                {state.commissionConfig?.defaultCommissionRate ?? 10}%
+                              </td>
+                              <td>
+                                {isEditing ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 100 }}>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="100"
+                                      step="0.5"
+                                      className="admin-number-input"
+                                      style={{ width: 75, minWidth: 0, padding: '5px 8px', fontSize: 13 }}
+                                      placeholder="e.g. 8"
+                                      value={vendorCommRateInput}
+                                      onChange={(e) => setVendorCommRateInput(e.target.value)}
+                                    />
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>%</span>
+                                  </div>
+                                ) : (
+                                  hasCustom ? (
+                                    <strong style={{ color: '#0e5c4a' }}>{customVal}% (Custom)</strong>
+                                  ) : (
+                                    <span style={{ color: '#94a3b8' }}>Default</span>
+                                  )
+                                )}
+                              </td>
+                              <td>
+                                <strong style={{ fontSize: 14 }}>{effectiveRate}%</strong>
+                              </td>
+                              <td>
+                                {isEditing ? (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', alignItems: 'center' }}>
+                                    <button
+                                      type="button"
+                                      className="approve-btn"
+                                      style={{ fontSize: 12, padding: '5px 12px', whiteSpace: 'nowrap' }}
+                                      disabled={savingVendorComm}
+                                      onClick={() => handleSaveVendorCommission(v.id)}
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn-secondary-sm"
+                                      style={{ fontSize: 12, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                                      onClick={() => { setEditingVendorCommId(null); setVendorCommRateInput(''); }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', alignItems: 'center' }}>
+                                    <button
+                                      type="button"
+                                      className="btn-secondary-sm"
+                                      style={{ fontSize: 12, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                                      onClick={() => {
+                                        setEditingVendorCommId(v.id);
+                                        setVendorCommRateInput(customVal != null ? String(customVal) : '');
+                                      }}
+                                    >
+                                      Edit Rate
+                                    </button>
+                                    {hasCustom && (
+                                      <button
+                                        type="button"
+                                        className="reject-btn"
+                                        style={{ fontSize: 11, padding: '5px 8px', whiteSpace: 'nowrap' }}
+                                        title="Reset to default rate"
+                                        disabled={savingVendorComm}
+                                        onClick={async () => {
+                                          await api.updateVendorCommission(v.id, null);
+                                          setAttempt((n) => n + 1);
+                                        }}
+                                      >
+                                        Reset
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ---------------- 8. CUSTOMERS TAB ---------------- */}
             {activeTab === 'customers' && (
               <div className="admin-vendors-section">
                 <div className="vendors-header">
                   <h2>Registered customers</h2>
                   <p>Accounts from the users table — customer credentials and passwords are never displayed</p>
                 </div>
+
+                {customerActionMsg.text && (
+                  <div className={`admin-modal-alert ${customerActionMsg.type}`} style={{ marginBottom: 16 }}>
+                    {customerActionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                    <span>{customerActionMsg.text}</span>
+                  </div>
+                )}
 
                 <div className="admin-filter-bar">
                   <input
@@ -2417,21 +3533,84 @@ export default function AdminDashboard({ onLogout }) {
                 <div className="vendors-table-container">
                   <table className="vendors-table">
                     <thead>
-                      <tr><th>Name</th><th>Email</th><th>Phone</th><th>Registered on</th></tr>
+                      <tr><th>Name</th><th>Email</th><th>Phone</th><th>Registered on</th><th>Status</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
-                      {paginatedUsers.map((c) => (
-                        <tr key={c.id}>
-                          <td><strong>{c.name}</strong></td>
-                          <td>{c.email}</td>
-                          <td>{c.phone || '—'}</td>
-                          <td style={{ fontSize: '13px', color: '#64748b' }}>
-                            {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
-                          </td>
-                        </tr>
-                      ))}
+                      {paginatedUsers.map((c) => {
+                        const isDeactivated = c.status === 'deactivated';
+                        const isBlocked = c.status === 'blocked';
+                        return (
+                          <tr key={c.id}>
+                            <td><strong>{c.name}</strong></td>
+                            <td>{c.email}</td>
+                            <td>{c.phone || '—'}</td>
+                            <td style={{ fontSize: '13px', color: '#64748b' }}>
+                              {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
+                            </td>
+                            <td>
+                              {isBlocked ? (
+                                <span className="status-badge" style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', fontWeight: 700 }}>
+                                  BLOCKED
+                                </span>
+                              ) : isDeactivated ? (
+                                <span className="status-badge" style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }}>
+                                  DEACTIVATED
+                                </span>
+                              ) : (
+                                <span className="status-badge status-approved">
+                                  ACTIVE
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                {isBlocked ? (
+                                  <button
+                                    type="button"
+                                    className="btn-secondary-sm"
+                                    style={{ fontSize: 12, padding: '4px 10px', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', fontWeight: 600 }}
+                                    onClick={() => handleToggleCustomerStatus(c, 'active')}
+                                    title="Unblock customer account"
+                                  >
+                                    Unblock
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn-secondary-sm"
+                                    style={{ fontSize: 12, padding: '4px 8px', color: '#b91c1c', borderColor: '#fca5a5', background: '#fff' }}
+                                    onClick={() => setCustomerToBlock(c)}
+                                    title="Block customer account"
+                                  >
+                                    <ShieldAlert size={12} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                                    Block
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="btn-secondary-sm"
+                                  style={{ fontSize: 12, padding: '4px 8px' }}
+                                  onClick={() => handleToggleCustomerStatus(c, isDeactivated ? 'active' : 'deactivated')}
+                                  title={isDeactivated ? 'Reactivate customer account' : 'Deactivate customer account'}
+                                >
+                                  {isDeactivated ? 'Reactivate' : 'Deactivate'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="reject-btn"
+                                  style={{ padding: '4px 8px', fontSize: 12 }}
+                                  onClick={() => setCustomerToDelete(c)}
+                                  title="Delete or de-anonymize customer"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {filteredUsers.length === 0 && (
-                        <tr><td colSpan="4" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No customer accounts match your search.</td></tr>
+                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No customer accounts match your search.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -2446,6 +3625,156 @@ export default function AdminDashboard({ onLogout }) {
                   onPageSizeChange={(sz) => { setCustomerPageSize(sz); setCustomerPage(1); }}
                   pageSizeOptions={[10, 25, 50]}
                 />
+              </div>
+            )}
+
+            {/* ---------------- 7b. SHIPPING & HANDLING CONFIGURATION ---------------- */}
+            {activeTab === 'shipping' && (
+              <div className="payment-audit-container">
+                <div className="payment-card">
+                  <div className="payment-card-header">
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <h3 className="payment-card-title" style={{ margin: 0 }}>Delivery Methods & Charges (Platform / Admin-Owned Products)</h3>
+                        <span className="status-badge status-pending" style={{ fontSize: 11, padding: '3px 10px', fontWeight: 600 }}>
+                          Admin Products Only
+                        </span>
+                      </div>
+                      <p className="payment-card-subtitle">
+                        Configure delivery fees, free delivery order thresholds, and handling fees for Admin direct / platform products.
+                        For vendor products, each vendor configures their own delivery charges independently in their Vendor Portal.
+                      </p>
+                    </div>
+                  </div>
+
+                  {shippingSaved && (
+                    <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', padding: '12px 18px', borderRadius: 8, margin: '16px 24px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <CheckCircle2 size={18} />
+                      <strong style={{ fontSize: 14 }}>Delivery & handling charges updated successfully!</strong>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSaveShippingConfig} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    {/* Standard Delivery Box */}
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 20, background: '#f8fafc' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>
+                        <input
+                          type="checkbox"
+                          checked={shippingConfig.standardDeliveryEnabled}
+                          onChange={(e) => setShippingConfig({ ...shippingConfig, standardDeliveryEnabled: e.target.checked })}
+                          style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                        />
+                        <span>Enable Standard Delivery (3–5 business days)</span>
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                        <div>
+                          <label style={{ display: 'block', fontWeight: 600, fontSize: 13, color: '#475569', marginBottom: 6 }}>
+                            Standard Delivery Charge (₹)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="admin-filter-input"
+                            style={{ width: '100%', background: '#fff' }}
+                            value={shippingConfig.standardCharge}
+                            onChange={(e) => setShippingConfig({ ...shippingConfig, standardCharge: Number(e.target.value) })}
+                            disabled={!shippingConfig.standardDeliveryEnabled}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontWeight: 600, fontSize: 13, color: '#475569', marginBottom: 6 }}>
+                            Free Shipping Threshold (₹)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="admin-filter-input"
+                            style={{ width: '100%', background: '#fff' }}
+                            value={shippingConfig.standardFreeThreshold}
+                            onChange={(e) => setShippingConfig({ ...shippingConfig, standardFreeThreshold: Number(e.target.value) })}
+                            disabled={!shippingConfig.standardDeliveryEnabled}
+                            placeholder="e.g. 499 (0 for always free)"
+                          />
+                          <small style={{ color: '#64748b', fontSize: 11, display: 'block', marginTop: 4 }}>
+                            Orders at or above this cart value receive free standard delivery.
+                          </small>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Express Delivery Box */}
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 20, background: '#f8fafc' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>
+                        <input
+                          type="checkbox"
+                          checked={shippingConfig.expressDeliveryEnabled}
+                          onChange={(e) => setShippingConfig({ ...shippingConfig, expressDeliveryEnabled: e.target.checked })}
+                          style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                        />
+                        <span>Enable Express Delivery (1–2 business days)</span>
+                      </label>
+                      <div style={{ maxWidth: 320 }}>
+                        <label style={{ display: 'block', fontWeight: 600, fontSize: 13, color: '#475569', marginBottom: 6 }}>
+                          Express Delivery Charge (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="admin-filter-input"
+                          style={{ width: '100%', background: '#fff' }}
+                          value={shippingConfig.expressCharge}
+                          onChange={(e) => setShippingConfig({ ...shippingConfig, expressCharge: Number(e.target.value) })}
+                          disabled={!shippingConfig.expressDeliveryEnabled}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Handling Fee Box */}
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 20, background: '#f8fafc' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>
+                        <input
+                          type="checkbox"
+                          checked={shippingConfig.handlingFeeEnabled}
+                          onChange={(e) => setShippingConfig({ ...shippingConfig, handlingFeeEnabled: e.target.checked })}
+                          style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                        />
+                        <span>Apply Handling & Packaging Fee</span>
+                      </label>
+                      <div style={{ maxWidth: 320 }}>
+                        <label style={{ display: 'block', fontWeight: 600, fontSize: 13, color: '#475569', marginBottom: 6 }}>
+                          Handling / Packaging Fee (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="admin-filter-input"
+                          style={{ width: '100%', background: '#fff' }}
+                          value={shippingConfig.handlingFee}
+                          onChange={(e) => setShippingConfig({ ...shippingConfig, handlingFee: Number(e.target.value) })}
+                          disabled={!shippingConfig.handlingFeeEnabled}
+                          placeholder="e.g. 10"
+                        />
+                        <small style={{ color: '#64748b', fontSize: 11, display: 'block', marginTop: 4 }}>
+                          Added as a dedicated line item in cart and checkout summary.
+                        </small>
+                      </div>
+                    </div>
+
+                    <div>
+                      <button
+                        type="submit"
+                        className="admin-sidebar-add-btn"
+                        style={{ background: '#0e5c4a', color: '#fff', borderRadius: 8, padding: '12px 24px', fontWeight: 600, fontSize: 14 }}
+                        disabled={shippingLoading}
+                      >
+                        {shippingLoading ? 'Saving Settings…' : 'Save Delivery & Handling Settings'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             )}
 
@@ -2781,6 +4110,50 @@ export default function AdminDashboard({ onLogout }) {
           </div>
         )}
 
+        {/* ---------------- EDIT PRODUCT MODAL DIALOG / DRAWER ---------------- */}
+        {editingProductId && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-edit-prod-modal-title">
+            <div className="admin-modal-backdrop" onClick={() => setEditingProductId(null)} />
+            <div className="admin-modal-dialog">
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge">
+                    <ShieldCheck size={14} /> Catalog Administration
+                  </div>
+                  <h2 id="admin-edit-prod-modal-title">Edit Product Details</h2>
+                  <p>Update product title, description, category, pricing, stock, images and video. Changes are applied directly.</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  onClick={() => setEditingProductId(null)}
+                  aria-label="Close dialog"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="admin-modal-body">
+                <Suspense fallback={<FormSkeleton fields={5} />}>
+                  <EditProduct
+                    productId={editingProductId}
+                    isAdmin={true}
+                    mode="admin"
+                    onBack={() => setEditingProductId(null)}
+                    onSaved={(updated) => {
+                      setEditingProductId(null);
+                      setProductCreatedMsg({
+                        title: updated?.title || 'Product',
+                        status: updated?.status || 'approved'
+                      });
+                      setAttempt((c) => c + 1);
+                    }}
+                  />
+                </Suspense>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ---------------- VIDEO PREVIEW MODAL ---------------- */}
         {previewingVideo && (
           <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-video-modal-title">
@@ -2953,62 +4326,153 @@ export default function AdminDashboard({ onLogout }) {
                   {/* Recommended Aspect Ratio Guidance */}
                   <div className="admin-banner-aspect-notice">
                     <ImageIcon size={18} style={{ flexShrink: 0 }} />
-                    <div>
-                      <strong>Recommended Dimensions:</strong> 1600 × 380 px (~4.2:1 aspect ratio). High-resolution image (JPEG, WebP, PNG) with centered subject for responsive mobile cropping.
+                    <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+                      <strong>Banner Dimension Guidelines:</strong><br />
+                      • <strong>Desktop:</strong> 1920 × 600 px (16:5 ratio)<br />
+                      • <strong>Tablet:</strong> 1200 × 500 px (12:5 ratio)<br />
+                      • <strong>Mobile:</strong> 750 × 900 px (5:6 ratio)<br />
+                      Images are fitted without distortion or cropping. Separate mobile creatives ensure clear product visibility on small screens.
                     </div>
                   </div>
 
-                  {/* Image Upload / URL Section */}
-                  <div className="cat-form-field">
-                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
-                      Banner Image *
-                    </label>
+                  {bannerAspectWarning && (
+                    <div className="admin-modal-alert" style={{ background: '#fffbeb', border: '1px solid #fef3c7', color: '#b45309', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>
+                      {bannerAspectWarning}
+                    </div>
+                  )}
 
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-                      <input
-                        type="file"
-                        ref={bannerFileInputRef}
-                        accept="image/jpeg,image/png,image/webp,image/avif"
-                        style={{ display: 'none' }}
-                        onChange={handleBannerImageUpload}
-                        disabled={bannerUploadingImg}
-                      />
+                  {/* Hidden single file input used for whichever target is active */}
+                  <input
+                    type="file"
+                    ref={bannerFileInputRef}
+                    accept="image/jpeg,image/png,image/webp,image/avif"
+                    style={{ display: 'none' }}
+                    onChange={handleBannerImageUpload}
+                    disabled={bannerUploadingImg}
+                  />
+
+                  {/* Desktop Banner Image Upload */}
+                  <div className="cat-form-field" style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ fontWeight: 600, fontSize: 13, color: '#334155' }}>
+                        1. Desktop Banner Image * (1920 × 600 px, 16:5)
+                      </label>
                       <button
                         type="button"
                         className="btn-secondary-sm"
                         disabled={bannerUploadingImg}
-                        onClick={() => bannerFileInputRef.current?.click()}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px' }}
+                        onClick={() => {
+                          setBannerUploadTarget('desktop');
+                          bannerFileInputRef.current?.click();
+                        }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: 12 }}
                       >
-                        {bannerUploadingImg ? (
-                          <>
-                            <Loader2 size={15} className="spin" /> Uploading to Cloudinary...
-                          </>
+                        {bannerUploadingImg && bannerUploadTarget === 'desktop' ? (
+                          <><Loader2 size={13} className="spin" /> Uploading...</>
                         ) : (
-                          <>
-                            <UploadCloud size={15} /> Upload Image File
-                          </>
+                          <><UploadCloud size={13} /> Upload Desktop File</>
                         )}
                       </button>
-                      <span style={{ fontSize: 12, color: '#64748b' }}>or provide direct image URL below:</span>
                     </div>
-
                     <input
                       type="url"
                       className="admin-filter-input"
-                      style={{ width: '100%' }}
-                      placeholder="https://images.unsplash.com/... or https://res.cloudinary.com/..."
+                      style={{ width: '100%', marginBottom: 8 }}
+                      placeholder="Desktop image URL or Cloudinary CDN link"
                       value={bannerForm.imageUrl}
                       onChange={(e) => setBannerForm({ ...bannerForm, imageUrl: e.target.value })}
                       required
                     />
-
-                    {/* Live Image Preview */}
                     {bannerForm.imageUrl && (
-                      <div className="admin-banner-preview-box">
+                      <div className="admin-banner-preview-box" style={{ maxHeight: 120 }}>
                         <img
                           src={bannerForm.imageUrl}
-                          alt="Banner Preview"
+                          alt="Desktop Banner Preview"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tablet Banner Image Upload */}
+                  <div className="cat-form-field" style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ fontWeight: 600, fontSize: 13, color: '#334155' }}>
+                        2. Tablet Banner Image (Optional, 1200 × 500 px, 12:5)
+                      </label>
+                      <button
+                        type="button"
+                        className="btn-secondary-sm"
+                        disabled={bannerUploadingImg}
+                        onClick={() => {
+                          setBannerUploadTarget('tablet');
+                          bannerFileInputRef.current?.click();
+                        }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: 12 }}
+                      >
+                        {bannerUploadingImg && bannerUploadTarget === 'tablet' ? (
+                          <><Loader2 size={13} className="spin" /> Uploading...</>
+                        ) : (
+                          <><UploadCloud size={13} /> Upload Tablet File</>
+                        )}
+                      </button>
+                    </div>
+                    <input
+                      type="url"
+                      className="admin-filter-input"
+                      style={{ width: '100%', marginBottom: 8 }}
+                      placeholder="Tablet image URL (falls back to desktop if blank)"
+                      value={bannerForm.tabletImageUrl}
+                      onChange={(e) => setBannerForm({ ...bannerForm, tabletImageUrl: e.target.value })}
+                    />
+                    {bannerForm.tabletImageUrl && (
+                      <div className="admin-banner-preview-box" style={{ maxHeight: 100 }}>
+                        <img
+                          src={bannerForm.tabletImageUrl}
+                          alt="Tablet Banner Preview"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mobile Banner Image Upload */}
+                  <div className="cat-form-field" style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ fontWeight: 600, fontSize: 13, color: '#334155' }}>
+                        3. Mobile Banner Image (Recommended, 750 × 900 px, 5:6)
+                      </label>
+                      <button
+                        type="button"
+                        className="btn-secondary-sm"
+                        disabled={bannerUploadingImg}
+                        onClick={() => {
+                          setBannerUploadTarget('mobile');
+                          bannerFileInputRef.current?.click();
+                        }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: 12 }}
+                      >
+                        {bannerUploadingImg && bannerUploadTarget === 'mobile' ? (
+                          <><Loader2 size={13} className="spin" /> Uploading...</>
+                        ) : (
+                          <><UploadCloud size={13} /> Upload Mobile File</>
+                        )}
+                      </button>
+                    </div>
+                    <input
+                      type="url"
+                      className="admin-filter-input"
+                      style={{ width: '100%', marginBottom: 8 }}
+                      placeholder="Mobile portrait image URL"
+                      value={bannerForm.mobileImageUrl}
+                      onChange={(e) => setBannerForm({ ...bannerForm, mobileImageUrl: e.target.value })}
+                    />
+                    {bannerForm.mobileImageUrl && (
+                      <div className="admin-banner-preview-box" style={{ maxHeight: 150, maxWidth: 200, margin: '0 auto' }}>
+                        <img
+                          src={bannerForm.mobileImageUrl}
+                          alt="Mobile Banner Preview"
+                          style={{ objectFit: 'contain' }}
                           onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       </div>
@@ -3264,6 +4728,973 @@ export default function AdminDashboard({ onLogout }) {
                         <Trash2 size={15} /> Confirm Delete
                       </>
                     )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- VENDOR APPLICATION REVIEW MODAL ---------------- */}
+        {reviewingVendor && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="vendor-review-title">
+            <div className="admin-modal-backdrop" onClick={() => !submittingVendorReview && setReviewingVendor(null)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 840 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge">
+                    <Store size={14} /> Vendor Application & Verification Audit
+                  </div>
+                  <h2 id="vendor-review-title">
+                    {reviewingVendor.businessName || reviewingVendor.name}
+                  </h2>
+                  <p>Comprehensive regulatory compliance, identity, tax documents, and payout settlement audit</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  disabled={submittingVendorReview}
+                  onClick={() => setReviewingVendor(null)}
+                  aria-label="Close dialog"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="admin-modal-body" style={{ padding: '20px 24px', maxHeight: '82vh', overflowY: 'auto' }}>
+                {vendorReviewMsg.text && (
+                  <div className={`admin-modal-alert ${vendorReviewMsg.type}`} style={{ marginBottom: 16 }}>
+                    {vendorReviewMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                    <span>{vendorReviewMsg.text}</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, marginBottom: 20 }}>
+                  {/* Business & Owner Info */}
+                  <div style={{ background: '#f8fafc', padding: 16, borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: 14, fontWeight: 700, color: '#0e5c4a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Store size={16} /> Business & Contact Profile
+                    </h4>
+                    <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div><strong style={{ color: '#475569' }}>Business / Shop Name:</strong> {reviewingVendor.businessName || reviewingVendor.name}</div>
+                      {reviewingVendor.registeredName && (
+                        <div><strong style={{ color: '#475569' }}>Registered Legal Name:</strong> {reviewingVendor.registeredName}</div>
+                      )}
+                      <div><strong style={{ color: '#475569' }}>Business Type:</strong> {reviewingVendor.businessType || 'Retailer / Merchant'}</div>
+                      <div><strong style={{ color: '#475569' }}>Owner Full Name:</strong> {reviewingVendor.ownerName || reviewingVendor.name}</div>
+                      <div><strong style={{ color: '#475569' }}>Email Address:</strong> <a href={`mailto:${reviewingVendor.email}`}>{reviewingVendor.email}</a></div>
+                      <div><strong style={{ color: '#475569' }}>Contact Phone:</strong> {reviewingVendor.phone || '—'}</div>
+                    </div>
+                  </div>
+
+                  {/* Business Address */}
+                  <div style={{ background: '#f8fafc', padding: 16, borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: 14, fontWeight: 700, color: '#0e5c4a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Globe size={16} /> Business Address & Location
+                    </h4>
+                    <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div><strong style={{ color: '#475569' }}>Street Address:</strong> {reviewingVendor.businessAddress || reviewingVendor.address || '—'}</div>
+                      <div><strong style={{ color: '#475569' }}>City:</strong> {reviewingVendor.city || '—'}</div>
+                      <div><strong style={{ color: '#475569' }}>District:</strong> {reviewingVendor.district || '—'}</div>
+                      <div><strong style={{ color: '#475569' }}>State:</strong> {reviewingVendor.state || '—'}</div>
+                      <div><strong style={{ color: '#475569' }}>PIN Code:</strong> {reviewingVendor.pincode || reviewingVendor.pin_code || '—'}</div>
+                      <div><strong style={{ color: '#475569' }}>Country:</strong> {reviewingVendor.country || 'India'}</div>
+                    </div>
+                  </div>
+
+                  {/* Tax & Regulatory Compliance */}
+                  <div style={{ background: '#f8fafc', padding: 16, borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: 14, fontWeight: 700, color: '#0e5c4a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <ShieldCheck size={16} /> Tax & Regulatory Documents
+                    </h4>
+                    <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div>
+                        <strong style={{ color: '#475569' }}>GST Registration:</strong>{' '}
+                        <span className={`status-badge ${reviewingVendor.gstStatus === 'Registered' ? 'status-approved' : 'status-pending'}`}>
+                          {reviewingVendor.gstStatus || 'Not Registered'}
+                        </span>
+                        {reviewingVendor.gstin && (
+                          <div style={{ marginTop: 4, fontFamily: 'monospace', fontWeight: 600 }}>GSTIN: {reviewingVendor.gstin}</div>
+                        )}
+                        {reviewingVendor.gstCertificateUrl ? (
+                          <div style={{ marginTop: 6 }}>
+                            <a
+                              href={reviewingVendor.gstCertificateUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-secondary-sm"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '4px 10px' }}
+                            >
+                              <ExternalLink size={13} /> View GST Certificate (A4)
+                            </a>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>No GST document attached</div>
+                        )}
+                      </div>
+
+                      <hr style={{ border: 'none', borderTop: '1px dashed #e2e8f0', margin: '4px 0' }} />
+
+                      <div>
+                        <strong style={{ color: '#475569' }}>FSSAI Food License:</strong>{' '}
+                        <span className={`status-badge ${reviewingVendor.fssaiStatus === 'Applicable' ? 'status-approved' : 'status-pending'}`}>
+                          {reviewingVendor.fssaiStatus || 'Not Applicable'}
+                        </span>
+                        {reviewingVendor.fssaiNumber && (
+                          <div style={{ marginTop: 4, fontFamily: 'monospace', fontWeight: 600 }}>FSSAI No: {reviewingVendor.fssaiNumber}</div>
+                        )}
+                        {reviewingVendor.fssaiCertificateUrl ? (
+                          <div style={{ marginTop: 6 }}>
+                            <a
+                              href={reviewingVendor.fssaiCertificateUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-secondary-sm"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '4px 10px' }}
+                            >
+                              <ExternalLink size={13} /> View FSSAI License (A4)
+                            </a>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>No FSSAI document attached</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bank & Settlement Details */}
+                  <div style={{ background: '#f8fafc', padding: 16, borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0e5c4a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <CreditCard size={16} /> Settlement Bank Account
+                      </h4>
+                      <button
+                        type="button"
+                        className="btn-secondary-sm"
+                        style={{ padding: '3px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        onClick={() => setShowBankAccount(!showBankAccount)}
+                      >
+                        {showBankAccount ? <EyeOff size={12} /> : <Eye size={12} />}
+                        {showBankAccount ? 'Mask Number' : 'Reveal Number'}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div><strong style={{ color: '#475569' }}>Account Holder:</strong> {reviewingVendor.bankAccountName || '—'}</div>
+                      <div><strong style={{ color: '#475569' }}>Bank Name:</strong> {reviewingVendor.bankName || '—'}</div>
+                      <div><strong style={{ color: '#475569' }}>IFSC Code:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{reviewingVendor.bankIfsc || '—'}</span></div>
+                      <div>
+                        <strong style={{ color: '#475569' }}>Account Number:</strong>{' '}
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                          {showBankAccount
+                            ? reviewingVendor.bankAccountNumber || '—'
+                            : (reviewingVendor.bankAccountNumber ? `•••• •••• ${reviewingVendor.bankAccountNumber.slice(-4)}` : '—')}
+                        </span>
+                      </div>
+                      {reviewingVendor.bankDocumentUrl && (
+                        <div style={{ marginTop: 4 }}>
+                          <a
+                            href={reviewingVendor.bankDocumentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-secondary-sm"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '4px 10px' }}
+                          >
+                            <ExternalLink size={13} /> View Supporting Bank Document
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audit Trail & Commission Settings */}
+                <div style={{ background: '#f1f5f9', padding: 16, borderRadius: 10, border: '1px solid #cbd5e1', marginBottom: 20 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Custom Vendor Commission Rate (%)
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          className="admin-number-input"
+                          style={{ width: 120, minWidth: 0, fontWeight: 700 }}
+                          placeholder={`Default (${state.commissionConfig?.defaultCommissionRate ?? 10}%)`}
+                          value={vendorCustomCommission}
+                          onChange={(e) => setVendorCustomCommission(e.target.value)}
+                        />
+                        <span style={{ fontSize: 13, color: '#64748b' }}>Leave blank to inherit global default ({state.commissionConfig?.defaultCommissionRate ?? 10}%)</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        <div><strong>Current Status:</strong> <span className={`status-badge status-${reviewingVendor.status}`}>{String(reviewingVendor.status).toUpperCase()}</span></div>
+                        <div style={{ marginTop: 4 }}><strong>Application Date:</strong> {reviewingVendor.createdAt ? new Date(reviewingVendor.createdAt).toLocaleString() : '—'}</div>
+                        {reviewingVendor.reviewedBy && (
+                          <div style={{ marginTop: 4 }}><strong>Last Reviewed By:</strong> {reviewingVendor.reviewedBy} on {new Date(reviewingVendor.reviewedAt || reviewingVendor.approvedAt).toLocaleDateString()}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                      Internal Verification Notes & Remarks
+                    </label>
+                    <textarea
+                      className="admin-filter-input"
+                      rows={2}
+                      style={{ width: '100%', resize: 'vertical' }}
+                      placeholder="e.g. Verified GSTIN on government portal. FSSAI food handler certificate valid. Approved standard 10% commission."
+                      value={vendorReviewNotes}
+                      onChange={(e) => setVendorReviewNotes(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Verification Decision Actions */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+                  <button
+                    type="button"
+                    className="admin-modal-btn cancel"
+                    disabled={submittingVendorReview}
+                    onClick={() => setReviewingVendor(null)}
+                  >
+                    Close
+                  </button>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="reject-btn"
+                      style={{ padding: '8px 14px', fontSize: 13 }}
+                      disabled={submittingVendorReview}
+                      onClick={() => handleVendorReviewAction('rejected')}
+                    >
+                      <XCircle size={15} /> Reject Application
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-secondary-sm"
+                      style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a', padding: '8px 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      disabled={submittingVendorReview}
+                      onClick={() => handleVendorReviewAction('corrections_requested')}
+                    >
+                      <AlertCircle size={15} /> Request Corrections
+                    </button>
+
+                    {reviewingVendor.status === 'approved' ? (
+                      <button
+                        type="button"
+                        className="btn-secondary-sm"
+                        style={{ padding: '8px 14px', fontSize: 13, color: '#dc2626' }}
+                        disabled={submittingVendorReview}
+                        onClick={() => handleVendorReviewAction('deactivated')}
+                      >
+                        Deactivate Vendor
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="approve-btn"
+                      style={{ padding: '8px 18px', fontSize: 13 }}
+                      disabled={submittingVendorReview}
+                      onClick={() => handleVendorReviewAction('approved')}
+                    >
+                      {submittingVendorReview ? (
+                        <><Loader2 size={15} className="spin" /> Updating...</>
+                      ) : (
+                        <><CheckCircle size={15} /> Approve & Activate Vendor</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- CUSTOMER DELETE / DEACTIVATE MODAL ---------------- */}
+        {customerToDelete && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-customer-title">
+            <div className="admin-modal-backdrop" onClick={() => !customerDeleteLoading && setCustomerToDelete(null)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 520 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge" style={{ color: '#dc2626' }}>
+                    <AlertTriangle size={14} /> Customer Account Management
+                  </div>
+                  <h2 id="delete-customer-title" style={{ color: '#991b1b' }}>
+                    Process Customer Account Deletion
+                  </h2>
+                  <p>Account: {customerToDelete.name} ({customerToDelete.email})</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  disabled={customerDeleteLoading}
+                  onClick={() => setCustomerToDelete(null)}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="admin-modal-body" style={{ padding: '20px 24px' }}>
+                <div className="admin-danger-notice">
+                  <h4>Relational Integrity & Financial Compliance:</h4>
+                  <ul style={{ margin: '8px 0 0 16px', padding: 0, fontSize: 13, lineHeight: 1.5 }}>
+                    <li>If this customer has past order records, their login credentials and contact details will be <strong>soft-deactivated and anonymized</strong> to preserve order invoices, tax audits, and vendor payouts.</li>
+                    <li>If the customer has 0 orders, their account row will be cleanly and permanently purged.</li>
+                  </ul>
+                </div>
+
+                <div className="admin-modal-footer-actions" style={{ marginTop: 20 }}>
+                  <button
+                    type="button"
+                    className="admin-modal-btn cancel"
+                    disabled={customerDeleteLoading}
+                    onClick={() => setCustomerToDelete(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-modal-btn danger"
+                    disabled={customerDeleteLoading}
+                    onClick={handleConfirmDeleteCustomer}
+                  >
+                    {customerDeleteLoading ? <Loader2 size={15} className="spin" /> : 'Confirm Deletion / Deactivation'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- CUSTOMER BLOCK / UNBLOCK MODAL ---------------- */}
+        {customerToBlock && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="block-customer-title">
+            <div className="admin-modal-backdrop" onClick={() => !customerBlockLoading && setCustomerToBlock(null)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 500 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge" style={{ color: '#dc2626' }}>
+                    <ShieldAlert size={14} /> Customer Account Security
+                  </div>
+                  <h2 id="block-customer-title" style={{ color: customerToBlock.status === 'blocked' ? '#065f46' : '#991b1b' }}>
+                    {customerToBlock.status === 'blocked' ? 'Unblock Customer Account' : 'Block Customer Account'}
+                  </h2>
+                  <p>Customer: <strong>{customerToBlock.name}</strong> ({customerToBlock.email})</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  disabled={customerBlockLoading}
+                  onClick={() => setCustomerToBlock(null)}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="admin-modal-body" style={{ padding: '20px 24px', fontSize: 14, color: '#334155', lineHeight: 1.6 }}>
+                {customerToBlock.status === 'blocked' ? (
+                  <p>
+                    Reactivating this customer account will restore their ability to log in, view order history, and place new orders on the storefront.
+                  </p>
+                ) : (
+                  <div>
+                    <p style={{ marginBottom: 12, fontWeight: 500 }}>
+                      Are you sure you want to <strong>block</strong> this customer account?
+                    </p>
+                    <ul style={{ paddingLeft: 20, color: '#64748b', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6, margin: 0 }}>
+                      <li>The customer is immediately prevented from logging into the platform.</li>
+                      <li>They cannot checkout or place any new orders.</li>
+                      <li>Past orders and invoice records remain securely preserved for audit and GST accounting.</li>
+                      <li>You can unblock this account at any time from this dashboard.</li>
+                    </ul>
+                  </div>
+                )}
+
+                <div className="admin-modal-footer-actions" style={{ marginTop: 22 }}>
+                  <button
+                    type="button"
+                    className="admin-modal-btn cancel"
+                    disabled={customerBlockLoading}
+                    onClick={() => setCustomerToBlock(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={`admin-modal-btn ${customerToBlock.status === 'blocked' ? 'primary' : 'danger'}`}
+                    disabled={customerBlockLoading}
+                    onClick={handleConfirmBlockCustomer}
+                  >
+                    {customerBlockLoading ? <Loader2 size={15} className="spin" /> : (customerToBlock.status === 'blocked' ? 'Confirm Unblock' : 'Confirm Block')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- ADD / EDIT COUPON MODAL ---------------- */}
+        {couponModalOpen && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="coupon-modal-title">
+            <div className="admin-modal-backdrop" onClick={() => !couponSaving && setCouponModalOpen(false)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 580 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge">
+                    <Tag size={14} /> Promotional Discount Engine
+                  </div>
+                  <h2 id="coupon-modal-title">
+                    {editingCouponCode ? `Edit Coupon: ${editingCouponCode}` : 'Create New Promotional Coupon'}
+                  </h2>
+                  <p>Configure discount type, minimum cart values, usage caps, and validity windows</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  disabled={couponSaving}
+                  onClick={() => setCouponModalOpen(false)}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="admin-modal-body" style={{ padding: '20px 24px' }}>
+                {couponFormMsg.text && (
+                  <div className={`admin-modal-alert ${couponFormMsg.type}`} style={{ marginBottom: 16 }}>
+                    {couponFormMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                    <span>{couponFormMsg.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveCoupon} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Coupon Code *
+                      </label>
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        style={{ width: '100%', textTransform: 'uppercase', fontFamily: 'monospace', fontWeight: 700 }}
+                        placeholder="e.g. HARVEST20"
+                        value={couponForm.code}
+                        disabled={Boolean(editingCouponCode)}
+                        onChange={(e) => updateCouponForm({ code: e.target.value.toUpperCase() })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Discount Type *
+                      </label>
+                      <select
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={couponForm.discountType}
+                        onChange={(e) => updateCouponForm({ discountType: e.target.value })}
+                      >
+                        <option value="percent">Percentage Discount (%)</option>
+                        <option value="flat">Flat Cash Discount (₹)</option>
+                        <option value="shipping">Free Shipping</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                      Description / Terms
+                    </label>
+                    <input
+                      type="text"
+                      className="admin-filter-input"
+                      style={{ width: '100%' }}
+                      placeholder="e.g. 20% off all organic vegetables on orders over ₹499"
+                      value={couponForm.description}
+                      onChange={(e) => updateCouponForm({ description: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Discount Value *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={couponForm.discountValue}
+                        onChange={(e) => updateCouponForm({ discountValue: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Min Order (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={couponForm.minOrderAmount}
+                        onChange={(e) => updateCouponForm({ minOrderAmount: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Max Cap (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="Optional"
+                        value={couponForm.maxDiscountAmount}
+                        onChange={(e) => setCouponForm({ ...couponForm, maxDiscountAmount: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Usage Limit
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="Unlimited"
+                        value={couponForm.usageLimit}
+                        onChange={(e) => setCouponForm({ ...couponForm, usageLimit: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Per-Customer Cap
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={couponForm.perCustomerLimit}
+                        onChange={(e) => setCouponForm({ ...couponForm, perCustomerLimit: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={couponForm.startDate}
+                        onChange={(e) => setCouponForm({ ...couponForm, startDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        End Date
+                      </label>
+                      <input
+                        type="date"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={couponForm.endDate}
+                        onChange={(e) => setCouponForm({ ...couponForm, endDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Applicable Products Selection */}
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, background: '#f8fafc' }}>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, color: '#334155', marginBottom: 8 }}>
+                      Applicable Products Scope
+                    </label>
+                    <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                        <input
+                          type="radio"
+                          name="couponApplicableTo"
+                          value="all"
+                          checked={couponForm.applicableTo === 'all'}
+                          onChange={() => setCouponForm({ ...couponForm, applicableTo: 'all' })}
+                        />
+                        <span>All Products (Storewide)</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                        <input
+                          type="radio"
+                          name="couponApplicableTo"
+                          value="selected"
+                          checked={couponForm.applicableTo === 'selected'}
+                          onChange={() => setCouponForm({ ...couponForm, applicableTo: 'selected' })}
+                        />
+                        <span>Specific Products ({couponForm.selectedProducts?.length || 0} selected)</span>
+                      </label>
+                    </div>
+
+                    {couponForm.applicableTo === 'selected' && (() => {
+                      const allProducts = state.products || [];
+                      const searchLower = couponProductSearch.trim().toLowerCase();
+                      const filtered = searchLower
+                        ? allProducts.filter((p) =>
+                            (p.title || p.name || '').toLowerCase().includes(searchLower) ||
+                            (p.category || p.categorySlug || '').toLowerCase().includes(searchLower) ||
+                            String(p.id || '').toLowerCase().includes(searchLower)
+                          )
+                        : allProducts;
+                      const selectedCount = (couponForm.selectedProducts || []).length;
+
+                      return (
+                        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, marginTop: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                              Assign Products ({selectedCount} assigned):
+                            </span>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                type="button"
+                                style={{ fontSize: 11, background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', color: '#0e5c4a', fontWeight: 600 }}
+                                onClick={() => {
+                                  const filteredIds = filtered.map((p) => p.id);
+                                  const combined = Array.from(new Set([...(couponForm.selectedProducts || []), ...filteredIds]));
+                                  setCouponForm({ ...couponForm, selectedProducts: combined });
+                                }}
+                              >
+                                Select All Filtered
+                              </button>
+                              <button
+                                type="button"
+                                style={{ fontSize: 11, background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', color: '#64748b' }}
+                                onClick={() => {
+                                  const filteredIds = new Set(filtered.map((p) => p.id));
+                                  const remaining = (couponForm.selectedProducts || []).filter((id) => !filteredIds.has(id));
+                                  setCouponForm({ ...couponForm, selectedProducts: remaining });
+                                }}
+                              >
+                                Clear Filtered
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Instant Product Search Bar */}
+                          <div style={{ position: 'relative', marginBottom: 8 }}>
+                            <input
+                              type="text"
+                              placeholder="Search products by title, category, or ID..."
+                              value={couponProductSearch}
+                              onChange={(e) => setCouponProductSearch(e.target.value)}
+                              style={{ width: '100%', padding: '7px 28px 7px 10px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 6, outline: 'none' }}
+                            />
+                            {couponProductSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setCouponProductSearch('')}
+                                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14 }}
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6, padding: 8 }}>
+                            {filtered.length === 0 ? (
+                              <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', margin: '14px 0' }}>
+                                No products match “{couponProductSearch}”
+                              </p>
+                            ) : (
+                              filtered.map((p) => {
+                                const isChecked = (couponForm.selectedProducts || []).includes(p.id);
+                                return (
+                                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer', padding: '5px 8px', borderRadius: 4, background: isChecked ? '#f0fdf4' : 'transparent', border: isChecked ? '1px solid #bbf7d0' : '1px solid transparent' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        const next = e.target.checked
+                                          ? [...(couponForm.selectedProducts || []), p.id]
+                                          : (couponForm.selectedProducts || []).filter((id) => id !== p.id);
+                                        setCouponForm({ ...couponForm, selectedProducts: next });
+                                      }}
+                                    />
+                                    <span style={{ fontWeight: isChecked ? 600 : 400, color: isChecked ? '#166534' : '#1e293b' }}>
+                                      {p.title || p.name}
+                                    </span>
+                                    {p.category && (
+                                      <span style={{ fontSize: 10, background: '#f1f5f9', color: '#64748b', padding: '1px 6px', borderRadius: 10 }}>
+                                        {p.category}
+                                      </span>
+                                    )}
+                                    <span style={{ color: '#0e5c4a', fontWeight: 600, marginLeft: 'auto' }}>₹{p.price}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div style={{ paddingTop: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, color: '#1e293b' }}>
+                      <input
+                        type="checkbox"
+                        checked={couponForm.isActive}
+                        onChange={(e) => setCouponForm({ ...couponForm, isActive: e.target.checked })}
+                        style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                      />
+                      <span>Coupon Active & Usable at Storefront Checkout</span>
+                    </label>
+                  </div>
+
+                  <div className="admin-modal-footer-actions" style={{ marginTop: 16 }}>
+                    <button
+                      type="button"
+                      className="admin-modal-btn cancel"
+                      disabled={couponSaving}
+                      onClick={() => setCouponModalOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="admin-modal-btn danger"
+                      style={{ background: '#0e5c4a' }}
+                      disabled={couponSaving}
+                    >
+                      {couponSaving ? <Loader2 size={15} className="spin" /> : 'Save Coupon'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- DELETE COUPON MODAL ---------------- */}
+        {couponToDelete && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="del-coupon-title">
+            <div className="admin-modal-backdrop" onClick={() => !couponDeleteLoading && setCouponToDelete(null)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 480 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <h2 id="del-coupon-title" style={{ color: '#991b1b' }}>Delete Coupon</h2>
+                  <p>Are you sure you want to delete coupon &quot;{couponToDelete.code}&quot;?</p>
+                </div>
+                <button type="button" className="admin-modal-close-btn" disabled={couponDeleteLoading} onClick={() => setCouponToDelete(null)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="admin-modal-body" style={{ padding: '20px 24px' }}>
+                <p style={{ margin: 0, fontSize: 13.5, color: '#64748b' }}>
+                  Customers will immediately no longer be able to apply this coupon code at checkout.
+                </p>
+                <div className="admin-modal-footer-actions" style={{ marginTop: 20 }}>
+                  <button type="button" className="admin-modal-btn cancel" disabled={couponDeleteLoading} onClick={() => setCouponToDelete(null)}>Cancel</button>
+                  <button type="button" className="admin-modal-btn danger" disabled={couponDeleteLoading} onClick={handleConfirmDeleteCoupon}>
+                    {couponDeleteLoading ? <Loader2 size={15} className="spin" /> : 'Confirm Delete'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- ADD / EDIT DEAL MODAL ---------------- */}
+        {dealModalOpen && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="deal-modal-title">
+            <div className="admin-modal-backdrop" onClick={() => !dealSaving && setDealModalOpen(false)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 580 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <div className="admin-modal-badge">
+                    <Flame size={14} /> Flash Deals & Timed Promotions
+                  </div>
+                  <h2 id="deal-modal-title">
+                    {editingDealId ? 'Edit Deal of the Day' : 'Configure New Deal of the Day'}
+                  </h2>
+                  <p>Set discounted prices, stock limits, and countdown expiration timers</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  disabled={dealSaving}
+                  onClick={() => setDealModalOpen(false)}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="admin-modal-body" style={{ padding: '20px 24px' }}>
+                {dealFormMsg.text && (
+                  <div className={`admin-modal-alert ${dealFormMsg.type}`} style={{ marginBottom: 16 }}>
+                    {dealFormMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                    <span>{dealFormMsg.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveDeal} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                      Select Catalog Product *
+                    </label>
+                    <select
+                      className="admin-filter-input"
+                      style={{ width: '100%' }}
+                      value={dealForm.productId}
+                      onChange={(e) => setDealForm({ ...dealForm, productId: e.target.value })}
+                      required
+                    >
+                      <option value="">-- Choose a Product --</option>
+                      {(state.products || []).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title || p.name} — Regular: ₹{p.price} (Stock: {p.stock ?? '—'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Deal Price (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="admin-filter-input"
+                        style={{ width: '100%', fontWeight: 700 }}
+                        placeholder="e.g. 199"
+                        value={dealForm.dealPrice}
+                        onChange={(e) => setDealForm({ ...dealForm, dealPrice: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Deal Stock Limit
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        placeholder="e.g. 50 (optional cap)"
+                        value={dealForm.stockLimit}
+                        onChange={(e) => setDealForm({ ...dealForm, stockLimit: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Deal Start Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={dealForm.startTime}
+                        onChange={(e) => setDealForm({ ...dealForm, startTime: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Deal End Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        className="admin-filter-input"
+                        style={{ width: '100%' }}
+                        value={dealForm.endTime}
+                        onChange={(e) => setDealForm({ ...dealForm, endTime: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                      Status
+                    </label>
+                    <select
+                      className="admin-filter-input"
+                      style={{ width: '100%' }}
+                      value={dealForm.status}
+                      onChange={(e) => setDealForm({ ...dealForm, status: e.target.value })}
+                    >
+                      <option value="active">Active Now</option>
+                      <option value="scheduled">Scheduled for Future</option>
+                      <option value="ended">Ended / Expired</option>
+                    </select>
+                  </div>
+
+                  <div className="admin-modal-footer-actions" style={{ marginTop: 16 }}>
+                    <button
+                      type="button"
+                      className="admin-modal-btn cancel"
+                      disabled={dealSaving}
+                      onClick={() => setDealModalOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="admin-modal-btn danger"
+                      style={{ background: '#0e5c4a' }}
+                      disabled={dealSaving}
+                    >
+                      {dealSaving ? <Loader2 size={15} className="spin" /> : 'Save Deal'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- DELETE DEAL MODAL ---------------- */}
+        {dealToDelete && (
+          <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="del-deal-title">
+            <div className="admin-modal-backdrop" onClick={() => !dealDeleteLoading && setDealToDelete(null)} />
+            <div className="admin-modal-dialog" style={{ maxWidth: 480 }}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-header-text">
+                  <h2 id="del-deal-title" style={{ color: '#991b1b' }}>Delete Deal</h2>
+                  <p>Are you sure you want to delete this promotion?</p>
+                </div>
+                <button type="button" className="admin-modal-close-btn" disabled={dealDeleteLoading} onClick={() => setDealToDelete(null)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="admin-modal-body" style={{ padding: '20px 24px' }}>
+                <p style={{ margin: 0, fontSize: 13.5, color: '#64748b' }}>
+                  The product will immediately revert back to its standard retail price on the storefront.
+                </p>
+                <div className="admin-modal-footer-actions" style={{ marginTop: 20 }}>
+                  <button type="button" className="admin-modal-btn cancel" disabled={dealDeleteLoading} onClick={() => setDealToDelete(null)}>Cancel</button>
+                  <button type="button" className="admin-modal-btn danger" disabled={dealDeleteLoading} onClick={handleConfirmDeleteDeal}>
+                    {dealDeleteLoading ? <Loader2 size={15} className="spin" /> : 'Confirm Delete'}
                   </button>
                 </div>
               </div>

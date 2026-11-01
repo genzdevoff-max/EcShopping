@@ -19,6 +19,7 @@ import {
   Navigation,
   Clock,
   ShieldCheck,
+  AlertTriangle,
   X
 } from 'lucide-react';
 import './CustomerProfile.css';
@@ -67,6 +68,51 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState(null);
   const [passwordError, setPasswordError] = useState(null);
+
+  // Account Deletion & Deactivation state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const handleAddressChange = (field, val) => {
+    setAddressFormData((prev) => ({ ...prev, [field]: val }));
+    if (addressError) setAddressError(null);
+  };
+
+  const handlePasswordChange = (setter) => (e) => {
+    setter(e.target.value);
+    if (passwordError) setPasswordError(null);
+  };
+
+  const handleDeletePasswordChange = (e) => {
+    setDeletePassword(e.target.value);
+    if (deleteError) setDeleteError('');
+  };
+
+  const handleConfirmDeleteAccount = async (e) => {
+    e.preventDefault();
+    if (!deletePassword) {
+      setDeleteError('Please enter your password to confirm account deletion.');
+      return;
+    }
+    setDeletingAccount(true);
+    setDeleteError('');
+    try {
+      const res = await api.deleteCustomerAccount(deletePassword);
+      if (res?.success) {
+        alert(res.message || 'Your account has been deactivated.');
+        if (typeof onLogout === 'function') onLogout();
+        window.location.href = '/';
+      } else {
+        setDeleteError(res?.error || 'Failed to delete account');
+      }
+    } catch (err) {
+      setDeleteError(err?.message || 'Failed to delete account');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
 
   // Sync profile form when customer changes
   useEffect(() => {
@@ -703,7 +749,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                         id="currentPassword"
                         type="password" 
                         value={currentPassword} 
-                        onChange={(e) => setCurrentPassword(e.target.value)} 
+                        onChange={handlePasswordChange(setCurrentPassword)} 
                         placeholder="Enter current password"
                         required 
                       />
@@ -718,7 +764,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                         id="newPassword"
                         type="password" 
                         value={newPassword} 
-                        onChange={(e) => setNewPassword(e.target.value)} 
+                        onChange={handlePasswordChange(setNewPassword)} 
                         placeholder="At least 8 characters"
                         required 
                       />
@@ -733,7 +779,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                         id="confirmPassword"
                         type="password" 
                         value={confirmPassword} 
-                        onChange={(e) => setConfirmPassword(e.target.value)} 
+                        onChange={handlePasswordChange(setConfirmPassword)} 
                         placeholder="Re-enter new password"
                         required 
                       />
@@ -744,6 +790,41 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                     {passwordSaving ? 'Updating...' : 'Update Password'}
                   </button>
                 </form>
+              </div>
+
+              {/* Danger Zone: Account Deletion / Deactivation */}
+              <div className="settings-box danger-box" style={{ marginTop: '30px', border: '1px solid #fecaca', background: '#fff5f5' }}>
+                <h2 style={{ color: '#991b1b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertTriangle size={20} color="#dc2626" /> Delete or Deactivate Account
+                </h2>
+                <p className="section-subtext" style={{ color: '#7f1d1d' }}>
+                  Need to close your EcShopping account? If you have placed orders in the past, your financial order records remain preserved in deactivated form for audit and tax purposes, while your login credentials will be deactivated immediately.
+                </p>
+
+                <button
+                  type="button"
+                  style={{
+                    background: '#dc2626',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 18px',
+                    fontWeight: 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 8
+                  }}
+                  onClick={() => {
+                    setDeleteModalOpen(true);
+                    setDeletePassword('');
+                    setDeleteError('');
+                  }}
+                >
+                  <Trash2 size={16} /> Delete / Deactivate Account
+                </button>
               </div>
             </div>
           )}
@@ -775,7 +856,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                     id="addrName"
                     type="text" 
                     value={addressFormData.name} 
-                    onChange={(e) => setAddressFormData({ ...addressFormData, name: e.target.value })} 
+                    onChange={(e) => handleAddressChange('name', e.target.value)} 
                     required 
                   />
                 </div>
@@ -785,7 +866,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                     id="addrPhone"
                     type="tel" 
                     value={addressFormData.phone} 
-                    onChange={(e) => setAddressFormData({ ...addressFormData, phone: e.target.value })} 
+                    onChange={(e) => handleAddressChange('phone', e.target.value)} 
                     placeholder="10-digit mobile"
                     required 
                   />
@@ -798,7 +879,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                   id="addrStreet"
                   type="text" 
                   value={addressFormData.street} 
-                  onChange={(e) => setAddressFormData({ ...addressFormData, street: e.target.value })} 
+                  onChange={(e) => handleAddressChange('street', e.target.value)} 
                   placeholder="e.g. 12/B, Green Garden Apartments"
                   required 
                 />
@@ -811,7 +892,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                     id="addrCity"
                     type="text" 
                     value={addressFormData.city} 
-                    onChange={(e) => setAddressFormData({ ...addressFormData, city: e.target.value })} 
+                    onChange={(e) => handleAddressChange('city', e.target.value)} 
                     placeholder="e.g. Chennai"
                     required 
                   />
@@ -822,7 +903,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                     id="addrState"
                     type="text" 
                     value={addressFormData.state} 
-                    onChange={(e) => setAddressFormData({ ...addressFormData, state: e.target.value })} 
+                    onChange={(e) => handleAddressChange('state', e.target.value)} 
                     placeholder="e.g. Tamil Nadu"
                     required 
                   />
@@ -833,7 +914,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                     id="addrPostcode"
                     type="text" 
                     value={addressFormData.postcode} 
-                    onChange={(e) => setAddressFormData({ ...addressFormData, postcode: e.target.value })} 
+                    onChange={(e) => handleAddressChange('postcode', e.target.value)} 
                     placeholder="e.g. 600001"
                     required 
                   />
@@ -846,7 +927,7 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                   id="addrCountry"
                   type="text" 
                   value={addressFormData.country} 
-                  onChange={(e) => setAddressFormData({ ...addressFormData, country: e.target.value })} 
+                  onChange={(e) => handleAddressChange('country', e.target.value)} 
                 />
               </div>
 
@@ -925,6 +1006,75 @@ export default function CustomerProfile({ loggedInCustomer, onCustomerUpdate, on
                 {cancelSubmitting ? 'Cancelling...' : 'Confirm Cancellation'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DELETE / DEACTIVATE ACCOUNT CONFIRMATION */}
+      {deleteModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-dialog">
+            <div className="modal-header">
+              <h3 style={{ color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={18} color="#dc2626" /> Confirm Account Deactivation
+              </h3>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setDeleteModalOpen(false)}
+                aria-label="Close dialog"
+                disabled={deletingAccount}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {deleteError && (
+              <div className="alert-banner error modal-alert">
+                <AlertCircle size={18} /> {deleteError}
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmDeleteAccount} className="cancel-modal-body">
+              <p className="cancel-notice" style={{ color: '#7f1d1d', background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 14px', borderRadius: 8 }}>
+                <strong>Important Policy:</strong> If you have orders currently in transit (Processing / Shipped), your account cannot be deleted until those orders are complete. If you have past order history, your financial purchase invoices remain preserved in deactivated form, while your login credentials will be permanently deactivated.
+              </p>
+
+              <div className="form-group cancel-form-group" style={{ marginTop: 16 }}>
+                <label htmlFor="deletePasswordInput" className="cancel-label" style={{ fontWeight: 600 }}>
+                  Enter your password to confirm:
+                </label>
+                <input
+                  id="deletePasswordInput"
+                  type="password"
+                  className="cancel-select"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  placeholder="Your current account password"
+                  value={deletePassword}
+                  onChange={handleDeletePasswordChange}
+                  required
+                  disabled={deletingAccount}
+                />
+              </div>
+
+              <div className="modal-footer" style={{ marginTop: 20 }}>
+                <button
+                  type="button"
+                  className="btn-modal-cancel"
+                  onClick={() => setDeleteModalOpen(false)}
+                  disabled={deletingAccount}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-danger-confirm"
+                  disabled={deletingAccount}
+                >
+                  {deletingAccount ? 'Deactivating...' : 'Confirm Account Deactivation'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

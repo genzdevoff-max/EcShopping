@@ -68,6 +68,58 @@ export function validateImageUpload(buffer) {
 }
 
 /**
+ * Sniff buffer magic bytes to detect permitted document and certificate formats.
+ * Accepts PDF documents as well as scanned PNG and JPEG certificate images.
+ * @param {Buffer} buf
+ * @returns {'application/pdf' | 'image/jpeg' | 'image/png' | null}
+ */
+export function detectDocumentFormat(buf) {
+  if (!buf || !Buffer.isBuffer(buf) || buf.length < 4) return null;
+
+  // PDF: %PDF- (25 50 44 46)
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) {
+    return 'application/pdf';
+  }
+
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) {
+    return 'image/jpeg';
+  }
+
+  // PNG: 89 50 4E 47
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+    return 'image/png';
+  }
+
+  return null;
+}
+
+/**
+ * Validates an uploaded document / certificate buffer for permitted format and size.
+ * @param {Buffer} buffer
+ * @returns {{ ok: boolean, error?: string, mimeType?: string }}
+ */
+export function validateDocumentUpload(buffer) {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+    return { ok: false, error: 'No document file uploaded' };
+  }
+
+  if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
+    return { ok: false, error: 'Document size exceeds maximum limit of 10MB' };
+  }
+
+  const detectedMime = detectDocumentFormat(buffer);
+  if (!detectedMime) {
+    return {
+      ok: false,
+      error: 'Invalid document format. Only PDF, JPG, and PNG files are accepted for certificates and legal documents.'
+    };
+  }
+
+  return { ok: true, mimeType: detectedMime };
+}
+
+/**
  * Extracts the Cloudinary public_id from a Cloudinary secure_url.
  * Returns null if not a Cloudinary URL or no public_id can be extracted safely.
  *

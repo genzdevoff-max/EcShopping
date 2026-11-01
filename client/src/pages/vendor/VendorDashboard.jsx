@@ -22,7 +22,16 @@ import {
   Star,
   XCircle,
   Menu,
-  X
+  X,
+  Tag,
+  Plus,
+  Building2,
+  FileText,
+  UploadCloud,
+  FileCheck2,
+  Loader2,
+  MapPin,
+  ShieldCheck
 } from 'lucide-react';
 import brandLogoWithBg from '../../assets/logo/logo.png';
 import Pagination from '../../components/ui/Pagination';
@@ -33,6 +42,15 @@ const CategoryManager = React.lazy(() => import('./CategoryManager'));
 const AddProduct = React.lazy(() => import('./AddProduct'));
 const AllProducts = React.lazy(() => import('./AllProducts'));
 const EditProduct = React.lazy(() => import('./EditProduct'));
+
+const INDIAN_STATES = [
+  'Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar',
+  'Chandigarh', 'Chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa',
+  'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka',
+  'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+  'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim',
+  'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal'
+];
 import { 
   getProducts, 
   addProduct, 
@@ -61,6 +79,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
     if (path.includes('/vendor/orders')) return 'orders';
     if (path.includes('/vendor/stocks')) return 'stocks';
     if (path.includes('/vendor/reviews')) return 'reviews';
+    if (path.includes('/vendor/coupons')) return 'coupons';
     if (path.includes('/vendor/settings')) return 'settings';
     return 'dashboard';
   };
@@ -96,6 +115,9 @@ export default function VendorDashboard({ vendor, onLogout }) {
         break;
       case 'reviews':
         navigate('/vendor/reviews');
+        break;
+      case 'coupons':
+        navigate('/vendor/coupons');
         break;
       case 'settings':
         navigate('/vendor/settings');
@@ -137,15 +159,199 @@ export default function VendorDashboard({ vendor, onLogout }) {
   });
   const [formSuccess, setFormSuccess] = useState('');
 
-  // Settings form state
-  const [settingsData, setSettingsData] = useState({
-    name: vendor?.name || '',
+  // Settings / Profile Form State
+  const [profileData, setProfileData] = useState({
+    businessName: vendor?.businessName || vendor?.business_name || vendor?.name || '',
+    ownerName: vendor?.ownerName || vendor?.owner_name || vendor?.name || '',
     email: vendor?.email || '',
     phone: vendor?.phone || '',
-    bio: 'Authentic farm-fresh and organic products directly from our farm.',
-    address: 'Tamil Nadu, India'
+    address: vendor?.address || '',
+    city: vendor?.city || '',
+    district: vendor?.district || '',
+    state: vendor?.state || 'Tamil Nadu',
+    pincode: vendor?.pincode || '',
+    bio: vendor?.bio || '',
+    gstStatus: vendor?.gstStatus || vendor?.gst_status || 'Not Registered',
+    gstin: vendor?.gstin || '',
+    gstCertificateUrl: vendor?.gstCertificateUrl || vendor?.gst_certificate_url || '',
+    fssaiStatus: vendor?.fssaiStatus || vendor?.fssai_status || 'Not Applicable',
+    fssaiNumber: vendor?.fssaiNumber || vendor?.fssai_number || '',
+    fssaiCertificateUrl: vendor?.fssaiCertificateUrl || vendor?.fssai_certificate_url || '',
+    bankAccountHolder: vendor?.bankAccountHolder || vendor?.bank_account_holder || '',
+    bankName: vendor?.bankName || vendor?.bank_name || '',
+    bankAccountNumber: vendor?.bankAccountNumber || vendor?.bank_account_number || '',
+    bankIfsc: vendor?.bankIfsc || vendor?.bank_ifsc || '',
+    bankDocumentUrl: vendor?.bankDocumentUrl || vendor?.bank_document_url || '',
+    shippingEnabled: vendor?.shippingEnabled !== false && vendor?.shipping_enabled !== 0,
+    shippingCharge: vendor?.shippingCharge != null ? vendor.shippingCharge : (vendor?.shipping_charge != null ? vendor.shipping_charge : '50'),
+    shippingFreeThreshold: vendor?.shippingFreeThreshold != null ? vendor.shippingFreeThreshold : (vendor?.shipping_free_threshold != null ? vendor.shipping_free_threshold : '499'),
+    shippingEstimatedDays: vendor?.shippingEstimatedDays || vendor?.shipping_estimated_days || '3–5 business days'
   });
-  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+  const [profileErrorMsg, setProfileErrorMsg] = useState('');
+  const [uploadingDoc, setUploadingDoc] = useState(null); // 'gst' | 'fssai' | 'bank'
+  const gstInputRef = React.useRef(null);
+  const fssaiInputRef = React.useRef(null);
+  const bankInputRef = React.useRef(null);
+
+  // Vendor Coupons State
+  const [coupons, setCoupons] = useState([]);
+  const [couponsLoading, setCouponsLoading] = useState(false);
+  const [couponModalOpen, setCouponModalOpen] = useState(false);
+  const [couponProductSearch, setCouponProductSearch] = useState('');
+  const [couponSaving, setCouponSaving] = useState(false);
+  const [couponFormMsg, setCouponFormMsg] = useState({ type: null, text: '' });
+  const [editingCouponCode, setEditingCouponCode] = useState(null);
+  const [couponForm, setCouponForm] = useState({
+    code: '',
+    title: '',
+    type: 'percent',
+    value: 10,
+    minOrder: 299,
+    maxDiscount: '',
+    applicableTo: 'all',
+    selectedProducts: [],
+    usageLimit: '',
+    perCustomerLimit: 1,
+    startDate: '',
+    expiryDate: '',
+    isActive: true
+  });
+
+  const loadCoupons = async () => {
+    setCouponsLoading(true);
+    try {
+      const res = await api.getVendorCoupons();
+      if (res?.success && Array.isArray(res.coupons)) {
+        setCoupons(res.coupons);
+      }
+    } catch {
+      setCoupons([]);
+    } finally {
+      setCouponsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'coupons') {
+      loadCoupons();
+    }
+  }, [activeTab]);
+
+  const handleOpenAddCoupon = () => {
+    setEditingCouponCode(null);
+    setCouponForm({
+      code: '',
+      title: '',
+      type: 'percent',
+      value: 10,
+      minOrder: 299,
+      maxDiscount: '',
+      applicableTo: 'all',
+      selectedProducts: [],
+      usageLimit: '',
+      perCustomerLimit: 1,
+      startDate: '',
+      expiryDate: '',
+      isActive: true
+    });
+    setCouponFormMsg({ type: null, text: '' });
+    setCouponModalOpen(true);
+  };
+
+  const updateCouponForm = (patch) => {
+    setCouponForm((prev) => ({ ...prev, ...patch }));
+    if (couponFormMsg.text) setCouponFormMsg({ type: null, text: '' });
+  };
+
+  const handleOpenEditCoupon = (c) => {
+    setEditingCouponCode(c.code);
+    let prodIds = [];
+    if (c.productIds || c.product_ids) {
+      const raw = c.productIds || c.product_ids;
+      try {
+        prodIds = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch {
+        prodIds = [];
+      }
+    }
+    setCouponForm({
+      code: c.code,
+      title: c.title || c.description || '',
+      type: c.type || c.discountType || 'percent',
+      value: c.value ?? c.discountValue ?? 10,
+      minOrder: c.minOrder ?? c.min_order ?? 0,
+      maxDiscount: c.maxDiscount ?? c.max_discount ?? '',
+      applicableTo: c.applicableTo || c.applicable_to || (prodIds.length > 0 ? 'selected' : 'all'),
+      selectedProducts: prodIds,
+      usageLimit: c.usageLimit ?? c.usage_limit ?? '',
+      perCustomerLimit: c.perCustomerLimit ?? c.per_customer_limit ?? 1,
+      startDate: c.startDate || c.start_date ? new Date(c.startDate || c.start_date).toISOString().slice(0, 10) : '',
+      expiryDate: c.expiryDate || c.expiry_date ? new Date(c.expiryDate || c.expiry_date).toISOString().slice(0, 10) : '',
+      isActive: Boolean(c.isActive ?? c.is_active ?? 1)
+    });
+    setCouponFormMsg({ type: null, text: '' });
+    setCouponModalOpen(true);
+  };
+
+  const handleSaveCoupon = async (e) => {
+    e.preventDefault();
+    if (!couponForm.code.trim()) {
+      setCouponFormMsg({ type: 'error', text: 'Coupon code is required.' });
+      return;
+    }
+    setCouponSaving(true);
+    setCouponFormMsg({ type: null, text: '' });
+    try {
+      const payload = {
+        code: couponForm.code.trim().toUpperCase(),
+        title: couponForm.title.trim(),
+        type: couponForm.type,
+        value: Number(couponForm.value) || 0,
+        minOrder: Number(couponForm.minOrder) || 0,
+        maxDiscount: couponForm.maxDiscount !== '' ? Number(couponForm.maxDiscount) : null,
+        applicableTo: couponForm.applicableTo,
+        productIds: couponForm.applicableTo === 'selected' ? couponForm.selectedProducts : [],
+        usageLimit: couponForm.usageLimit !== '' ? parseInt(couponForm.usageLimit, 10) : null,
+        perCustomerLimit: couponForm.perCustomerLimit !== '' ? parseInt(couponForm.perCustomerLimit, 10) : 1,
+        startDate: couponForm.startDate || null,
+        expiryDate: couponForm.expiryDate || null,
+        isActive: Boolean(couponForm.isActive)
+      };
+
+      if (editingCouponCode) {
+        const res = await api.updateVendorCoupon(editingCouponCode, payload);
+        if (!res?.success) throw new Error(res?.error || 'Failed to update coupon');
+      } else {
+        const res = await api.createVendorCoupon(payload);
+        if (!res?.success) throw new Error(res?.error || 'Failed to create coupon');
+      }
+
+      await loadCoupons();
+      setCouponFormMsg({ type: 'success', text: `Coupon ${payload.code} saved successfully!` });
+      setTimeout(() => setCouponModalOpen(false), 1000);
+    } catch (err) {
+      setCouponFormMsg({ type: 'error', text: err?.message || 'Failed to save coupon' });
+    } finally {
+      setCouponSaving(false);
+    }
+  };
+
+  const handleDeleteCoupon = async (code) => {
+    if (!window.confirm(`Are you sure you want to delete coupon ${code}?`)) return;
+    try {
+      const res = await api.deleteVendorCoupon(code);
+      if (res?.success) {
+        setCoupons(prev => prev.filter(c => c.code !== code));
+      } else {
+        alert(res?.error || 'Failed to delete coupon');
+      }
+    } catch (err) {
+      alert(err?.message || 'Failed to delete coupon');
+    }
+  };
 
   // Sample quick images for adding products easily
   const sampleImages = [
@@ -202,6 +408,49 @@ export default function VendorDashboard({ vendor, onLogout }) {
         if (!cancelled) setReviewsLoading(false);
       });
     return () => { cancelled = true; };
+  }, [activeTab, vendor?.id]);
+
+  // Fetch live vendor profile from backend when opening settings
+  useEffect(() => {
+    if (activeTab === 'settings' && vendor?.id) {
+      setProfileLoading(true);
+      api.getVendorProfile()
+        .then((res) => {
+          if (res?.success && res.vendor) {
+            const v = res.vendor;
+            setProfileData((prev) => ({
+              ...prev,
+              businessName: v.businessName || v.business_name || v.name || prev.businessName,
+              ownerName: v.ownerName || v.owner_name || v.name || prev.ownerName,
+              email: v.email || prev.email,
+              phone: v.phone || prev.phone,
+              address: v.address || prev.address,
+              city: v.city || prev.city,
+              district: v.district || prev.district,
+              state: v.state || prev.state || 'Tamil Nadu',
+              pincode: v.pincode || prev.pincode,
+              bio: v.bio || prev.bio,
+              gstStatus: v.gstStatus || v.gst_status || prev.gstStatus,
+              gstin: v.gstin || prev.gstin,
+              gstCertificateUrl: v.gstCertificateUrl || v.gst_certificate_url || prev.gstCertificateUrl,
+              fssaiStatus: v.fssaiStatus || v.fssai_status || prev.fssaiStatus,
+              fssaiNumber: v.fssaiNumber || v.fssai_number || prev.fssaiNumber,
+              fssaiCertificateUrl: v.fssaiCertificateUrl || v.fssai_certificate_url || prev.fssaiCertificateUrl,
+              bankAccountHolder: v.bankAccountHolder || v.bank_account_holder || prev.bankAccountHolder,
+              bankName: v.bankName || v.bank_name || prev.bankName,
+              bankAccountNumber: v.bankAccountNumber || v.bank_account_number || prev.bankAccountNumber,
+              bankIfsc: v.bankIfsc || v.bank_ifsc || prev.bankIfsc,
+              bankDocumentUrl: v.bankDocumentUrl || v.bank_document_url || prev.bankDocumentUrl,
+              shippingEnabled: v.shippingEnabled !== false && v.shipping_enabled !== 0,
+              shippingCharge: v.shippingCharge != null ? v.shippingCharge : (v.shipping_charge != null ? v.shipping_charge : prev.shippingCharge),
+              shippingFreeThreshold: v.shippingFreeThreshold != null ? v.shippingFreeThreshold : (v.shipping_free_threshold != null ? v.shipping_free_threshold : prev.shippingFreeThreshold),
+              shippingEstimatedDays: v.shippingEstimatedDays || v.shipping_estimated_days || prev.shippingEstimatedDays
+            }));
+          }
+        })
+        .catch(() => {})
+        .finally(() => setProfileLoading(false));
+    }
   }, [activeTab, vendor?.id]);
 
   if (!vendor) return null;
@@ -279,17 +528,71 @@ export default function VendorDashboard({ vendor, onLogout }) {
     setUpdatingOrderId(null);
   };
 
-  // Handle Save Settings
-  const handleSaveSettings = (e) => {
+  // Handle Document Upload in Profile
+  const handleVendorDocUpload = async (e, docType) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    if (!allowed.includes(file.type)) {
+      setProfileErrorMsg('Please select a valid PDF, JPEG, or PNG document.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setProfileErrorMsg('Document size exceeds 10MB limit.');
+      return;
+    }
+
+    setUploadingDoc(docType);
+    setProfileErrorMsg('');
+
+    try {
+      const res = await api.uploadDocument(file, 'vendor');
+      if (res?.success && res.url) {
+        if (docType === 'gst') {
+          setProfileData((prev) => ({ ...prev, gstCertificateUrl: res.url }));
+        } else if (docType === 'fssai') {
+          setProfileData((prev) => ({ ...prev, fssaiCertificateUrl: res.url }));
+        } else if (docType === 'bank') {
+          setProfileData((prev) => ({ ...prev, bankDocumentUrl: res.url }));
+        }
+      } else {
+        setProfileErrorMsg(res?.error || 'Document upload failed.');
+      }
+    } catch (err) {
+      setProfileErrorMsg(err?.message || 'Document upload failed. Please try again.');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  // Handle Save Profile & Compliance Settings
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    updateVendor(vendor.id, {
-      name: settingsData.name,
-      phone: settingsData.phone,
-      bio: settingsData.bio,
-      address: settingsData.address
-    });
-    setSettingsSaved(true);
-    setTimeout(() => setSettingsSaved(false), 2500);
+    setProfileSaving(true);
+    setProfileErrorMsg('');
+    setProfileSuccessMsg('');
+
+    try {
+      const res = await api.updateVendorProfile(profileData);
+      if (res?.success) {
+        setProfileSuccessMsg(res.message || 'Profile, licenses, and settlement details saved successfully!');
+        if (res.vendor) {
+          updateVendor(vendor.id, {
+            ...vendor,
+            ...res.vendor,
+            name: res.vendor.businessName || res.vendor.name || vendor.name
+          });
+        }
+        setTimeout(() => setProfileSuccessMsg(''), 4000);
+      } else {
+        setProfileErrorMsg(res?.error || 'Failed to update profile.');
+      }
+    } catch (err) {
+      setProfileErrorMsg(err?.message || 'Failed to update profile. Please try again.');
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   // Filter products by search
@@ -350,12 +653,10 @@ export default function VendorDashboard({ vendor, onLogout }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
-                    cursor: ['pending', 'rejected'].includes(p.status) ? 'pointer' : 'default'
+                    cursor: 'pointer'
                   }}
-                  onClick={() => {
-                    if (['pending', 'rejected'].includes(p.status)) setEditingProductId(p.id);
-                  }}
-                  title={['pending', 'rejected'].includes(p.status) ? 'Click to view / edit product' : undefined}
+                  onClick={() => setEditingProductId(p.id)}
+                  title="Click to view / edit product"
                 >
                   {p.image && (
                     <img
@@ -379,24 +680,23 @@ export default function VendorDashboard({ vendor, onLogout }) {
                 </span>
               </td>
               <td>
-                {['pending', 'rejected'].includes(p.status) && (
-                  <button
-                    type="button"
-                    onClick={() => setEditingProductId(p.id)}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      background: '#ffffff',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      color: '#0f172a',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Edit
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setEditingProductId(p.id)}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: '#0f172a',
+                    cursor: 'pointer'
+                  }}
+                  title={p.status === 'approved' ? 'Edit listing (re-approval required)' : 'Edit product details'}
+                >
+                  Edit
+                </button>
               </td>
             </tr>
           ))}
@@ -576,6 +876,20 @@ export default function VendorDashboard({ vendor, onLogout }) {
               <span className="vendor-menu-title">Customer Reviews</span>
               {reviews.length > 0 && (
                 <span className="vendor-badge-count">{reviews.length}</span>
+              )}
+            </button>
+          </div>
+
+          {/* 5b. Coupons */}
+          <div className="vendor-menu-item">
+            <button 
+              className={`vendor-menu-btn ${activeTab === 'coupons' ? 'active' : ''}`}
+              onClick={() => handleNavigate('coupons')}
+            >
+              <Tag size={19} className="vendor-menu-icon" />
+              <span className="vendor-menu-title">Store Coupons</span>
+              {coupons.length > 0 && (
+                <span className="vendor-badge-count">{coupons.length}</span>
               )}
             </button>
           </div>
@@ -1085,77 +1399,955 @@ export default function VendorDashboard({ vendor, onLogout }) {
             </div>
           )}
 
-          {/* ---------------- 6. SETTINGS VIEW ---------------- */}
+          {/* ---------------- 6. SETTINGS VIEW (Vendor Profile & Compliance) ---------------- */}
           {activeTab === 'settings' && (
-            <div className="settings-container">
-              <div className="settings-card">
-                <h3 className="settings-card-title">Store & Vendor Profile</h3>
-                <p className="settings-card-desc">Keep your farm details and contact information up-to-date.</p>
+            <div className="settings-container" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {profileSuccessMsg && (
+                <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', padding: '12px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                  <CheckCircle size={20} />
+                  <span>{profileSuccessMsg}</span>
+                </div>
+              )}
 
-                {settingsSaved && (
-                  <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', padding: '10px 16px', borderRadius: '8px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <CheckCircle size={18} />
-                    <span>Settings saved successfully!</span>
+              {profileErrorMsg && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '12px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                  <AlertCircle size={20} />
+                  <span>{profileErrorMsg}</span>
+                </div>
+              )}
+
+              {profileLoading ? (
+                <div style={{ textAlign: 'center', padding: '48px', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                  <Loader2 size={32} className="spin" style={{ margin: '0 auto 12px', color: '#0e5c4a' }} />
+                  <p style={{ color: '#64748b', margin: 0 }}>Loading your store and compliance details...</p>
+                </div>
+              ) : (
+                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  {/* Card 1: Store & Contact Information */}
+                  <div className="settings-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', color: '#0e5c4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Store size={20} />
+                      </div>
+                      <div>
+                        <h3 className="settings-card-title" style={{ margin: 0 }}>Store & Contact Information</h3>
+                        <p className="settings-card-desc" style={{ margin: '2px 0 0' }}>Your public store profile and verified contact details.</p>
+                      </div>
+                    </div>
+
+                    <div className="form-two-column-grid">
+                      <div>
+                        <label className="v-input-label">Business / Farm Name *</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          value={profileData.businessName}
+                          onChange={(e) => setProfileData({ ...profileData, businessName: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Owner / Contact Name *</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          value={profileData.ownerName}
+                          onChange={(e) => setProfileData({ ...profileData, ownerName: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Email Address (Read-only)</label>
+                        <input
+                          type="email"
+                          className="v-input-text"
+                          value={profileData.email}
+                          disabled
+                          style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Contact Mobile Number *</label>
+                        <input
+                          type="tel"
+                          className="v-input-text"
+                          value={profileData.phone}
+                          maxLength={10}
+                          onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      <div className="form-full-column">
+                        <label className="v-input-label">Farm / Operating Street Address *</label>
+                        <textarea
+                          className="v-textarea"
+                          rows={2}
+                          value={profileData.address}
+                          onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
+                          placeholder="Building, street, plot or village"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">City / Town *</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          value={profileData.city}
+                          onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">District *</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          value={profileData.district}
+                          onChange={(e) => setProfileData({ ...profileData, district: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">State *</label>
+                        <select
+                          className="v-input-text"
+                          value={profileData.state}
+                          onChange={(e) => setProfileData({ ...profileData, state: e.target.value })}
+                          required
+                        >
+                          {INDIAN_STATES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">PIN Code *</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          value={profileData.pincode}
+                          maxLength={6}
+                          onChange={(e) => setProfileData({ ...profileData, pincode: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      <div className="form-full-column">
+                        <label className="v-input-label">Store Bio / Description</label>
+                        <textarea
+                          className="v-textarea"
+                          rows={3}
+                          value={profileData.bio}
+                          onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
+                          placeholder="Tell customers about your farm harvest practices and specialties"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Business & Regulatory Licenses */}
+                  <div className="settings-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', color: '#0e5c4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FileCheck2 size={20} />
+                      </div>
+                      <div>
+                        <h3 className="settings-card-title" style={{ margin: 0 }}>Business & Regulatory Licenses</h3>
+                        <p className="settings-card-desc" style={{ margin: '2px 0 0' }}>Goods and Services Tax (GST) & Food Safety (FSSAI) regulatory records.</p>
+                      </div>
+                    </div>
+
+                    <div className="form-two-column-grid">
+                      <div>
+                        <label className="v-input-label">GST Registration Status</label>
+                        <select
+                          className="v-input-text"
+                          value={profileData.gstStatus}
+                          onChange={(e) => setProfileData({ ...profileData, gstStatus: e.target.value })}
+                        >
+                          <option value="Not Registered">Not Registered (Exempt / Threshold limit)</option>
+                          <option value="Registered">Registered (Hold valid GSTIN)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">GSTIN Number</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          placeholder="15-character GSTIN"
+                          maxLength={15}
+                          value={profileData.gstin}
+                          onChange={(e) => setProfileData({ ...profileData, gstin: e.target.value.toUpperCase() })}
+                          disabled={profileData.gstStatus !== 'Registered'}
+                          style={{ textTransform: 'uppercase' }}
+                        />
+                      </div>
+
+                      <div className="form-full-column">
+                        <label className="v-input-label">GST Registration Certificate</label>
+                        <input
+                          type="file"
+                          ref={gstInputRef}
+                          style={{ display: 'none' }}
+                          accept=".pdf,image/jpeg,image/png"
+                          onChange={(e) => handleVendorDocUpload(e, 'gst')}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={() => gstInputRef.current?.click()}
+                            disabled={uploadingDoc === 'gst'}
+                            style={{ fontSize: '0.85rem' }}
+                          >
+                            <UploadCloud size={16} /> {uploadingDoc === 'gst' ? 'Uploading...' : (profileData.gstCertificateUrl ? 'Replace Certificate' : 'Upload GST Certificate')}
+                          </button>
+                          {profileData.gstCertificateUrl && (
+                            <a
+                              href={profileData.gstCertificateUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', color: '#0e5c4a', fontWeight: 600, textDecoration: 'none' }}
+                            >
+                              <FileText size={16} /> View Current Certificate
+                            </a>
+                          )}
+                        </div>
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>PDF, JPG, PNG up to 10MB.</small>
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">FSSAI Registration Status</label>
+                        <select
+                          className="v-input-text"
+                          value={profileData.fssaiStatus}
+                          onChange={(e) => setProfileData({ ...profileData, fssaiStatus: e.target.value })}
+                        >
+                          <option value="Not Applicable">Not Applicable (Raw produce / Exempt)</option>
+                          <option value="Applicable">Applicable (Packaged / Processed items)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">FSSAI License / Registration No.</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          placeholder="14-digit FSSAI number"
+                          maxLength={14}
+                          value={profileData.fssaiNumber}
+                          onChange={(e) => setProfileData({ ...profileData, fssaiNumber: e.target.value })}
+                          disabled={profileData.fssaiStatus !== 'Applicable'}
+                        />
+                      </div>
+
+                      <div className="form-full-column">
+                        <label className="v-input-label">FSSAI Food License Certificate</label>
+                        <input
+                          type="file"
+                          ref={fssaiInputRef}
+                          style={{ display: 'none' }}
+                          accept=".pdf,image/jpeg,image/png"
+                          onChange={(e) => handleVendorDocUpload(e, 'fssai')}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={() => fssaiInputRef.current?.click()}
+                            disabled={uploadingDoc === 'fssai'}
+                            style={{ fontSize: '0.85rem' }}
+                          >
+                            <UploadCloud size={16} /> {uploadingDoc === 'fssai' ? 'Uploading...' : (profileData.fssaiCertificateUrl ? 'Replace FSSAI License' : 'Upload FSSAI License')}
+                          </button>
+                          {profileData.fssaiCertificateUrl && (
+                            <a
+                              href={profileData.fssaiCertificateUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', color: '#0e5c4a', fontWeight: 600, textDecoration: 'none' }}
+                            >
+                              <FileText size={16} /> View Current FSSAI License
+                            </a>
+                          )}
+                        </div>
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>PDF, JPG, PNG up to 10MB.</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Bank Account & Settlement Information */}
+                  <div className="settings-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', color: '#0e5c4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Building2 size={20} />
+                      </div>
+                      <div>
+                        <h3 className="settings-card-title" style={{ margin: 0 }}>Bank Account & Settlement Information (Payouts)</h3>
+                        <p className="settings-card-desc" style={{ margin: '2px 0 0' }}>Used confidentially for seller payout transfers and settlement deposits.</p>
+                      </div>
+                    </div>
+
+                    <div className="form-two-column-grid">
+                      <div>
+                        <label className="v-input-label">Account Holder Legal Name</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          placeholder="As printed on bank passbook"
+                          value={profileData.bankAccountHolder}
+                          onChange={(e) => setProfileData({ ...profileData, bankAccountHolder: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Bank Name</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          placeholder="e.g. State Bank of India, Canara Bank"
+                          value={profileData.bankName}
+                          onChange={(e) => setProfileData({ ...profileData, bankName: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Account Number</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          placeholder="Bank account number"
+                          value={profileData.bankAccountNumber}
+                          onChange={(e) => setProfileData({ ...profileData, bankAccountNumber: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">IFSC Code</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          placeholder="11-character IFSC code"
+                          maxLength={11}
+                          value={profileData.bankIfsc}
+                          onChange={(e) => setProfileData({ ...profileData, bankIfsc: e.target.value.toUpperCase() })}
+                          style={{ textTransform: 'uppercase' }}
+                        />
+                      </div>
+
+                      <div className="form-full-column">
+                        <label className="v-input-label">Bank Passbook / Cancelled Cheque</label>
+                        <input
+                          type="file"
+                          ref={bankInputRef}
+                          style={{ display: 'none' }}
+                          accept=".pdf,image/jpeg,image/png"
+                          onChange={(e) => handleVendorDocUpload(e, 'bank')}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={() => bankInputRef.current?.click()}
+                            disabled={uploadingDoc === 'bank'}
+                            style={{ fontSize: '0.85rem' }}
+                          >
+                            <UploadCloud size={16} /> {uploadingDoc === 'bank' ? 'Uploading...' : (profileData.bankDocumentUrl ? 'Replace Bank Document' : 'Upload Passbook / Cheque')}
+                          </button>
+                          {profileData.bankDocumentUrl && (
+                            <a
+                              href={profileData.bankDocumentUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', color: '#0e5c4a', fontWeight: 600, textDecoration: 'none' }}
+                            >
+                              <FileText size={16} /> View Current Bank Document
+                            </a>
+                          )}
+                        </div>
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>PDF, JPG, PNG up to 10MB.</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Store Delivery & Shipping Charges */}
+                  <div className="settings-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', color: '#0e5c4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Truck size={20} />
+                      </div>
+                      <div>
+                        <h3 className="settings-card-title" style={{ margin: 0 }}>Store Delivery & Shipping Charges</h3>
+                        <p className="settings-card-desc" style={{ margin: '2px 0 0' }}>Configure delivery fees and free shipping order thresholds for customers ordering your produce.</p>
+                      </div>
+                    </div>
+
+                    <div className="form-two-column-grid">
+                      <div className="form-full-column">
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
+                          <input
+                            type="checkbox"
+                            checked={profileData.shippingEnabled}
+                            onChange={(e) => setProfileData({ ...profileData, shippingEnabled: e.target.checked })}
+                            style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                          />
+                          <span>Charge delivery fee on orders of my produce (uncheck for Store Free Delivery)</span>
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Standard Delivery Charge (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="v-input-text"
+                          placeholder="e.g. 50"
+                          value={profileData.shippingCharge}
+                          onChange={(e) => setProfileData({ ...profileData, shippingCharge: e.target.value })}
+                          disabled={!profileData.shippingEnabled}
+                        />
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Applied to customer checkout orders containing your items.</small>
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Free Delivery Threshold (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="v-input-text"
+                          placeholder="e.g. 499 (0 or blank for no free shipping)"
+                          value={profileData.shippingFreeThreshold}
+                          onChange={(e) => setProfileData({ ...profileData, shippingFreeThreshold: e.target.value })}
+                          disabled={!profileData.shippingEnabled}
+                        />
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Orders of your items meeting or exceeding this subtotal receive Free Shipping.</small>
+                      </div>
+
+                      <div className="form-full-column">
+                        <label className="v-input-label">Estimated Delivery Timeline</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          placeholder="e.g. 2–4 business days (Direct farm harvest)"
+                          value={profileData.shippingEstimatedDays}
+                          onChange={(e) => setProfileData({ ...profileData, shippingEstimatedDays: e.target.value })}
+                        />
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Displayed to customers during product browsing and checkout.</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save Action */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
+                    <button
+                      type="submit"
+                      className="btn-primary-action"
+                      disabled={profileSaving}
+                      style={{ padding: '12px 28px', fontSize: '0.95rem' }}
+                    >
+                      {profileSaving ? (
+                        <>
+                          <Loader2 size={18} className="spin" /> Saving Changes...
+                        </>
+                      ) : (
+                        <>
+                          <Check size={18} /> Save Profile & Settings
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* ---------------- 7. STORE COUPONS VIEW ---------------- */}
+          {activeTab === 'coupons' && (
+            <div className="products-table-card">
+              <div className="table-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>Store Coupons & Promotional Offers</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
+                    Create discounts and special promotional codes applicable to your store's products
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-primary-action"
+                  onClick={handleOpenAddCoupon}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Plus size={16} /> Create Coupon
+                </button>
+              </div>
+
+              {couponsLoading ? (
+                <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
+                  Loading coupons…
+                </div>
+              ) : coupons.length === 0 ? (
+                <div style={{ padding: '48px 20px', textAlign: 'center', color: '#64748b' }}>
+                  <Tag size={36} style={{ color: '#cbd5e1', marginBottom: 12 }} />
+                  <h4 style={{ margin: '0 0 6px', color: '#1e293b', fontSize: 16 }}>No store coupons created yet</h4>
+                  <p style={{ margin: '0 0 16px', fontSize: 13 }}>Create your first discount coupon to boost your store sales.</p>
+                  <button type="button" className="btn-primary-action" onClick={handleOpenAddCoupon}>
+                    <Plus size={15} /> Create First Coupon
+                  </button>
+                </div>
+              ) : (
+                <div className="table-responsive" style={{ overflowX: 'auto' }}>
+                  <table className="products-table">
+                    <thead>
+                      <tr>
+                        <th>Code</th>
+                        <th>Title / Description</th>
+                        <th>Discount</th>
+                        <th>Scope</th>
+                        <th>Min Order / Max Cap</th>
+                        <th>Validity Window</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coupons.map((c) => {
+                        const isActive = Boolean(c.is_active ?? c.isActive ?? 1);
+                        const isPercent = (c.type || c.discountType) === 'percent';
+                        let prodCount = 0;
+                        if (c.applicable_to === 'selected' || c.applicableTo === 'selected') {
+                          try {
+                            const parsed = typeof c.product_ids === 'string' ? JSON.parse(c.product_ids) : (c.product_ids || c.productIds || []);
+                            prodCount = Array.isArray(parsed) ? parsed.length : 0;
+                          } catch {
+                            prodCount = 0;
+                          }
+                        }
+                        return (
+                          <tr key={c.code}>
+                            <td>
+                              <strong style={{ color: '#0e5c4a', fontFamily: 'monospace', letterSpacing: 1, fontSize: 14 }}>
+                                {c.code}
+                              </strong>
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: 500, color: '#1e293b' }}>{c.title || c.description || '—'}</div>
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: 600, color: '#0f172a' }}>
+                                {c.value ?? c.discountValue}{isPercent ? '%' : '₹'} off
+                              </span>
+                            </td>
+                            <td>
+                              {(c.applicable_to === 'selected' || c.applicableTo === 'selected') ? (
+                                <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 500 }}>
+                                  {prodCount} specific product{prodCount === 1 ? '' : 's'}
+                                </span>
+                              ) : (
+                                <span style={{ background: '#f1f5f9', color: '#475569', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 500 }}>
+                                  All my products
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ fontSize: 12 }}>Min: ₹{c.min_order ?? c.minOrder ?? 0}</div>
+                              {(c.max_discount || c.maxDiscount) && (
+                                <div style={{ fontSize: 11, color: '#64748b' }}>Cap: ₹{c.max_discount || c.maxDiscount}</div>
+                              )}
+                            </td>
+                            <td style={{ fontSize: 12, color: '#475569' }}>
+                              {c.expiry_date || c.expiryDate
+                                ? `Until ${new Date(c.expiry_date || c.expiryDate).toLocaleDateString()}`
+                                : 'No expiry'}
+                            </td>
+                            <td>
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '3px 8px',
+                                borderRadius: 12,
+                                fontSize: 11,
+                                fontWeight: 600,
+                                background: isActive ? '#ecfdf5' : '#f1f5f9',
+                                color: isActive ? '#065f46' : '#64748b'
+                              }}>
+                                {isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditCoupon(c)}
+                                  style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', color: '#334155' }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCoupon(c.code)}
+                                  style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', color: '#991b1b' }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ---------------- VENDOR ADD / EDIT COUPON MODAL ---------------- */}
+          {couponModalOpen && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+              <div
+                style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)' }}
+                onClick={() => !couponSaving && setCouponModalOpen(false)}
+              />
+              <div style={{ position: 'relative', background: '#fff', borderRadius: 12, maxWidth: 560, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)', padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, borderBottom: '1px solid #e2e8f0', paddingBottom: 14 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>
+                      {editingCouponCode ? `Edit Coupon: ${editingCouponCode}` : 'Create New Store Coupon'}
+                    </h3>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b' }}>
+                      Offer discounts on your products to attract more shoppers
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCouponModalOpen(false)}
+                    disabled={couponSaving}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {couponFormMsg.text && (
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    marginBottom: 16,
+                    fontSize: 13,
+                    background: couponFormMsg.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                    border: `1px solid ${couponFormMsg.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
+                    color: couponFormMsg.type === 'success' ? '#065f46' : '#991b1b'
+                  }}>
+                    {couponFormMsg.text}
                   </div>
                 )}
 
-                <form onSubmit={handleSaveSettings}>
-                  <div className="form-two-column-grid">
+                <form onSubmit={handleSaveCoupon} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
-                      <label className="v-input-label">Business / Farm Name</label>
-                      <input 
-                        type="text" 
-                        className="v-input-text" 
-                        value={settingsData.name}
-                        onChange={e => setSettingsData({ ...settingsData, name: e.target.value })}
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Coupon Code *
+                      </label>
+                      <input
+                        type="text"
+                        className="v-input-text"
+                        style={{ textTransform: 'uppercase', fontFamily: 'monospace', fontWeight: 700 }}
+                        placeholder="e.g. FARM15"
+                        value={couponForm.code}
+                        disabled={Boolean(editingCouponCode)}
+                        onChange={(e) => updateCouponForm({ code: e.target.value.toUpperCase() })}
                         required
                       />
                     </div>
-
                     <div>
-                      <label className="v-input-label">Email Address (Read-only)</label>
-                      <input 
-                        type="email" 
-                        className="v-input-text" 
-                        value={settingsData.email}
-                        disabled
-                        style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="v-input-label">Contact Phone</label>
-                      <input 
-                        type="tel" 
-                        className="v-input-text" 
-                        value={settingsData.phone}
-                        onChange={e => setSettingsData({ ...settingsData, phone: e.target.value })}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="v-input-label">Farm / Pickup Location</label>
-                      <input 
-                        type="text" 
-                        className="v-input-text" 
-                        value={settingsData.address}
-                        onChange={e => setSettingsData({ ...settingsData, address: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-full-column">
-                      <label className="v-input-label">Store Bio / Description</label>
-                      <textarea 
-                        className="v-textarea"
-                        value={settingsData.bio}
-                        onChange={e => setSettingsData({ ...settingsData, bio: e.target.value })}
-                      ></textarea>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Discount Type *
+                      </label>
+                      <select
+                        className="v-input-text"
+                        value={couponForm.type}
+                        onChange={(e) => updateCouponForm({ type: e.target.value })}
+                      >
+                        <option value="percent">Percentage Discount (%)</option>
+                        <option value="flat">Flat Cash Discount (₹)</option>
+                      </select>
                     </div>
                   </div>
 
-                  <div style={{ marginTop: '22px' }}>
-                    <button type="submit" className="btn-primary-action">
-                      <Check size={16} /> Save Changes
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                      Coupon Title / Description
+                    </label>
+                    <input
+                      type="text"
+                      className="v-input-text"
+                      placeholder="e.g. 15% off on cold-pressed sesame oil"
+                      value={couponForm.title}
+                      onChange={(e) => updateCouponForm({ title: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Discount Value *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        className="v-input-text"
+                        value={couponForm.value}
+                        onChange={(e) => updateCouponForm({ value: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Min Order (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="v-input-text"
+                        value={couponForm.minOrder}
+                        onChange={(e) => updateCouponForm({ minOrder: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Max Cap (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="v-input-text"
+                        placeholder="Optional"
+                        value={couponForm.maxDiscount}
+                        onChange={(e) => setCouponForm({ ...couponForm, maxDiscount: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Scope Selection */}
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, background: '#f8fafc' }}>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: 13, color: '#334155', marginBottom: 8 }}>
+                      Applicable Products in Your Store
+                    </label>
+                    <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                        <input
+                          type="radio"
+                          name="vCouponScope"
+                          value="all"
+                          checked={couponForm.applicableTo === 'all'}
+                          onChange={() => setCouponForm({ ...couponForm, applicableTo: 'all' })}
+                        />
+                        <span>All My Store Products</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                        <input
+                          type="radio"
+                          name="vCouponScope"
+                          value="selected"
+                          checked={couponForm.applicableTo === 'selected'}
+                          onChange={() => setCouponForm({ ...couponForm, applicableTo: 'selected' })}
+                        />
+                        <span>Specific Products ({couponForm.selectedProducts?.length || 0} selected)</span>
+                      </label>
+                    </div>
+
+                    {couponForm.applicableTo === 'selected' && (() => {
+                      const searchLower = couponProductSearch.trim().toLowerCase();
+                      const filtered = searchLower
+                        ? products.filter((p) =>
+                            (p.title || p.name || '').toLowerCase().includes(searchLower) ||
+                            (p.category || '').toLowerCase().includes(searchLower) ||
+                            String(p.id || '').toLowerCase().includes(searchLower)
+                          )
+                        : products;
+                      const selectedCount = (couponForm.selectedProducts || []).length;
+
+                      return (
+                        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, marginTop: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                              Assign Store Products ({selectedCount} assigned):
+                            </span>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                type="button"
+                                style={{ fontSize: 11, background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', color: '#0e5c4a', fontWeight: 600 }}
+                                onClick={() => {
+                                  const filteredIds = filtered.map((p) => p.id);
+                                  const combined = Array.from(new Set([...(couponForm.selectedProducts || []), ...filteredIds]));
+                                  setCouponForm({ ...couponForm, selectedProducts: combined });
+                                }}
+                              >
+                                Select All Filtered
+                              </button>
+                              <button
+                                type="button"
+                                style={{ fontSize: 11, background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', color: '#64748b' }}
+                                onClick={() => {
+                                  const filteredIds = new Set(filtered.map((p) => p.id));
+                                  const remaining = (couponForm.selectedProducts || []).filter((id) => !filteredIds.has(id));
+                                  setCouponForm({ ...couponForm, selectedProducts: remaining });
+                                }}
+                              >
+                                Clear Filtered
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Instant Search Bar */}
+                          <div style={{ position: 'relative', marginBottom: 8 }}>
+                            <input
+                              type="text"
+                              placeholder="Search your store products by title, category, or ID..."
+                              value={couponProductSearch}
+                              onChange={(e) => setCouponProductSearch(e.target.value)}
+                              style={{ width: '100%', padding: '7px 28px 7px 10px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 6, outline: 'none' }}
+                            />
+                            {couponProductSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setCouponProductSearch('')}
+                                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14 }}
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6, padding: 8 }}>
+                            {products.length === 0 ? (
+                              <p style={{ fontSize: 12, color: '#94a3b8', margin: '10px 0', textAlign: 'center' }}>No approved products found in your store.</p>
+                            ) : filtered.length === 0 ? (
+                              <p style={{ fontSize: 12, color: '#94a3b8', margin: '10px 0', textAlign: 'center' }}>No products match “{couponProductSearch}”</p>
+                            ) : (
+                              filtered.map((p) => {
+                                const isChecked = (couponForm.selectedProducts || []).includes(p.id);
+                                return (
+                                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer', padding: '5px 8px', borderRadius: 4, background: isChecked ? '#f0fdf4' : 'transparent', border: isChecked ? '1px solid #bbf7d0' : '1px solid transparent' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        const next = e.target.checked
+                                          ? [...(couponForm.selectedProducts || []), p.id]
+                                          : (couponForm.selectedProducts || []).filter((id) => id !== p.id);
+                                        setCouponForm({ ...couponForm, selectedProducts: next });
+                                      }}
+                                    />
+                                    <span style={{ fontWeight: isChecked ? 600 : 400, color: isChecked ? '#166534' : '#1e293b' }}>
+                                      {p.title || p.name}
+                                    </span>
+                                    {p.category && (
+                                      <span style={{ fontSize: 10, background: '#f1f5f9', color: '#64748b', padding: '1px 6px', borderRadius: 10 }}>
+                                        {p.category}
+                                      </span>
+                                    )}
+                                    <span style={{ color: '#0e5c4a', fontWeight: 600, marginLeft: 'auto' }}>₹{p.price}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Usage Limit
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="v-input-text"
+                        placeholder="Unlimited"
+                        value={couponForm.usageLimit}
+                        onChange={(e) => setCouponForm({ ...couponForm, usageLimit: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Per-Customer Cap
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="v-input-text"
+                        value={couponForm.perCustomerLimit}
+                        onChange={(e) => setCouponForm({ ...couponForm, perCustomerLimit: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        className="v-input-text"
+                        value={couponForm.startDate}
+                        onChange={(e) => setCouponForm({ ...couponForm, startDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
+                        Expiry Date
+                      </label>
+                      <input
+                        type="date"
+                        className="v-input-text"
+                        value={couponForm.expiryDate}
+                        onChange={(e) => setCouponForm({ ...couponForm, expiryDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ paddingTop: 6 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, color: '#1e293b' }}>
+                      <input
+                        type="checkbox"
+                        checked={couponForm.isActive}
+                        onChange={(e) => setCouponForm({ ...couponForm, isActive: e.target.checked })}
+                        style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                      />
+                      <span>Coupon Active & Usable by Customers</span>
+                    </label>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
+                    <button
+                      type="button"
+                      onClick={() => setCouponModalOpen(false)}
+                      disabled={couponSaving}
+                      style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 18px', fontWeight: 500, cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={couponSaving}
+                      className="btn-primary-action"
+                      style={{ padding: '10px 20px' }}
+                    >
+                      {couponSaving ? 'Saving…' : (editingCouponCode ? 'Update Coupon' : 'Create Coupon')}
                     </button>
                   </div>
                 </form>

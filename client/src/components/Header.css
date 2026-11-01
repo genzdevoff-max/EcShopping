@@ -259,6 +259,8 @@
   border-radius: 50%;
   color: var(--ink-2);
   background: transparent;
+  border: none;
+  cursor: pointer;
 }
 
 .action-icon-btn:hover { background: var(--brand-50); color: var(--brand); }
@@ -630,47 +632,9 @@
 
 .mobile-nav-link .nav-badge { margin-left: 6px; }
 
-/* ---------- Header cart total ---------- */
-
-.header-cart-btn.has-total {
-  width: auto;
-  padding-inline: 12px 14px;
-  gap: 7px;
-  border-radius: var(--r-pill);
-  background: var(--brand-50);
-  border: 1px solid var(--brand-100);
-  color: var(--brand-700);
-}
-
-.header-cart-btn.has-total:hover {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: #fff;
-}
-
-.header-cart-btn.has-total .icon-badge { top: -5px; right: -5px; }
-
-.cart-total-text {
-  font-size: 0.78rem;
-  font-weight: 800;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
+/* ---------- Nav links responsive ---------- */
 
 @media (max-width: 1180px) and (min-width: 1041px) {
   .nav-link { padding: 9px 8px; font-size: 0.84rem; }
   .nav-badge { display: none; }
-}
-
-@media (max-width: 560px) {
-  .header-cart-btn.has-total {
-    width: 38px;
-    padding: 0;
-    gap: 0;
-    background: transparent;
-    border: none;
-    color: var(--ink-2);
-  }
-  .header-cart-btn.has-total .icon-badge { top: 3px; right: 2px; }
-  .cart-total-text { display: none; }
 }

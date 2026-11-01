@@ -12,6 +12,7 @@ import {
 import { useCart } from '../context/CartContext';
 import { PageHero } from '../components/ui/PageHeader';
 import { EmptyState } from '../components/ui/States';
+import QuantityStepper from '../components/ui/QuantityStepper';
 import PhonePe from '../components/checkout/PhonePe';
 import PaymentStates from '../components/checkout/PaymentStates';
 import { createPhonePePayment } from '../components/checkout/paymentGateway';
@@ -74,7 +75,61 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
     return () => { cancelled = true; };
   }, [loggedInCustomer]);
 
+  const [deliveryId, setDeliveryId] = useState('standard');
+  const [shippingConfig, setShippingConfig] = useState(null);
+  const [couponInput, setCouponInput] = useState('');
+  const [couponResult, setCouponResult] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('cod');
+  const [payState, setPayState] = useState('idle');
+  const [payInfo, setPayInfo] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [summaryCollapsed, setSummaryCollapsed] = useState(true);
+  const [errors, setErrors] = useState({});
+
+  const vendorIdsParam = useMemo(() => {
+    return [...new Set(items.map((i) => i.vendorId).filter(Boolean))].join(',');
+  }, [items]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getShippingConfig(vendorIdsParam ? { vendorIds: vendorIdsParam } : {})
+      .then((res) => {
+        if (!cancelled && res?.config) {
+          setShippingConfig(res.config);
+          if (res.config.standardDeliveryEnabled === false && res.config.expressDeliveryEnabled) {
+            setDeliveryId('express');
+          }
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [vendorIdsParam]);
+
+  const handleFieldChange = (field, setter) => (e) => {
+    setter(e.target.value);
+    if (errors[field]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  };
+
   const handleSelectAddressCard = (addr) => {
+    // Clear any active required errors
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.firstName;
+      delete next.lastName;
+      delete next.phone;
+      delete next.street;
+      delete next.city;
+      delete next.postcode;
+      return next;
+    });
+
     if (addr === 'new') {
       setSelectedAddressId('new');
     } else {
@@ -92,20 +147,9 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
     }
   };
 
-  const [deliveryId, setDeliveryId] = useState('standard');
-  const [couponInput, setCouponInput] = useState('');
-  const [couponResult, setCouponResult] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('cod');
-  const [payState, setPayState] = useState('idle');
-  const [payInfo, setPayInfo] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
-  const [summaryCollapsed, setSummaryCollapsed] = useState(true);
-  const [errors, setErrors] = useState({});
-
   const totals = useMemo(
-    () => computeTotals({ items, couponResult, deliveryMethodId: deliveryId }),
-    [items, couponResult, deliveryId]
+    () => computeTotals({ items, couponResult, deliveryMethodId: deliveryId, shippingConfig }),
+    [items, couponResult, deliveryId, shippingConfig]
   );
 
   if (items.length === 0) {
@@ -131,10 +175,36 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
     );
   }
 
-  const applyCoupon = (event) => {
+  const applyCoupon = async (event) => {
     event.preventDefault();
-    const result = validateCoupon(couponInput, totals.subtotal);
-    setCouponResult(result);
+    const code = couponInput.trim().toUpperCase();
+    if (!code) {
+      setCouponResult({ ok: false, message: 'Enter a coupon code.' });
+      return;
+    }
+    try {
+      const res = await api.validateCoupon(code, totals.subtotal, items);
+      if (res?.success && res.coupon) {
+        setCouponResult({
+          ok: true,
+          coupon: {
+            code: res.coupon.code,
+            type: res.coupon.discountType || res.coupon.type,
+            value: res.coupon.discountValue || res.coupon.value,
+            label: `${res.coupon.discountValue || res.coupon.value}${res.coupon.discountType === 'percent' ? '%' : '₹'} off`
+          },
+          discount: res.discount,
+          freeShipping: res.freeShipping,
+          message: `Coupon "${res.coupon.code}" applied! Saved ${formatINR(res.discount)}`
+        });
+      } else {
+        const local = validateCoupon(code, totals.subtotal);
+        setCouponResult(local.ok ? local : { ok: false, message: res?.error || local.message });
+      }
+    } catch {
+      const local = validateCoupon(code, totals.subtotal);
+      setCouponResult(local);
+    }
   };
 
   const clearCoupon = () => {
@@ -345,6 +415,22 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
     }
   };
 
+  const handleUpdateQuantity = (item, newQty) => {
+    const lineKey = ctx?.lineKeyOf ? ctx.lineKeyOf(item.id, item.variant) : `${item.id}::${item.variant || 'default'}`;
+    if (newQty <= 0) {
+      handleRemoveItem(item);
+      return;
+    }
+    if (ctx?.setQuantity) {
+      ctx.setQuantity(lineKey, newQty);
+    } else if (ctx?.updateQuantity) {
+      ctx.updateQuantity(item.id, item.variant, newQty - item.quantity);
+    }
+    if (errors.form) {
+      setErrors((prev) => ({ ...prev, form: null }));
+    }
+  };
+
   const fieldError = (key) => (errors[key] ? <p className="field-error" role="alert">{errors[key]}</p> : null);
 
   return (
@@ -378,22 +464,22 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
             <div className="form-grid form-grid-2">
               <label className="field">
                 <span className="field-label">First name *</span>
-                <input className="input" type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" />
+                <input className="input" type="text" value={firstName} onChange={handleFieldChange('firstName', setFirstName)} autoComplete="given-name" />
                 {fieldError('firstName')}
               </label>
               <label className="field">
                 <span className="field-label">Last name *</span>
-                <input className="input" type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" />
+                <input className="input" type="text" value={lastName} onChange={handleFieldChange('lastName', setLastName)} autoComplete="family-name" />
                 {fieldError('lastName')}
               </label>
               <label className="field">
                 <span className="field-label">Email address *</span>
-                <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" />
+                <input className="input" type="email" value={email} onChange={handleFieldChange('email', setEmail)} autoComplete="email" placeholder="you@example.com" />
                 {fieldError('email')}
               </label>
               <label className="field">
                 <span className="field-label">Mobile number *</span>
-                <input className="input" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="98765 43210" />
+                <input className="input" type="tel" value={phone} onChange={handleFieldChange('phone', setPhone)} autoComplete="tel" placeholder="98765 43210" />
                 {fieldError('phone')}
               </label>
             </div>
@@ -478,7 +564,7 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
                   type="text"
                   value={street}
                   onChange={(e) => {
-                    setStreet(e.target.value);
+                    handleFieldChange('street', setStreet)(e);
                     if (selectedAddressId && selectedAddressId !== 'new') setSelectedAddressId('new');
                   }}
                   autoComplete="street-address"
@@ -496,7 +582,7 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
                   type="text"
                   value={city}
                   onChange={(e) => {
-                    setCity(e.target.value);
+                    handleFieldChange('city', setCity)(e);
                     if (selectedAddressId && selectedAddressId !== 'new') setSelectedAddressId('new');
                   }}
                   autoComplete="address-level2"
@@ -531,7 +617,15 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
                   maxLength={6}
                   value={postcode}
                   onChange={(e) => {
-                    setPostcode(e.target.value.replace(/\D/g, ''));
+                    const cleanVal = e.target.value.replace(/\D/g, '');
+                    setPostcode(cleanVal);
+                    if (errors.postcode) {
+                      setErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.postcode;
+                        return next;
+                      });
+                    }
                     if (selectedAddressId && selectedAddressId !== 'new') setSelectedAddressId('new');
                   }}
                   autoComplete="postal-code"
@@ -564,7 +658,22 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
             </header>
 
             <div className="co-delivery-list">
-              {DELIVERY_METHODS.map((method) => {
+              {[
+                ...(shippingConfig?.standardDeliveryEnabled !== false ? [{
+                  id: 'standard',
+                  label: 'Standard delivery',
+                  detail: '3–5 business days',
+                  price: shippingConfig?.standardCharge != null ? Number(shippingConfig.standardCharge) : 50,
+                  freeOver: shippingConfig?.standardFreeThreshold != null ? Number(shippingConfig.standardFreeThreshold) : 499
+                }] : []),
+                ...(shippingConfig?.expressDeliveryEnabled !== false ? [{
+                  id: 'express',
+                  label: 'Express delivery',
+                  detail: '1–2 business days',
+                  price: shippingConfig?.expressCharge != null ? Number(shippingConfig.expressCharge) : 120,
+                  freeOver: null
+                }] : [])
+              ].map((method) => {
                 const Icon = DELIVERY_ICONS[method.id] || Truck;
                 const freeByCoupon = couponResult?.ok && couponResult.freeShipping;
                 const price = method.freeOver && totals.subtotal >= method.freeOver ? 0 : method.price;
@@ -688,14 +797,25 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
                   const lineKey = ctx?.lineKeyOf ? ctx.lineKeyOf(item.id, item.variant) : `${item.id}::${item.variant || 'default'}`;
                   return (
                     <li key={lineKey} className="co-item-row">
-                      <img src={item.image} alt="" width="48" height="48" />
-                      <span className="co-item-name">
-                        {item.title}
-                        {item.variant && <small> · {item.variant}</small>}
-                        <small>Qty {item.quantity}</small>
-                      </span>
+                      <img src={item.image} alt="" className="co-item-img" width="52" height="52" />
+                      <div className="co-item-name">
+                        <div className="co-item-title">{item.title}</div>
+                        {item.variant && <small className="co-item-variant">Pack: {item.variant}</small>}
+                        <div className="co-item-qty-control">
+                          <QuantityStepper
+                            small
+                            value={item.quantity}
+                            min={1}
+                            max={99}
+                            onChange={(qty) => handleUpdateQuantity(item, qty)}
+                            label={`quantity of ${item.title}`}
+                          />
+                        </div>
+                      </div>
                       <div className="co-item-right">
-                        <span className="co-item-price">{formatINR((Number(item.price) || 0) * item.quantity)}</span>
+                        <span className="co-item-price">
+                          {formatINR((Number(item.price) || 0) * item.quantity)}
+                        </span>
                         <button
                           type="button"
                           className="co-item-remove-btn"
@@ -703,7 +823,7 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
                           title={`Remove ${item.title} from checkout`}
                           aria-label={`Remove ${item.title}`}
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </li>
@@ -715,19 +835,21 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
               <div className="co-coupon">
                 <label className="sr-only" htmlFor="coupon-code">Coupon code</label>
                 <div className="co-coupon-row">
-                  <Tag size={16} />
-                  <input
-                    id="coupon-code"
-                    type="text"
-                    placeholder="Coupon code"
-                    value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    disabled={couponResult?.ok}
-                  />
+                  <div className="co-coupon-input-wrap">
+                    <Tag size={16} />
+                    <input
+                      id="coupon-code"
+                      type="text"
+                      placeholder="Coupon code"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      disabled={couponResult?.ok}
+                    />
+                  </div>
                   {couponResult?.ok ? (
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={clearCoupon}>Remove</button>
+                    <button type="button" className="btn btn-sm btn-ghost co-coupon-btn" onClick={clearCoupon}>Remove</button>
                   ) : (
-                    <button type="button" className="btn btn-sm btn-outline" onClick={applyCoupon}>Apply</button>
+                    <button type="button" className="btn btn-sm btn-outline co-coupon-btn" onClick={applyCoupon}>Apply</button>
                   )}
                 </div>
                 {couponResult && (
@@ -750,9 +872,29 @@ export default function Checkout({ cartItems, clearCart, loggedInCustomer, onCus
                 </div>
               )}
               <div className="summary-row">
-                <span>Shipping · {DELIVERY_METHODS.find((m) => m.id === deliveryId)?.label}</span>
+                <span>Shipping · {totals.method?.label || 'Delivery'}</span>
                 <span>{totals.shipping === 0 ? 'FREE' : formatINR(totals.shipping)}</span>
               </div>
+              {totals.shippingBreakdown?.vendorBreakdowns?.length > 0 && totals.shippingBreakdown?.hasAdminItems && (
+                <div className="co-shipping-breakdown">
+                  <div className="co-shipping-subrow">
+                    <span>• Platform Direct Delivery:</span>
+                    <span>{totals.shippingBreakdown.adminShipping === 0 ? 'FREE' : formatINR(totals.shippingBreakdown.adminShipping)}</span>
+                  </div>
+                  {totals.shippingBreakdown.vendorBreakdowns.map((vb) => (
+                    <div key={vb.vendorId} className="co-shipping-subrow">
+                      <span>• {vb.name} Delivery:</span>
+                      <span>{vb.charge === 0 ? 'FREE' : formatINR(vb.charge)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {totals.handlingFee > 0 && (
+                <div className="summary-row">
+                  <span>Handling & packaging</span>
+                  <span>{formatINR(totals.handlingFee)}</span>
+                </div>
+              )}
               <div className="summary-row total">
                 <span>Total</span>
                 <span>{formatINR(totals.total)}</span>

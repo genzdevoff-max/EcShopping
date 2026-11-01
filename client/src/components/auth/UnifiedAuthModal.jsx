@@ -128,6 +128,12 @@ export default function UnifiedAuthModal({
     setVendorPendingNotice(false);
   };
 
+  const handleFieldChange = (setter) => (e) => {
+    setter(e.target.value);
+    if (error) setError('');
+    if (vendorPendingNotice) setVendorPendingNotice(false);
+  };
+
   // ---------------- Form Submissions ----------------
   const handleCustomerLoginSubmit = async (e) => {
     e.preventDefault();
@@ -525,7 +531,7 @@ export default function UnifiedAuthModal({
                     className="auth-unified-input"
                     placeholder="you@example.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={handleFieldChange(setEmail)}
                     required
                     disabled={loading}
                   />
@@ -589,7 +595,7 @@ export default function UnifiedAuthModal({
                       className="auth-unified-input"
                       placeholder={role === 'vendor' ? 'e.g. Green Valley Farms' : 'e.g. Ananya Sharma'}
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={handleFieldChange(setName)}
                       required
                       disabled={loading}
                     />
@@ -610,7 +616,7 @@ export default function UnifiedAuthModal({
                     className="auth-unified-input"
                     placeholder={role === 'admin' ? 'admin@ecshopping.in' : 'you@example.com'}
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={handleFieldChange(setEmail)}
                     required
                     disabled={loading}
                     autoComplete="email"
@@ -632,7 +638,7 @@ export default function UnifiedAuthModal({
                       className="auth-unified-input"
                       placeholder="98765 43210"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={handleFieldChange(setPhone)}
                       disabled={loading}
                     />
                   </div>
@@ -652,7 +658,7 @@ export default function UnifiedAuthModal({
                     className="auth-unified-input"
                     placeholder="Enter your password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={handleFieldChange(setPassword)}
                     required
                     disabled={loading}
                     autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
@@ -711,6 +717,18 @@ export default function UnifiedAuthModal({
                     : 'Sign In'}
                 </span>
               </button>
+
+              {mode === 'signup' && role === 'vendor' && (
+                <div style={{ textAlign: 'center', marginTop: 12, fontSize: '0.82rem' }}>
+                  <Link
+                    to="/vendor/register"
+                    onClick={handleDismiss}
+                    style={{ color: '#0e5c4a', fontWeight: 600, textDecoration: 'underline' }}
+                  >
+                    Open Comprehensive Seller Registration (GST, FSSAI & Bank Details) →
+                  </Link>
+                </div>
+              )}
 
               {/* Footer Switch Prompt */}
               {role !== 'admin' && (

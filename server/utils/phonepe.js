@@ -36,8 +36,25 @@ const REQUIRED_ENV_V2 = ['PHONEPE_CLIENT_ID', 'PHONEPE_CLIENT_VERSION', 'PHONEPE
  * Resolves the canonical storefront origin safely from validated configuration.
  * Never trust arbitrary Host headers or client-provided redirect roots.
  */
-export const getFrontendOrigin = (env = process.env) => {
-  const custom = String(env.FRONTEND_URL || env.frontend_url || '').trim();
+export const getFrontendOrigin = (env = process.env, req = null) => {
+  if (req) {
+    const origin = String(req.headers?.origin || req.headers?.referer || '').trim();
+    if (origin) {
+      try {
+        const parsed = new URL(origin);
+        if (parsed.hostname === 'ecshopping.in' || parsed.hostname === 'www.ecshopping.in' || parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+          return `${parsed.protocol}//${parsed.host}`;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  let custom = String(env.FRONTEND_URL || env.frontend_url || '').trim();
+  if (custom.includes('vercel.app')) {
+    custom = custom.replace(/https?:\/\/[a-zA-Z0-9-]+\.vercel\.app/g, 'https://ecshopping.in');
+  }
   if (custom) {
     try {
       const parsed = new URL(custom);
@@ -58,10 +75,16 @@ export const getFrontendOrigin = (env = process.env) => {
  * Defaults to the official production storefront origin https://ecshopping.in/payment/phonepe/return
  * Optionally appends orderId parameter so the return flow always retains order identity.
  */
-export const getPhonePeRedirectUrl = (env = process.env, orderId = null) => {
-  const explicit = String(env.PHONEPE_REDIRECT_URL || env.phonepe_redirect_url || '').trim();
+export const getPhonePeRedirectUrl = (env = process.env, orderId = null, req = null) => {
+  let explicit = String(env.PHONEPE_REDIRECT_URL || env.phonepe_redirect_url || '').trim();
+
+  // Strip and sanitize any legacy or preview vercel domain references
+  if (explicit.includes('vercel.app')) {
+    explicit = explicit.replace(/https?:\/\/[a-zA-Z0-9-]+\.vercel\.app/g, 'https://ecshopping.in');
+  }
+
   let base = '';
-  if (explicit) {
+  if (explicit && !explicit.includes('vercel.app')) {
     try {
       const parsed = new URL(explicit);
       if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
@@ -72,7 +95,10 @@ export const getPhonePeRedirectUrl = (env = process.env, orderId = null) => {
     }
   }
   if (!base) {
-    base = `${getFrontendOrigin(env)}/payment/phonepe/return`;
+    base = `${getFrontendOrigin(env, req)}/payment/phonepe/return`;
+  }
+  if (base.includes('vercel.app')) {
+    base = base.replace(/https?:\/\/[a-zA-Z0-9-]+\.vercel\.app/g, 'https://ecshopping.in');
   }
   if (orderId) {
     const cleanId = String(orderId).trim();

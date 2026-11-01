@@ -15,10 +15,16 @@ import LoginModal from './components/auth/LoginModal';
 import { CheckCircle } from 'lucide-react';
 import './App.css';
 
+// Canonical storefront domain redirection: Ensure traffic arriving at preview or obsolete Vercel domain is immediately redirected to official hostinger storefront
+if (typeof window !== 'undefined' && window.location.hostname === 'ec-shopping.vercel.app') {
+  window.location.replace(`https://ecshopping.in${window.location.pathname}${window.location.search}${window.location.hash}`);
+}
+
 // Lazy-loaded routes for code splitting
 const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const VendorLogin = lazy(() => import('./pages/vendor/VendorLogin'));
+const VendorRegister = lazy(() => import('./pages/vendor/VendorRegister'));
 const VendorDashboard = lazy(() => import('./pages/vendor/VendorDashboard'));
 const Checkout = lazy(() => import('./pages/Checkout'));
 const OrderConfirmation = lazy(() => import('./pages/OrderConfirmation'));
@@ -253,7 +259,7 @@ function App() {
                 vendorUser ? (
                   <VendorDashboard vendor={vendorUser} onLogout={handleVendorLogout} />
                 ) : (
-                  <VendorLogin onLogin={handleVendorLogin} initialSignUp={true} />
+                  <VendorRegister />
                 )
               }
             />

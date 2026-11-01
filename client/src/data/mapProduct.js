@@ -38,6 +38,23 @@ export function mapServerProduct(row) {
     resolvedSeller = 'Admin Direct';
   }
 
+  let parsedImages = [];
+  if (Array.isArray(row.images) && row.images.length > 0) {
+    parsedImages = row.images;
+  } else if (typeof row.images === 'string' && row.images.trim()) {
+    try {
+      const parsed = JSON.parse(row.images);
+      if (Array.isArray(parsed) && parsed.length > 0) parsedImages = parsed;
+    } catch {
+      parsedImages = [row.images];
+    }
+  }
+  if (parsedImages.length === 0 && row.image) {
+    parsedImages = [row.image];
+  }
+
+  const primaryImage = row.image || (parsedImages.length > 0 ? parsedImages[0] : '');
+
   return {
     id: String(row.id ?? ''),
     title: row.title || row.name || 'Untitled product',
@@ -47,8 +64,8 @@ export function mapServerProduct(row) {
     // compareAt is only shown when the strike price is really higher;
     // this mirrors the server-side validated hasDiscount comparison.
     compareAt: strikeRaw != null && strikeRaw > price ? strikeRaw : null,
-    image: row.image || '',
-    images: row.image ? [row.image] : [],
+    image: primaryImage,
+    images: parsedImages,
     videoUrl: row.videoUrl || row.video_url || '',
     category: row.category || '',
     categorySlug: categorySlugFromName(row.category),

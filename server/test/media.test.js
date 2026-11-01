@@ -13,9 +13,7 @@ const { default: pool } = await import('../db.js');
 
 const request = () => supertest(app);
 
-after(async () => {
-  await pool.end();
-});
+// pool left open for shared test runner lifecycle
 
 const VENDOR_TOKEN = signToken({ sub: 'v-media-01', role: 'vendor', vendorId: 'v-media-01', email: 'vendor@media.test' });
 const ADMIN_TOKEN = signToken({ sub: 'admin-media-01', role: 'admin', email: 'admin@media.test' });

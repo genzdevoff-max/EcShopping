@@ -127,17 +127,87 @@ export function validateCoupon(rawCode, subtotal) {
 /**
  * Cart totals.
  * @param {object} args
- * @param {Array<{price:number|string, quantity:number}>} args.items
+ * @param {Array<{price:number|string, quantity:number, vendorId?:string|null, vendorShipping?:object}>} args.items
  * @param {ReturnType<typeof validateCoupon>|null} args.couponResult
  * @param {string} args.deliveryMethodId
+ * @param {object} [args.shippingConfig]
  */
-export function computeTotals({ items = [], couponResult = null, deliveryMethodId = 'standard' } = {}) {
+export function computeTotals({ items = [], couponResult = null, deliveryMethodId = 'standard', shippingConfig = null } = {}) {
   const subtotal = items.reduce((sum, item) => sum + parsePrice(item.price) * (item.quantity || 1), 0);
   const itemCount = items.reduce((sum, item) => sum + (item.quantity || 1), 0);
 
-  const method = getDeliveryMethod(deliveryMethodId);
-  let shipping = subtotal === 0 ? 0 : method.price;
-  if (method.freeOver && subtotal >= method.freeOver) shipping = 0;
+  const standardCharge = shippingConfig?.standardCharge != null ? Number(shippingConfig.standardCharge) : 50;
+  const standardFreeThreshold = shippingConfig?.standardFreeThreshold != null ? Number(shippingConfig.standardFreeThreshold) : 499;
+  const standardEnabled = shippingConfig?.standardDeliveryEnabled !== false;
+  const expressCharge = shippingConfig?.expressCharge != null ? Number(shippingConfig.expressCharge) : 120;
+  const expressEnabled = shippingConfig?.expressDeliveryEnabled !== false;
+  const handlingFee = (shippingConfig?.handlingFeeEnabled && Number(shippingConfig?.handlingFee) > 0) ? Number(shippingConfig.handlingFee) : 0;
+
+  let effectiveId = deliveryMethodId;
+  if (effectiveId === 'express' && !expressEnabled) effectiveId = 'standard';
+  if (effectiveId === 'standard' && !standardEnabled && expressEnabled) effectiveId = 'express';
+
+  const defaultMethod = getDeliveryMethod(effectiveId);
+  const method = {
+    ...defaultMethod,
+    id: effectiveId,
+    price: effectiveId === 'express' ? expressCharge : standardCharge,
+    freeOver: effectiveId === 'express' ? null : standardFreeThreshold
+  };
+
+  const adminItems = items.filter((i) => !i.vendorId || i.vendorId === 'admin');
+  const vendorItems = items.filter((i) => i.vendorId && i.vendorId !== 'admin');
+
+  let adminShipping = 0;
+  if (adminItems.length > 0) {
+    const adminSubtotal = adminItems.reduce((sum, i) => sum + parsePrice(i.price) * (i.quantity || 1), 0);
+    adminShipping = (method.freeOver != null && adminSubtotal >= method.freeOver) ? 0 : method.price;
+  }
+
+  let vendorShippingTotal = 0;
+  const vendorShippingMap = shippingConfig?.vendorShipping || {};
+  const vendorGroups = {};
+  for (const item of vendorItems) {
+    const vId = String(item.vendorId);
+    if (!vendorGroups[vId]) {
+      vendorGroups[vId] = {
+        vendorId: vId,
+        seller: item.seller || item.vendorName || 'Vendor Direct',
+        subtotal: 0,
+        items: []
+      };
+    }
+    vendorGroups[vId].subtotal += parsePrice(item.price) * (item.quantity || 1);
+    vendorGroups[vId].items.push(item);
+  }
+
+  const vendorBreakdowns = [];
+  for (const vId of Object.keys(vendorGroups)) {
+    const group = vendorGroups[vId];
+    const vConfig = vendorShippingMap[vId] || group.items[0]?.vendorShipping || {};
+    const isEnabled = vConfig.shippingEnabled !== false;
+    const vCharge = vConfig.shippingCharge != null ? Number(vConfig.shippingCharge) : 0;
+    const vFreeOver = vConfig.shippingFreeThreshold != null ? Number(vConfig.shippingFreeThreshold) : null;
+
+    let vFee = 0;
+    if (isEnabled && vCharge > 0) {
+      if (vFreeOver != null && group.subtotal >= vFreeOver) {
+        vFee = 0;
+      } else {
+        vFee = vCharge;
+      }
+    }
+    vendorShippingTotal += vFee;
+    vendorBreakdowns.push({
+      vendorId: vId,
+      name: vConfig.storeName || group.seller,
+      charge: vFee,
+      isFree: vFee === 0 && vCharge > 0
+    });
+  }
+
+  let shipping = adminShipping + vendorShippingTotal;
+  if (items.length === 0) shipping = 0;
 
   let discount = 0;
   if (couponResult && couponResult.ok) {
@@ -145,6 +215,21 @@ export function computeTotals({ items = [], couponResult = null, deliveryMethodI
     if (couponResult.freeShipping) shipping = 0;
   }
 
-  const total = Math.max(0, subtotal - discount) + shipping;
-  return { subtotal, itemCount, discount, shipping, total, method };
+  const total = Math.max(0, subtotal - discount) + shipping + handlingFee;
+  return {
+    subtotal,
+    itemCount,
+    discount,
+    shipping,
+    handlingFee,
+    total,
+    method,
+    shippingBreakdown: {
+      adminShipping,
+      vendorShippingTotal,
+      vendorBreakdowns,
+      hasAdminItems: adminItems.length > 0,
+      hasVendorItems: vendorItems.length > 0
+    }
+  };
 }

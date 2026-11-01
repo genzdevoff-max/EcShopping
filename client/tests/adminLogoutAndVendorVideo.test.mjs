@@ -33,18 +33,18 @@ test('api.js getProduct resolves session role to authenticate vendor and admin r
   assert.ok(apiJs.includes('deleteCloudinaryVideo'), 'api.js exports deleteCloudinaryVideo helper');
 });
 
-test('EditProduct.jsx calls getProduct with vendor role and provides cache fallback', () => {
+test('EditProduct.jsx calls getProduct with role and provides cache fallback', () => {
   const jsx = fs.readFileSync(path.join(CLIENT_ROOT, 'src/pages/vendor/EditProduct.jsx'), 'utf8');
 
-  assert.ok(jsx.includes("api.getProduct(productId, 'vendor')"), 'EditProduct must request product with vendor role');
+  assert.ok(jsx.includes('api.getProduct(productId,'), 'EditProduct must request product with role');
   assert.ok(jsx.includes('getProducts()'), 'EditProduct must import and use local cache fallback if needed');
 });
 
-test('VendorDashboard.jsx allows clicking pending approval products to open edit/inspection', () => {
+test('VendorDashboard.jsx allows clicking products to open edit/inspection', () => {
   const jsx = fs.readFileSync(path.join(CLIENT_ROOT, 'src/pages/vendor/VendorDashboard.jsx'), 'utf8');
 
-  assert.ok(jsx.includes('setEditingProductId(p.id)'), 'VendorDashboard must set editingProductId when pending product is clicked');
-  assert.ok(jsx.includes("cursor: ['pending', 'rejected'].includes(p.status) ? 'pointer' : 'default'"), 'Pending product row has pointer cursor');
+  assert.ok(jsx.includes('setEditingProductId(p.id)'), 'VendorDashboard must set editingProductId when product is clicked');
+  assert.ok(jsx.includes('cursor: \'pointer\''), 'Product row has pointer cursor');
 });
 
 test('AllProducts.jsx incorporates video upload and URL management in edit modal', () => {

@@ -1,8 +1,108 @@
 # EcShopping — Progress & Session Handover Log
 
-**Current Date:** 2026-10-30  
-**Current Phase:** PHASE 19: PRODUCTION READINESS, MOBILE UI, PAYMENT RETURN & PERFORMANCE FIXES (Verified & Built)  
-**Last Completed Task:** `TASK-P19-08` (PhonePe Return Flow: Eliminate "Status Unavailable", Multi-Source Order Resolution, Bounded Retries, and Smooth Confirmation)
+**Current Date:** 2026-11-01  
+**Current Phase:** PHASE 20: FEATURE GAP IMPLEMENTATION, PAYMENT STATUS FIXES & COUPON MANAGEMENT (Deployed to Production & Verified)  
+**Last Completed Task:** `TASK-P20-19` (Live Hostinger Production Deployment & Comprehensive End-to-End Verification)
+
+---
+
+### Phase 20: Feature Gaps, Mobile Responsiveness & Live Deployment
+
+1. **Form Validation Realtime Error Clearing (`TASK-P20-01`):**
+   - Keystroke-Driven Validation: When a user enters data into a required field, any lingering "required" or format error messages are instantly dismissed instead of remaining visible until submission.
+   - Coverage: Implemented across `Checkout.jsx` (`handleFieldChange`), `VendorRegister.jsx` (`handleChange`), `UnifiedAuthModal.jsx` (`handleFieldChange`), `CustomerProfile.jsx` (`handleAddressChange`, `handlePasswordChange`, `handleDeletePasswordChange`), `AdminDashboard.jsx` (`updateCouponForm`), and `VendorDashboard.jsx` (`updateCouponForm`).
+
+2. **Payment Cancelled / Status Page 404 Resolution & Switch to COD (`TASK-P20-02`):**
+   - Eliminated Confusing 404 Display: Replaced "Status unavailable Request failed (404)" with an informative, reassuring "Payment did not complete. No amount was deducted" view whenever a user cancels payment, aborts flow, or payment is declined.
+   - Switch to Cash on Delivery (COD): Added prominent "Switch to Cash on Delivery (COD)" button on the payment failure screen that calls `POST /api/payments/switch-to-cod`, safely migrating the existing pending order to COD and seamlessly redirecting to Order Confirmation.
+
+3. **Configurable Delivery Charges, Handling Fee & Checkout Coupon Preservation (`TASK-P20-03`):**
+   - Admin Delivery Governance: Added dynamic shipping and handling fee settings managed via `GET /api/shipping-config`, `GET /api/admin/shipping-config`, and `PUT /api/admin/shipping-config`. Allows Admin to configure Standard Shipping fee (default ₹50, free over ₹499), Express Shipping fee (default ₹120), optional Handling Fee (default ₹0), and individually enable/disable delivery methods.
+   - Coupon Preservation: Updated `Checkout.jsx` to dynamically load shipping settings, render Handling Fee when > 0, and strictly preserve applied coupon codes across delivery method toggles and address changes.
+
+4. **Multi-Aspect Responsive Homepage Slider & Upload Guidelines (`TASK-P20-04`):**
+   - Multi-Device Responsive Banner: Maintained existing homepage slider and enhanced `PromotionalBanner.jsx` with responsive `<picture>` markup serving Desktop 16:5 (1920×600 px), Tablet 12:5 (1200×500 px), and Mobile 5:6 (750×900 px) images with `object-fit: contain` / `cover` styling to prevent stretching or unwanted cropping.
+   - Upload Guidelines & Live Previews: Added responsive image dimension guides and aspect ratio previews to Admin banner management.
+
+5. **Admin and Vendor Product-Scoped Coupon Management (`TASK-P20-05`):**
+   - Granular Promotion Permissions: Dedicated Coupon Management section in both Admin and Vendor dashboards. Admin manages marketplace-wide coupons; Vendors create and manage coupons strictly scoped to their own store's approved products.
+   - Product Scoping: Supports "All Products" and "Specific Products" with multi-select product selector. Backend validates eligible product subtotals during checkout and safely increments usage count via `WHERE UPPER(code) = UPPER(?)`.
+   - Storefront Integration: Display applicable coupon offer tags on Product Cards and PDP (`ProductDetails.jsx`).
+
+6. **Customer Account Block / Suspension Option (`TASK-P20-07`):**
+   - Just like customer deletion, Admin now has a dedicated Customer Block/Unblock toggle in `AdminDashboard.jsx` Users table.
+   - Confirmation modal explains that account suspension retains historical orders and snapshot data while preventing logins and new checkouts.
+   - Backend `PUT /api/users/:id/status` permits 'blocked', `POST /api/auth/user/login` returns HTTP 403 on blocked logins, and `POST /api/orders` blocks checkout submissions from blocked customer emails.
+
+7. **Homepage Interactive Filter System (`TASK-P20-08`):**
+   - Built `HomepageFilters.jsx` and `HomepageFilters.css` integrated seamlessly below the circular category showcase in `Home.jsx`.
+   - Offers category quick-pills (`All Produce`, `⚡ Deals & Offers`, `🌱 Fresh Arrivals`, dynamic database categories), price range chips (`Under ₹199`, `Under ₹499`, `₹500 & Above`), and sort dropdown (`Featured`, `Price: Low to High`, `Price: High to Low`, `Biggest Discount`).
+   - Displays real-time matching product cards in a clean responsive grid with active filter count badges and quick "Clear filters" action.
+
+8. **Checkout Direct Product Quantity Stepper (`TASK-P20-09`):**
+   - Integrated `QuantityStepper` inside `Checkout.jsx` order summary for every line item.
+   - Customers can adjust quantities (`+` / `-`) directly on the checkout page without having to navigate back to cart or shop.
+   - Automatically recalculates line totals, subtotal, delivery charges, coupons, and grand total in real-time.
+
+9. **Hostinger vs Vercel Routing Audit & PHONEPE_REDIRECT_URL Cleanup (`TASK-P20-10`):**
+   - Audited all routing paths to verify no storefront traffic unintentionally routes to Vercel when running live on Hostinger.
+   - Found root cause: `PHONEPE_REDIRECT_URL` in `server/.env` and in TiDB Cloud database table `platform_settings` was configured to `https://ec-shopping.vercel.app/payment/phonepe/return`.
+   - Updated TiDB Cloud table `platform_settings` and `server/.env` to `https://ecshopping.in/payment/phonepe/return`.
+   - Verified `client/public/.htaccess` rewrite rules and confirmed all frontend navigation remains strictly on `https://ecshopping.in`.
+
+10. **E-Commerce Order Tracking Overhaul (`TASK-P20-11`):**
+    - Overhauled "Track Your Order" (`TrackOrder.jsx`, `Orders.css`, and `api.trackOrder`) from a freight/logistics text consignment tracker into a rich, authentic consumer e-commerce order tracker.
+    - Added public API endpoint `GET /api/orders/track/:id` returning order timeline, status, and purchased product details (images, title, variant, seller name, unit price, and quantity).
+    - Features a 4-step e-commerce progress stepper (Order Placed -> Confirmed -> Shipped -> Delivered) and customer cancellation flow for pending orders.
+
+11. **PhonePe Vercel Redirect Multi-Layer Quarantine & Origin Enforcement (`TASK-P20-12`):**
+    - Added database-level pre-payment lookup query in `POST /api/payments/phonepe/create-payment` overriding any stale Vercel URL with `https://ecshopping.in/payment/phonepe/return`.
+    - Added server-side domain sanitization in `server/utils/phonepe.js` rewriting any `ec-shopping.vercel.app` redirect URL to `https://ecshopping.in`.
+    - Added client-side host guard in `client/src/App.jsx` and edge HTTP 301 redirection in `client/vercel.json` redirecting deprecated domains while preserving query parameters.
+
+12. **Vendor Registration Streamlining, Dashboard Profile Compliance & Coupon Product Search (`TASK-P20-13`):**
+    - Streamlined vendor registration by removing confusing numbered section headers and asking for their Farm and Operating address upfront so Admin can review and approve immediately.
+    - Created comprehensive business compliance manager in Vendor Dashboard profile tab (Business Profile, GST/FSSAI Licenses, Bank Payout Details).
+    - Added search combobox and batch selection for products when creating product-specific coupons in Admin and Vendor portals.
+    - Cleaned up homepage by removing promotional trust banner above footer.
+
+13. **Commission Percentage Input Overlap Fix & Vendor-Scoped Delivery Charges (`TASK-P20-14`):**
+    - Fixed percentage input overlapping the Save button in Admin Commission tab using `.admin-number-input` and `min-width: 0`.
+    - Added real-time vendor search bar in commission overrides table.
+    - Clarified that Admin delivery charges apply only to Admin-owned products; enabled vendors to configure their own delivery charges and free delivery threshold in Vendor Portal profile.
+    - Updated `POST /api/orders` to apply vendor-specific delivery charges.
+
+14. **Multi-Image Product Upload, Amazon/Flipkart PDP Gallery, Admin Product Editing & Vendor Re-Approval (`TASK-P20-15`):**
+    - Added multiple image upload (up to 8 images) with primary badge and reordering across Add Product and Edit Product modals.
+    - Built Amazon/Flipkart style PDP gallery with hover thumbnail switching, prev/next buttons, and image counter pill.
+    - Added in-place Product Edit modal in Admin Dashboard with instant live updates.
+    - Enabled vendors to edit approved listings in Vendor Dashboard with automatic transition to pending review for Admin re-approval.
+    - Captured seller farm and operating address directly during vendor registration.
+
+15. **Checkout Order Summary Responsive Layout (`TASK-P20-16`):**
+    - Tablet Dedicated Side Column (768px–1024px): Order summary is permanently visible in a dedicated side-by-side sticky column; mobile accordion toggle button hidden.
+    - Mobile Collapsible Accordion & Spacious Card (<768px): Summary renders as a clean, spacious card with generous padding, smooth fade-in animation, full-width coupon controls, and structured line item rows.
+
+16. **Header Wishlist & Cart Count Badge Refinement (`TASK-P20-17`):**
+    - Removed cart subtotal price text from header Cart button.
+    - Standardized action button layout: Cart icon now renders as a circular `action-icon-btn` with ShoppingCart icon and item count badge, matching the adjacent Wishlist icon (`Heart` + count badge) with identical sizing and zero price text.
+
+17. **Checkout Order Summary Mobile Responsiveness Overhaul (`TASK-P20-18`):**
+    - Separated coupon input into `.co-coupon-input-wrap` (`flex: 1; min-width: 0; min-height: 44px;`) with dedicated border and icon, paired with distinct 44px Apply button (`.co-coupon-btn`).
+    - Added responsive `@media (max-width: 340px)` stacking coupon controls vertically for full-width 44px touch targets on narrow devices.
+    - Applied `width: 100%; min-width: 0; box-sizing: border-box; word-break: break-word;` across summary cards, item rows, product titles, quantity steppers, and delivery breakdowns.
+    - Automated Chrome headless audit across all 7 target widths (320px, 340px, 360px, 375px, 390px, 414px, 430px) verified 0px horizontal overflow, 100% control visibility, and zero regressions on tablet and desktop.
+
+18. **Live Hostinger Production Deployment & Post-Deployment Verification (`TASK-P20-19`):**
+    - Quality Gates: 100% test pass rate across 122 client tests (17 test suites) and 151 server tests; OxLint passed with 0 errors; clean Vite production build targeting `VITE_API_URL=https://ec-shopping-three.vercel.app`.
+    - Live Backup: Downloaded 62 files (1.46 MB) from Hostinger FTPS (`195.35.44.99:21`) to `scratch/backups/hostinger_backup_2026-11-01T17-11-47-214Z`.
+    - Production Upload: Uploaded 59 static assets to `/assets/` first with retry guards and pacing delays, followed by root files (`.htaccess`, `favicon.svg`, `icons.svg`, `placeholder.png`), and switched traffic atomically by uploading `index.html` last.
+    - Asset Cleanup: Identified 40 obsolete hashed script/style files from previous builds and cleanly deleted them via FTP `DELE` while preserving active media, branding images, and server configuration.
+    - Post-Deployment Live Verification: HTTP 200 on all entry points and SPA client routes (`/`, `/shop`, `/cart`, `/checkout`, `/wishlist`, `/orders`, `/track-order`, `/vendor`, `/vendor/register`, `/admin`). Verified entry bundle hashes match `client/dist/index.html` 100%. Automated Chrome CDP testing across 12 viewports (320px, 340px, 360px, 375px, 390px, 414px, 430px, 768px, 1024px, 1366px, 1440px, 1920px) confirmed 0px horizontal overflow, coupon inputs and Apply buttons fully visible and usable, header cart displaying item count badge without price, and live backend API connecting smoothly.
+
+---
+
+### Previous Phase Handover (Phase 19)
 
 1. **PhonePe Payment Return URL & Webhook Isolation (`TASK-P19-01`):**
    - Canonical Storefront Origin: Routed browser return flow to `https://ecshopping.in/payment/phonepe/return`.

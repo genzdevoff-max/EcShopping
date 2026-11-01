@@ -42,8 +42,8 @@ test('PromotionalBanner includes accessible navigation controls and layout safet
   assert.ok(promoJsx.includes('role="tablist"'), 'Pagination dots must have tablist semantics');
   assert.ok(promoJsx.includes('aria-label="Promotional campaign banner"'), 'Banner section must have region label');
 
-  // Aspect ratio in CSS (~4:1 to 5:2 on desktop)
-  assert.match(promoCss, /aspect-ratio:\s*4\.\d+\s*\/\s*1/, 'CSS must specify desktop aspect ratio around 4:1 to 5:2');
+  // Aspect ratio in CSS (16:5 / 1920x600 or 4.x:1 on desktop)
+  assert.match(promoCss, /aspect-ratio:\s*(4\.\d+\s*\/\s*1|16\s*\/\s*5)/, 'CSS must specify desktop aspect ratio 16:5 or 4.x:1');
   assert.ok(promoCss.includes('min-height'), 'CSS must specify min-height to prevent layout shifts (CLS=0)');
   assert.ok(promoCss.includes('--brand') || promoCss.includes('#0e5c4a'), 'Must preserve EcShopping pine green brand color');
   assert.ok(promoCss.includes('--accent') || promoCss.includes('#d9663d'), 'Must preserve EcShopping terracotta accent color');

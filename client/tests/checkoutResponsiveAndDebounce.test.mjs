@@ -68,3 +68,16 @@ test('Checkout.css enforces responsive single-column layout, 44px touch targets,
     'Must enforce 16px font size on inputs to prevent iOS auto-zoom'
   );
 });
+
+test('Checkout.css implements dedicated uncollapsed side-by-side layout for Tablet (768px+) and collapsible accordion for Mobile (<768px)', () => {
+  // Tablet side-by-side column
+  assert.ok(checkoutCss.includes('@media (min-width: 768px)'), 'Must define side-by-side layout from 768px');
+  assert.ok(checkoutCss.includes('minmax(0, 1fr) 330px'), 'Tablet layout must allocate dedicated side column for summary');
+
+  // Toggle button hidden on tablet and desktop
+  assert.ok(checkoutCss.includes('.co-summary-toggle-btn {\n    display: none !important;'), 'Toggle button must be hidden on tablet and desktop');
+
+  // Mobile collapsible breakpoint at 767px
+  assert.ok(checkoutCss.includes('@media (max-width: 767px)'), 'Must define mobile collapsible rules at 767px');
+  assert.ok(checkoutCss.includes('coFadeIn'), 'Must provide smooth fade-in transition when summary is opened on mobile');
+});

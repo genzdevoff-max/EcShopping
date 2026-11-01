@@ -164,6 +164,12 @@ test('getPhonePeRedirectUrl constructs valid canonical return URLs', () => {
     'https://custom.ecshopping.in/return'
   );
 
+  // Obsolete vercel domain is automatically sanitized to canonical https://ecshopping.in
+  assert.equal(
+    getPhonePeRedirectUrl({ PHONEPE_REDIRECT_URL: 'https://ec-shopping.vercel.app/payment/phonepe/return' }, 'ORD-591753'),
+    'https://ecshopping.in/payment/phonepe/return?orderId=ORD-591753'
+  );
+
   // Derived from FRONTEND_URL
   assert.equal(
     getPhonePeRedirectUrl({ FRONTEND_URL: 'https://ecshopping.in' }),

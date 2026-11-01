@@ -26,7 +26,10 @@ import {
   ArrowLeft,
   Percent,
   Video,
-  PlayCircle
+  PlayCircle,
+  Plus,
+  ShieldCheck,
+  Clock
 } from 'lucide-react';
 import api from '../../utils/api';
 import { getProducts } from '../../utils/storage';
@@ -51,10 +54,12 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [image, setImage] = useState('');
+  const [images, setImages] = useState([]);
   const [sellingPrice, setSellingPrice] = useState('');
   const [strikePrice, setStrikePrice] = useState('');
   const [unit, setUnit] = useState(UNIT_OPTIONS[2]);
   const [stockStatus, setStockStatus] = useState('in_stock');
+  const [stockQuantity, setStockQuantity] = useState(50);
   const [categoriesList, setCategoriesList] = useState([]);
 
   const [uploading, setUploading] = useState(false);
@@ -84,7 +89,7 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
     if (!productId) return;
     setLoading(true);
     setLoadError(null);
-    api.getProduct(productId, 'vendor')
+    api.getProduct(productId, effectiveMode)
       .then((res) => {
         if (!res?.success || !res.product) throw new Error(res?.error || 'Product not found');
         const p = res.product;
@@ -93,10 +98,12 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
         setDescription(p.description || '');
         setCategory(p.category || '');
         setImage(p.image || '');
+        setImages(Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image ? [p.image] : []));
         setSellingPrice(p.price ? String(p.price) : '');
         setStrikePrice(p.strikePrice ? String(p.strikePrice) : '');
         setUnit(p.unit || UNIT_OPTIONS[2]);
         setStockStatus(p.stockStatus || 'in_stock');
+        setStockQuantity(p.stockQuantity != null ? p.stockQuantity : (p.stock_quantity != null ? p.stock_quantity : 50));
         setVideoUrl(p.videoUrl || p.video_url || '');
         setVideoUrlInput(p.videoUrl || p.video_url || '');
         setLoading(false);
@@ -110,10 +117,12 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
           setDescription(local.description || '');
           setCategory(local.category || '');
           setImage(local.image || '');
+          setImages(Array.isArray(local.images) && local.images.length > 0 ? local.images : (local.image ? [local.image] : []));
           setSellingPrice(local.price ? String(local.price) : '');
           setStrikePrice(local.strikePrice ? String(local.strikePrice) : '');
           setUnit(local.unit || UNIT_OPTIONS[2]);
           setStockStatus(local.stockStatus || 'in_stock');
+          setStockQuantity(local.stockQuantity != null ? local.stockQuantity : 50);
           setVideoUrl(local.videoUrl || local.video_url || '');
           setVideoUrlInput(local.videoUrl || local.video_url || '');
           setLoading(false);
@@ -142,25 +151,67 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
   const savingsAmount = hasDiscount ? (parsedStrike - parsedSelling).toFixed(2) : 0;
 
   // File upload
-  const handleFileUpload = async (file) => {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { showToast('Please upload an image file (PNG, JPG, WEBP, etc.)', 'error'); return; }
-    if (file.size > 10 * 1024 * 1024) { showToast('Image size should be less than 10MB', 'error'); return; }
+  const handleMultipleFiles = async (filesList) => {
+    const rawFiles = Array.from(filesList || []);
+    const validFiles = rawFiles.filter((f) => f.type.startsWith('image/'));
+    if (validFiles.length === 0) {
+      showToast('Please select valid image files (PNG, JPG, WEBP)', 'error');
+      return;
+    }
+    const remainingSlots = Math.max(0, 8 - images.length);
+    if (remainingSlots <= 0) {
+      showToast('Maximum 8 images allowed per product', 'error');
+      return;
+    }
+    const toUpload = validFiles.slice(0, remainingSlots);
+    if (validFiles.length > remainingSlots) {
+      showToast(`Only uploading first ${remainingSlots} images (max 8 allowed)`, 'error');
+    }
     setUploading(true);
+    let uploadedCount = 0;
     try {
       const uploadRole = effectiveMode === 'admin' ? 'admin' : 'vendor';
-      const data = await api.uploadImage(file, uploadRole);
-      if (data?.success && data.url) {
-        setImage(data.url);
-        showToast('Image uploaded successfully!', 'success');
-      } else {
-        showToast((data?.error) || 'Upload failed', 'error');
+      for (const file of toUpload) {
+        if (file.size > 10 * 1024 * 1024) {
+          showToast(`Skipped ${file.name}: exceeds 10MB`, 'error');
+          continue;
+        }
+        const data = await api.uploadImage(file, uploadRole);
+        if (data?.success && data.url) {
+          uploadedCount++;
+          setImage((prev) => prev || data.url);
+          setImages((prev) => (prev.includes(data.url) ? prev : [...prev, data.url]));
+        }
+      }
+      if (uploadedCount > 0) {
+        showToast(`${uploadedCount} image${uploadedCount > 1 ? 's' : ''} uploaded successfully!`, 'success');
       }
     } catch (err) {
-      showToast('Upload failed: ' + (err.message || 'unknown error'), 'error');
+      showToast('Upload error: ' + (err.message || 'unknown error'), 'error');
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+    await handleMultipleFiles([file]);
+  };
+
+  const handleSetPrimaryImage = (index) => {
+    if (index < 0 || index >= images.length) return;
+    const target = images[index];
+    const rest = images.filter((_, i) => i !== index);
+    const reordered = [target, ...rest];
+    setImages(reordered);
+    setImage(target);
+    showToast('Primary product image updated', 'success');
+  };
+
+  const handleRemoveGalleryImage = (index) => {
+    const next = images.filter((_, i) => i !== index);
+    setImages(next);
+    setImage(next[0] || '');
   };
 
   const handleDrag = (e) => {
@@ -172,8 +223,8 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
   const handleDrop = (e) => {
     e.preventDefault(); e.stopPropagation();
     setDragActive(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (file) handleFileUpload(file);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) handleMultipleFiles(files);
   };
 
   const handleApplyVideoUrl = () => {
@@ -241,6 +292,7 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
 
     setSubmitting(true);
     try {
+      const isVendorEditingApproved = effectiveMode === 'vendor' && product?.status === 'approved';
       const res = await api.updateProduct(productId, {
         title: name.trim(),
         name: name.trim(),
@@ -249,12 +301,20 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
         price: parsedSelling,
         strikePrice: parsedStrike > 0 ? parsedStrike : null,
         unit,
-        image: image.trim(),
+        image: (images[0] || image).trim(),
+        images: images.length > 0 ? images : (image.trim() ? [image.trim()] : []),
+        stockQuantity: Number(stockQuantity) || 0,
         videoUrl: videoUrl ? videoUrl.trim() : null,
         stockStatus
-      });
+      }, effectiveMode);
       if (res?.success) {
-        showToast('Product updated successfully!', 'success');
+        if (effectiveMode === 'admin') {
+          showToast('Product updated successfully! Changes are live.', 'success');
+        } else if (isVendorEditingApproved) {
+          showToast('Product revisions submitted! Sent to Admin for re-approval.', 'success');
+        } else {
+          showToast('Product updated successfully!', 'success');
+        }
         setTimeout(() => onSaved?.(res.product), 1000);
       } else {
         showToast(res?.error || 'Update failed. Please try again.', 'error');
@@ -307,20 +367,26 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
 
       {/* Back button */}
       <button type="button" onClick={onBack} style={styles.backBtn}>
-        <ArrowLeft size={14} /> Back to products
+        <ArrowLeft size={14} /> {effectiveMode === 'admin' ? 'Back to Admin Products' : 'Back to products'}
       </button>
 
       {/* Status notices */}
-      {isRejected && (
+      {effectiveMode === 'admin' && (
+        <div style={styles.adminBanner}>
+          <ShieldCheck size={16} />
+          <span><strong>Admin Editing Mode</strong> — You have full rights to modify this product. Changes apply live to the storefront immediately.</span>
+        </div>
+      )}
+      {effectiveMode === 'vendor' && isApproved && (
+        <div style={styles.reapprovalBanner}>
+          <Clock size={16} />
+          <span>This product is currently <strong>Live &amp; Approved</strong>. Any modifications to details, pricing, stock, images or description will automatically be submitted to the Admin for <strong>re-approval</strong> before updating on the storefront.</span>
+        </div>
+      )}
+      {effectiveMode === 'vendor' && isRejected && (
         <div style={styles.warningBanner}>
           <AlertCircle size={15} />
           <span>This product was rejected by the admin. Editing and saving will reset its status to <strong>pending review</strong>.</span>
-        </div>
-      )}
-      {isApproved && (
-        <div style={styles.infoBanner}>
-          <AlertCircle size={15} />
-          <span>This product is <strong>approved</strong> and live. Vendors cannot edit approved products — contact support if changes are needed.</span>
         </div>
       )}
 
@@ -337,14 +403,14 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
                   <span>Product Name</span><span className="req">*</span>
                 </label>
                 <input id="ep-name" type="text" className="add-prod-input" value={name}
-                  onChange={(e) => setName(e.target.value)} required disabled={isApproved} />
+                  onChange={(e) => setName(e.target.value)} required />
               </div>
               <div className="add-prod-field">
                 <label htmlFor="ep-cat" className="add-prod-label">
                   <span>Category</span><span className="req">*</span>
                 </label>
                 <select id="ep-cat" className="add-prod-select" value={category}
-                  onChange={(e) => setCategory(e.target.value)} required disabled={isApproved}>
+                  onChange={(e) => setCategory(e.target.value)} required>
                   <option value="" disabled>Select category</option>
                   {categoriesList.map((cat) => (
                     <option key={cat.id} value={cat.name}>{cat.name}</option>
@@ -356,7 +422,7 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
                   <span>Description</span><span className="opt">(optional)</span>
                 </label>
                 <textarea id="ep-desc" className="add-prod-textarea" value={description}
-                  onChange={(e) => setDescription(e.target.value)} disabled={isApproved} />
+                  onChange={(e) => setDescription(e.target.value)} />
               </div>
             </div>
 
@@ -372,15 +438,14 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
                   </label>
                   <input id="ep-price" type="number" step="0.01" min="0" className="add-prod-input"
                     value={sellingPrice} onChange={(e) => setSellingPrice(e.target.value)}
-                    required disabled={isApproved} />
+                    required />
                 </div>
                 <div className="add-prod-field">
                   <label htmlFor="ep-strike" className="add-prod-label">
                     <span>Strike-out Price (₹)</span><span className="opt">(optional)</span>
                   </label>
                   <input id="ep-strike" type="number" step="0.01" min="0" className="add-prod-input"
-                    value={strikePrice} onChange={(e) => setStrikePrice(e.target.value)}
-                    disabled={isApproved} />
+                    value={strikePrice} onChange={(e) => setStrikePrice(e.target.value)} />
                 </div>
               </div>
               {hasDiscount && (
@@ -402,7 +467,7 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
                     <span>Unit</span><span className="req">*</span>
                   </label>
                   <select id="ep-unit" className="add-prod-select" value={unit}
-                    onChange={(e) => setUnit(e.target.value)} required disabled={isApproved}>
+                    onChange={(e) => setUnit(e.target.value)} required>
                     {UNIT_OPTIONS.map((u, i) => <option key={i} value={u}>{u}</option>)}
                   </select>
                 </div>
@@ -417,247 +482,352 @@ export default function EditProduct({ productId, vendor, onBack, onSaved, mode =
                   </select>
                 </div>
               </div>
+              <div className="add-prod-field" style={{ marginTop: 12 }}>
+                <label htmlFor="ep-stock-qty" className="add-prod-label">
+                  <span>Available Stock Quantity</span><span className="opt">(units)</span>
+                </label>
+                <input
+                  id="ep-stock-qty"
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="add-prod-input"
+                  placeholder="e.g. 50"
+                  value={stockQuantity}
+                  onChange={(e) => setStockQuantity(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                />
+              </div>
             </div>
 
             {/* Image */}
-            {!isApproved && (
-              <div className="add-prod-section">
-                <div className="add-prod-section-header">
-                  <ImageIcon size={18} /><span>Product Image</span>
+            <div className="add-prod-section">
+              <div className="add-prod-section-header">
+                <ImageIcon size={18} /><span>Product Images ({images.length}/8)</span>
+              </div>
+              <p style={{ fontSize: 12, color: '#64748b', marginTop: -4, marginBottom: 12 }}>
+                Upload multiple images (up to 8). Recommended: <strong>1200×1200 px (1:1 square)</strong>. The first image is the Primary storefront image.
+              </p>
+              <input
+                type="file"
+                ref={fileInputRef}
+                multiple
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleMultipleFiles(e.target.files);
+                  }
+                  e.target.value = '';
+                }}
+              />
+              {images.length === 0 ? (
+                <div
+                  className={`add-prod-dropzone ${dragActive ? 'drag-active' : ''} ${uploading ? 'uploading' : ''}`}
+                  onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
+                  onClick={() => !uploading && fileInputRef.current?.click()}
+                >
+                  {uploading ? (
+                    <div className="add-prod-upload-loading">
+                      <Loader2 size={36} className="add-prod-spinner" />
+                      <div className="upload-loading-text">
+                        <strong>Uploading…</strong>
+                        <span>Storing securely on Cloudinary CDN</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="add-prod-dropzone-content">
+                      <div className="add-prod-dropzone-icon"><UploadCloud size={38} /></div>
+                      <div className="add-prod-dropzone-text">
+                        <p className="dropzone-main"><strong>Click to select images</strong> or drag &amp; drop</p>
+                        <p className="dropzone-sub">PNG, JPG, WEBP (multiple files allowed, max 8 total)</p>
+                      </div>
+                      <span className="dropzone-badge"><Cloud size={13} /> Cloudinary Direct Storage</span>
+                    </div>
+                  )}
                 </div>
-                <input type="file" ref={fileInputRef}
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
-                  accept="image/*" style={{ display: 'none' }} />
-                {!image ? (
+              ) : (
+                <div className="add-prod-uploaded-box">
+                  <div className="add-prod-uploaded-left">
+                    <img src={images[0] || image} alt="Product primary" className="add-prod-uploaded-img" />
+                    <div className="add-prod-uploaded-meta">
+                      <div className="add-prod-uploaded-title">
+                        <CheckCircle size={15} className="uploaded-check-icon" />
+                        <span>Primary Image Selected ({images.length} total)</span>
+                      </div>
+                      <span className="add-prod-uploaded-url" title={images[0] || image}>
+                        {images[0] || image}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="add-prod-uploaded-actions">
+                    {images.length < 8 && (
+                      <button type="button" className="add-prod-action-btn replace"
+                        onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                        <Plus size={13} /><span>Add More</span>
+                      </button>
+                    )}
+                    <button type="button" className="add-prod-action-btn remove"
+                      onClick={() => { setImages([]); setImage(''); }} disabled={uploading}>
+                      <Trash2 size={13} /><span>Clear All</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Product Gallery Strip */}
+              {images.length > 0 && (
+                <div style={{ marginTop: 14, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                      Gallery Images ({images.length}/8) • 1200×1200 px (1:1)
+                    </span>
+                    {images.length < 8 && (
+                      <button
+                        type="button"
+                        style={{ background: '#0e5c4a', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                      >
+                        <Plus size={13} /> Add More
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 10 }}>
+                    {images.map((imgUrl, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          position: 'relative',
+                          aspectRatio: '1/1',
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          border: idx === 0 ? '2px solid #0e5c4a' : '1px solid #cbd5e1',
+                          background: '#fff'
+                        }}
+                      >
+                        <img src={imgUrl} alt={`Thumb ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {idx === 0 && (
+                          <span style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(14, 92, 74, 0.9)', color: '#fff', fontSize: 10, fontWeight: 700, textAlign: 'center', padding: '2px 0' }}>
+                            PRIMARY
+                          </span>
+                        )}
+                        <div style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 2 }}>
+                          {idx !== 0 && (
+                            <button
+                              type="button"
+                              title="Make primary"
+                              onClick={() => handleSetPrimaryImage(idx)}
+                              style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: 4, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              ★
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            title="Remove"
+                            onClick={() => handleRemoveGalleryImage(idx)}
+                            style={{ background: 'rgba(220,38,38,0.85)', color: '#fff', border: 'none', borderRadius: 4, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="add-prod-url-toggle-wrap">
+                <button type="button" className="add-prod-url-toggle-btn"
+                  onClick={() => setShowManualUrl(!showManualUrl)}>
+                  <LinkIcon size={12} />
+                  <span>{showManualUrl ? 'Hide image URL input' : 'Or paste image URL manually'}</span>
+                </button>
+              </div>
+              {showManualUrl && (
+                <div className="add-prod-field add-prod-manual-url">
+                  <input type="url" className="add-prod-input" placeholder="Enter image URL"
+                    value={image} onChange={(e) => {
+                      setImage(e.target.value);
+                      if (e.target.value.trim() && !images.includes(e.target.value.trim())) {
+                        setImages((prev) => [...prev, e.target.value.trim()]);
+                      }
+                    }} />
+                </div>
+              )}
+            </div>
+
+            {/* Product Video */}
+            <div className="add-prod-section">
+              <div className="add-prod-section-header">
+                <Video size={18} /><span>Product Video (Optional)</span>
+              </div>
+
+              {/* Mode switch: URL vs Upload */}
+              <div className="prod-video-mode-selector">
+                <button
+                  type="button"
+                  className={`prod-video-mode-btn ${videoInputMode === 'url' ? 'active' : ''}`}
+                  onClick={() => setVideoInputMode('url')}
+                >
+                  <LinkIcon size={14} />
+                  <span>Add Video URL</span>
+                </button>
+                <button
+                  type="button"
+                  className={`prod-video-mode-btn ${videoInputMode === 'upload' ? 'active' : ''}`}
+                  onClick={() => setVideoInputMode('upload')}
+                >
+                  <UploadCloud size={14} />
+                  <span>Upload Video File (MP4/WebM)</span>
+                </button>
+              </div>
+
+              {/* Option B: Video URL input */}
+              {videoInputMode === 'url' && (
+                <div className="prod-video-url-block">
+                  <label htmlFor="ep-video-url" className="add-prod-label">
+                    <span>Product Video URL</span>
+                    <span className="opt">(YouTube, Vimeo, or direct MP4/WebM)</span>
+                  </label>
+                  <div className="prod-video-url-input-row">
+                    <input
+                      id="ep-video-url"
+                      type="url"
+                      className="add-prod-input"
+                      placeholder="https://www.youtube.com/watch?v=... or https://.../video.mp4"
+                      value={videoUrlInput}
+                      onChange={(e) => {
+                        setVideoUrlInput(e.target.value);
+                        setVideoUrlError('');
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="prod-video-apply-btn"
+                      onClick={handleApplyVideoUrl}
+                    >
+                      Apply Link
+                    </button>
+                  </div>
+                  {videoUrlError && <p className="prod-video-error-text">{videoUrlError}</p>}
+                </div>
+              )}
+
+              {/* Option A: Video File Upload */}
+              {videoInputMode === 'upload' && (
+                <div className="prod-video-upload-block">
+                  <input
+                    type="file"
+                    ref={videoFileInputRef}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleVideoFileUpload(f);
+                    }}
+                    accept="video/mp4,video/webm,video/quicktime,video/ogg"
+                    style={{ display: 'none' }}
+                  />
                   <div
-                    className={`add-prod-dropzone ${dragActive ? 'drag-active' : ''} ${uploading ? 'uploading' : ''}`}
-                    onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
-                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    className={`add-prod-dropzone ${videoUploading ? 'uploading' : ''}`}
+                    onClick={() => !videoUploading && videoFileInputRef.current?.click()}
                   >
-                    {uploading ? (
+                    {videoUploading ? (
                       <div className="add-prod-upload-loading">
                         <Loader2 size={36} className="add-prod-spinner" />
                         <div className="upload-loading-text">
-                          <strong>Uploading…</strong>
-                          <span>Storing securely on Cloudinary CDN</span>
+                          <strong>Uploading Video to Cloud CDN…</strong>
+                          <span>This might take a moment depending on file size (up to 50MB)</span>
                         </div>
                       </div>
                     ) : (
                       <div className="add-prod-dropzone-content">
-                        <div className="add-prod-dropzone-icon"><UploadCloud size={38} /></div>
-                        <div className="add-prod-dropzone-text">
-                          <p className="dropzone-main"><strong>Click to upload</strong> or drag &amp; drop</p>
-                          <p className="dropzone-sub">PNG, JPG, WEBP, GIF (up to 10MB)</p>
+                        <div className="add-prod-dropzone-icon">
+                          <UploadCloud size={38} />
                         </div>
-                        <span className="dropzone-badge"><Cloud size={13} /> Cloudinary Direct Storage</span>
+                        <div className="add-prod-dropzone-text">
+                          <p className="dropzone-main"><strong>Click to upload video</strong> or choose file</p>
+                          <p className="dropzone-sub">MP4, WebM, MOV (Max 50MB)</p>
+                        </div>
+                        <span className="dropzone-badge">
+                          <Cloud size={13} /> Cloudinary Video Storage
+                        </span>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="add-prod-uploaded-box">
-                    <div className="add-prod-uploaded-left">
-                      <img src={image} alt="Product preview" className="add-prod-uploaded-img" />
-                      <div className="add-prod-uploaded-meta">
-                        <div className="add-prod-uploaded-title">
-                          <CheckCircle size={15} className="uploaded-check-icon" />
-                          <span>Product Image Ready</span>
-                        </div>
-                        <span className="add-prod-uploaded-url" title={image}>
-                          {image.startsWith('data:') ? 'Image selected' : image}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="add-prod-uploaded-actions">
-                      <button type="button" className="add-prod-action-btn replace"
-                        onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                        <RefreshCw size={13} /><span>Change</span>
-                      </button>
-                      <button type="button" className="add-prod-action-btn remove"
-                        onClick={() => setImage('')} disabled={uploading}>
-                        <Trash2 size={13} /><span>Remove</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <div className="add-prod-url-toggle-wrap">
-                  <button type="button" className="add-prod-url-toggle-btn"
-                    onClick={() => setShowManualUrl(!showManualUrl)}>
-                    <LinkIcon size={12} />
-                    <span>{showManualUrl ? 'Hide image URL input' : 'Or paste image URL manually'}</span>
-                  </button>
+                  {videoUploadError && <p className="prod-video-error-text">{videoUploadError}</p>}
                 </div>
-                {showManualUrl && (
-                  <div className="add-prod-field add-prod-manual-url">
-                    <input type="url" className="add-prod-input" placeholder="Enter image URL"
-                      value={image} onChange={(e) => setImage(e.target.value)} />
-                  </div>
-                )}
-              </div>
-            )}
+              )}
 
-            {/* Product Video */}
-            {!isApproved && (
-              <div className="add-prod-section">
-                <div className="add-prod-section-header">
-                  <Video size={18} /><span>Product Video (Optional)</span>
-                </div>
-
-                {/* Mode switch: URL vs Upload */}
-                <div className="prod-video-mode-selector">
-                  <button
-                    type="button"
-                    className={`prod-video-mode-btn ${videoInputMode === 'url' ? 'active' : ''}`}
-                    onClick={() => setVideoInputMode('url')}
-                  >
-                    <LinkIcon size={14} />
-                    <span>Add Video URL</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`prod-video-mode-btn ${videoInputMode === 'upload' ? 'active' : ''}`}
-                    onClick={() => setVideoInputMode('upload')}
-                  >
-                    <UploadCloud size={14} />
-                    <span>Upload Video File (MP4/WebM)</span>
-                  </button>
-                </div>
-
-                {/* Option B: Video URL input */}
-                {videoInputMode === 'url' && (
-                  <div className="prod-video-url-block">
-                    <label htmlFor="ep-video-url" className="add-prod-label">
-                      <span>Product Video URL</span>
-                      <span className="opt">(YouTube, Vimeo, or direct MP4/WebM)</span>
-                    </label>
-                    <div className="prod-video-url-input-row">
-                      <input
-                        id="ep-video-url"
-                        type="url"
-                        className="add-prod-input"
-                        placeholder="https://www.youtube.com/watch?v=... or https://.../video.mp4"
-                        value={videoUrlInput}
-                        onChange={(e) => {
-                          setVideoUrlInput(e.target.value);
-                          setVideoUrlError('');
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="prod-video-apply-btn"
-                        onClick={handleApplyVideoUrl}
-                      >
-                        Apply Link
-                      </button>
+              {/* Video Preview Card if videoUrl is set */}
+              {videoUrl && (
+                <div className="prod-video-preview-card">
+                  <div className="prod-video-preview-header">
+                    <div className="prod-video-preview-title">
+                      <PlayCircle size={16} className="video-preview-icon" />
+                      <span>Video Ready &amp; Attached</span>
                     </div>
-                    {videoUrlError && <p className="prod-video-error-text">{videoUrlError}</p>}
-                  </div>
-                )}
-
-                {/* Option A: Video File Upload */}
-                {videoInputMode === 'upload' && (
-                  <div className="prod-video-upload-block">
-                    <input
-                      type="file"
-                      ref={videoFileInputRef}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleVideoFileUpload(f);
+                    <button
+                      type="button"
+                      className="add-prod-action-btn remove"
+                      onClick={() => {
+                        setVideoUrl('');
+                        setVideoUrlInput('');
                       }}
-                      accept="video/mp4,video/webm,video/quicktime,video/ogg"
-                      style={{ display: 'none' }}
-                    />
-                    <div
-                      className={`add-prod-dropzone ${videoUploading ? 'uploading' : ''}`}
-                      onClick={() => !videoUploading && videoFileInputRef.current?.click()}
+                      title="Remove product video"
                     >
-                      {videoUploading ? (
-                        <div className="add-prod-upload-loading">
-                          <Loader2 size={36} className="add-prod-spinner" />
-                          <div className="upload-loading-text">
-                            <strong>Uploading Video to Cloud CDN…</strong>
-                            <span>This might take a moment depending on file size (up to 50MB)</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="add-prod-dropzone-content">
-                          <div className="add-prod-dropzone-icon">
-                            <UploadCloud size={38} />
-                          </div>
-                          <div className="add-prod-dropzone-text">
-                            <p className="dropzone-main"><strong>Click to upload video</strong> or choose file</p>
-                            <p className="dropzone-sub">MP4, WebM, MOV (Max 50MB)</p>
-                          </div>
-                          <span className="dropzone-badge">
-                            <Cloud size={13} /> Cloudinary Video Storage
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    {videoUploadError && <p className="prod-video-error-text">{videoUploadError}</p>}
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
                   </div>
-                )}
-
-                {/* Video Preview Card if videoUrl is set */}
-                {videoUrl && (
-                  <div className="prod-video-preview-card">
-                    <div className="prod-video-preview-header">
-                      <div className="prod-video-preview-title">
-                        <PlayCircle size={16} className="video-preview-icon" />
-                        <span>Video Ready &amp; Attached</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="add-prod-action-btn remove"
-                        onClick={() => {
-                          setVideoUrl('');
-                          setVideoUrlInput('');
-                        }}
-                        title="Remove product video"
+                  <div className="prod-video-player-container">
+                    {getYoutubeEmbedUrl(videoUrl) ? (
+                      <iframe
+                        src={getYoutubeEmbedUrl(videoUrl)}
+                        title="Product Video Preview"
+                        className="prod-video-iframe"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video
+                        src={videoUrl}
+                        controls
+                        playsInline
+                        className="prod-video-html5"
                       >
-                        <Trash2 size={13} />
-                        <span>Remove</span>
-                      </button>
-                    </div>
-                    <div className="prod-video-player-container">
-                      {getYoutubeEmbedUrl(videoUrl) ? (
-                        <iframe
-                          src={getYoutubeEmbedUrl(videoUrl)}
-                          title="Product Video Preview"
-                          className="prod-video-iframe"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      ) : (
-                        <video
-                          src={videoUrl}
-                          controls
-                          playsInline
-                          className="prod-video-html5"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
-                      )}
-                    </div>
-                    <span className="prod-video-url-display" title={videoUrl}>
-                      {videoUrl}
-                    </span>
+                        Your browser does not support the video tag.
+                      </video>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
+                  <span className="prod-video-url-display" title={videoUrl}>
+                    {videoUrl}
+                  </span>
+                </div>
+              )}
+            </div>
 
             {/* Actions */}
-            {!isApproved && (
-              <div className="add-prod-actions">
-                <button type="submit" className="add-prod-submit-btn" disabled={submitting}>
-                  {submitting ? <Loader2 size={18} className="add-prod-spinner" /> : <CheckCircle size={18} />}
-                  <span>{submitting ? 'Saving…' : 'Save Changes'}</span>
-                </button>
-                <button type="button" className="add-prod-cancel-btn" onClick={onBack}>
-                  Cancel
-                </button>
-              </div>
-            )}
+            <div className="add-prod-actions">
+              <button type="submit" className="add-prod-submit-btn" disabled={submitting}>
+                {submitting ? (
+                  <Loader2 size={18} className="add-prod-spinner" />
+                ) : (
+                  <CheckCircle size={18} />
+                )}
+                <span>
+                  {submitting
+                    ? 'Saving…'
+                    : effectiveMode === 'admin'
+                    ? 'Save Product Changes (Live Update)'
+                    : isApproved
+                    ? 'Submit Revisions for Admin Approval'
+                    : 'Save Changes'}
+                </span>
+              </button>
+              <button type="button" className="add-prod-cancel-btn" onClick={onBack}>
+                Cancel
+              </button>
+            </div>
           </form>
         </div>
 
@@ -713,6 +883,30 @@ const styles = {
     cursor: 'pointer',
     marginBottom: 16,
     color: '#475569'
+  },
+  adminBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    background: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    color: '#166534',
+    padding: '10px 14px',
+    borderRadius: 8,
+    marginBottom: 16,
+    fontSize: 13
+  },
+  reapprovalBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    background: '#fffbeb',
+    border: '1px solid #fde68a',
+    color: '#92400e',
+    padding: '10px 14px',
+    borderRadius: 8,
+    marginBottom: 16,
+    fontSize: 13
   },
   warningBanner: {
     display: 'flex',

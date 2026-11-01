@@ -1,12 +1,26 @@
 # Dependencies
 node_modules/
+node_modules
+nodemodule/
+nodemodule
+nodemodules/
+nodemodules
 */node_modules/
+**/node_modules/
+**/node_modules
+**/nodemodule/
+**/nodemodule
+**/nodemodules/
+**/nodemodules
 
 # Production builds
 dist/
 */dist/
 build/
 */build/
+
+# Temporary scratch, test profiles & backups
+scratch/
 
 # Environment files
 .env

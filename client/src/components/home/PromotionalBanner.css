@@ -20,14 +20,13 @@
   padding-inline: clamp(12px, 2.2vw, 28px);
 }
 
-/* Immersive Hero Landing Viewport — Nearly full-screen below sticky header */
+/* Immersive Hero Landing Viewport — Responsive 16:5 desktop, 12:5 tablet, 5:6 mobile */
 .promo-banner-viewport {
   position: relative;
   width: 100%;
-  aspect-ratio: 4.1 / 1;
-  min-height: calc(100vh - var(--header-h, 72px) - 28px);
-  height: calc(100vh - var(--header-h, 72px) - 28px);
-  max-height: 840px;
+  aspect-ratio: 16 / 5;
+  min-height: clamp(380px, 31.25vw, 600px);
+  max-height: 640px;
   border-radius: var(--r-xl, 24px);
   overflow: hidden;
   background: linear-gradient(135deg, #07322a 0%, #0e5c4a 65%, #136a56 100%);
@@ -63,12 +62,18 @@
   overflow: hidden;
 }
 
+.promo-banner-picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .promo-banner-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center right;
-  transform: scale(1.03);
+  transform: scale(1.02);
   transition: transform 6s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
@@ -358,13 +363,13 @@
    Responsive Adaptations
    ============================================================ */
 
-/* Tablet (1024px and below) */
+/* Tablet (1024px and below) - 12:5 ratio (1200x500px) */
 @media (max-width: 1024px) {
   .promo-banner-viewport {
-    aspect-ratio: auto;
-    min-height: calc(85vh - var(--header-h, 72px));
-    height: clamp(520px, 80vh, 680px);
-    max-height: 680px;
+    aspect-ratio: 12 / 5;
+    min-height: clamp(340px, 41.6vw, 500px);
+    height: auto;
+    max-height: 520px;
   }
 
   .promo-banner-content {
@@ -382,7 +387,7 @@
   }
 }
 
-/* Tablet Portrait & Mobile Landscape (768px and below) */
+/* Tablet Portrait & Mobile Landscape (768px and below) - 5:6 ratio (750x900px) */
 @media (max-width: 768px) {
   .promo-banner-section {
     padding-block: 6px;
@@ -393,9 +398,9 @@
   }
 
   .promo-banner-viewport {
-    aspect-ratio: auto;
-    min-height: calc(82vh - var(--header-h, 72px));
-    height: clamp(480px, 78vh, 600px);
+    aspect-ratio: 5 / 6;
+    min-height: clamp(380px, 110vw, 560px);
+    height: auto;
     max-height: 600px;
     border-radius: var(--r-lg, 18px);
   }
@@ -481,16 +486,17 @@
   }
 }
 
-/* Mobile Portrait (430px and below) */
+/* Mobile Portrait (430px and below) - 5:6 ratio (750x900px) */
 @media (max-width: 430px) {
   .promo-banner-section {
     padding-block: 4px;
   }
 
   .promo-banner-viewport {
-    min-height: calc(80vh - var(--header-h, 72px));
-    height: clamp(460px, 80vh, 560px);
-    max-height: 560px;
+    aspect-ratio: 5 / 6;
+    min-height: clamp(340px, 115vw, 500px);
+    height: auto;
+    max-height: 540px;
     border-radius: var(--r-md, 16px);
   }
 

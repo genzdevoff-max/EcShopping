@@ -282,6 +282,29 @@ export const api = {
     });
   },
 
+  /** Upload document or certificate (PDF, JPG, PNG up to 10MB) */
+  uploadDocument(file, role) {
+    return new Promise((resolve, reject) => {
+      const headers = {};
+      const token = role ? authSessions.get(role) : null;
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const formData = new FormData();
+      formData.append('document', file);
+
+      fetch(`${API_URL}/api/upload/document`, { method: 'POST', headers, body: formData })
+        .then(async (res) => {
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            if (role && res.status === 401) authSessions.clear(role);
+            reject(new Error((data && data.error) || `Upload failed (${res.status})`));
+            return;
+          }
+          resolve(data);
+        })
+        .catch(reject);
+    });
+  },
+
   /* Reviews — listing is public; creating accepts a customer token (optional) */
   getReviews: (params) => request(`/api/reviews${qs(params)}`),
   createReview: (review, role = 'customer') => request('/api/reviews', { method: 'POST', body: review, role }),
@@ -289,6 +312,7 @@ export const api = {
   /* Orders — scoped by the authenticated role; guests only create */
   getOrders: (params = {}, role) => request(`/api/orders${qs(params)}`, { role }),
   getOrder: (id, role) => request(`/api/orders/${encodeURIComponent(id)}`, { role }),
+  trackOrder: (id) => request(`/api/orders/track/${encodeURIComponent(id)}`),
   createOrder: (order) => request('/api/orders', { method: 'POST', body: order, role: 'customer' }),
   updateOrderStatus: (id, status, role = 'vendor') => request(`/api/orders/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status }, role }),
   cancelCustomerOrder: (orderId, reason) => request(`/api/orders/${encodeURIComponent(orderId)}/cancel`, { method: 'POST', body: { reason }, role: 'customer' }),
@@ -315,6 +339,84 @@ export const api = {
     request('/api/admin/payment-config', { role: 'admin' }),
   updatePaymentConfig: (config) =>
     request('/api/admin/payment-config', { method: 'PUT', body: config, role: 'admin' }),
+
+  /* Customer Account Management */
+  deleteCustomerAccount: (password) =>
+    request('/api/user/account', { method: 'DELETE', body: { password }, role: 'customer' }),
+  updateCustomerStatus: (id, status) =>
+    request(`/api/users/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status }, role: 'admin' }),
+  deleteCustomer: (id) =>
+    request(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
+
+  /* Vendor Profile & Applications (Admin & Vendor) */
+  getPublicVendor: (id) =>
+    request(`/api/vendors/${encodeURIComponent(id)}/public`),
+  getVendorProfile: () =>
+    request('/api/vendor/profile', { role: 'vendor' }),
+  updateVendorProfile: (profileData) =>
+    request('/api/vendor/profile', { method: 'PUT', body: profileData, role: 'vendor' }),
+  verifyVendorApplication: (id, verificationData) =>
+    request(`/api/vendors/${encodeURIComponent(id)}/status`, { method: 'PUT', body: verificationData, role: 'admin' }),
+
+  /* Commission & Financials */
+  getCommissionConfig: () =>
+    request('/api/admin/commission', { role: 'admin' }),
+  updateCommissionConfig: (data) =>
+    request('/api/admin/commission', { method: 'PUT', body: data, role: 'admin' }),
+  updateVendorCommission: (id, commissionRate) =>
+    request(`/api/admin/vendors/${encodeURIComponent(id)}/commission`, { method: 'PUT', body: { commissionRate }, role: 'admin' }),
+  getVendorFinancials: () =>
+    request('/api/vendor/financials', { role: 'vendor' }),
+
+  /* Coupons Engine */
+  validateCoupon: (code, subtotal, items = []) =>
+    request('/api/coupons/validate', { method: 'POST', body: { code, subtotal, items } }),
+  getAdminCoupons: () =>
+    request('/api/admin/coupons', { role: 'admin' }),
+  createCoupon: (couponData) =>
+    request('/api/admin/coupons', { method: 'POST', body: couponData, role: 'admin' }),
+  updateCoupon: (code, couponData) =>
+    request(`/api/admin/coupons/${encodeURIComponent(code)}`, { method: 'PUT', body: couponData, role: 'admin' }),
+  deleteCoupon: (code) =>
+    request(`/api/admin/coupons/${encodeURIComponent(code)}`, { method: 'DELETE', role: 'admin' }),
+  getVendorCoupons: () =>
+    request('/api/vendor/coupons', { role: 'vendor' }),
+  createVendorCoupon: (couponData) =>
+    request('/api/vendor/coupons', { method: 'POST', body: couponData, role: 'vendor' }),
+  updateVendorCoupon: (code, couponData) =>
+    request(`/api/vendor/coupons/${encodeURIComponent(code)}`, { method: 'PUT', body: couponData, role: 'vendor' }),
+  deleteVendorCoupon: (code) =>
+    request(`/api/vendor/coupons/${encodeURIComponent(code)}`, { method: 'DELETE', role: 'vendor' }),
+  getProductCoupons: (productId) =>
+    request(`/api/products/${encodeURIComponent(productId)}/coupons`),
+
+  /* Shipping & Handling Config */
+  getShippingConfig: (params) => {
+    const qs = params && typeof params === 'object'
+      ? '?' + new URLSearchParams(params).toString()
+      : (typeof params === 'string' && params ? `?${params}` : '');
+    return request(`/api/shipping-config${qs}`);
+  },
+  getAdminShippingConfig: () =>
+    request('/api/admin/shipping-config', { role: 'admin' }),
+  updateAdminShippingConfig: (config) =>
+    request('/api/admin/shipping-config', { method: 'PUT', body: config, role: 'admin' }),
+
+  /* Payment Switch to COD on Cancellation / Abort */
+  switchToCod: (orderId) =>
+    request('/api/payments/switch-to-cod', { method: 'POST', body: { orderId } }),
+
+  /* Deals of the Day */
+  getActiveDeals: () =>
+    request('/api/deals/active'),
+  getAdminDeals: () =>
+    request('/api/admin/deals', { role: 'admin' }),
+  createDeal: (dealData) =>
+    request('/api/admin/deals', { method: 'POST', body: dealData, role: 'admin' }),
+  updateDeal: (id, dealData) =>
+    request(`/api/admin/deals/${encodeURIComponent(id)}`, { method: 'PUT', body: dealData, role: 'admin' }),
+  deleteDeal: (id) =>
+    request(`/api/admin/deals/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
 };
 
 export default api;

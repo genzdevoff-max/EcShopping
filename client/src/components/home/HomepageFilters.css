@@ -1,0 +1,246 @@
+/* Homepage Quick Filter Component Styles */
+.home-filters-section {
+  padding: 18px 0 10px;
+  background: #fdfbf7;
+  border-top: 1px solid #f1ece4;
+  border-bottom: 1px solid #f1ece4;
+  margin-bottom: 20px;
+}
+
+.home-filters-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.home-filters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.home-filters-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #0e5c4a;
+  margin-bottom: 2px;
+}
+
+.home-filters-heading {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.home-filters-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.home-filters-clear-btn:hover {
+  background: #fca5a5;
+  color: #7f1d1d;
+}
+
+/* Category & Collection Pills Row */
+.home-filter-pills-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.home-filter-pills-row::-webkit-scrollbar {
+  height: 4px;
+}
+
+.home-filter-pills-row::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.home-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #ffffff;
+  color: #475569;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 24px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.home-pill:hover {
+  border-color: #0e5c4a;
+  color: #0e5c4a;
+  background: #f0fdf4;
+}
+
+.home-pill.active {
+  background: #0e5c4a;
+  color: #ffffff;
+  border-color: #0e5c4a;
+  box-shadow: 0 2px 6px rgba(14, 92, 74, 0.25);
+}
+
+.home-pill.special-deal {
+  border-color: #fed7aa;
+  color: #c2410c;
+  background: #fff7ed;
+}
+
+.home-pill.special-deal:hover {
+  background: #ffedd5;
+  border-color: #d9663d;
+}
+
+.home-pill.special-deal.active {
+  background: #d9663d;
+  color: #ffffff;
+  border-color: #d9663d;
+  box-shadow: 0 2px 6px rgba(217, 102, 61, 0.3);
+}
+
+/* Sub-Bar: Price & Sort */
+.home-filter-subbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.home-price-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.subbar-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.home-price-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.home-price-chip:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.home-price-chip.active {
+  background: #0e5c4a;
+  color: #ffffff;
+  border-color: #0e5c4a;
+}
+
+.home-sort-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-sort-select {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.home-sort-select:focus {
+  border-color: #0e5c4a;
+}
+
+@media (max-width: 640px) {
+  .home-filters-section {
+    padding: 14px 0 8px;
+    margin-bottom: 14px;
+  }
+  .home-filters-heading {
+    font-size: 0.98rem;
+  }
+  .home-filter-subbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .home-price-chips {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .home-price-chips::-webkit-scrollbar {
+    display: none;
+  }
+  .home-price-chip {
+    flex-shrink: 0;
+    min-height: 34px;
+    padding: 6px 12px;
+  }
+  .home-sort-wrap {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .home-sort-select {
+    flex: 1;
+    min-height: 36px;
+  }
+}

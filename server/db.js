@@ -82,10 +82,14 @@ const columnExists = async (connection, table, column) => {
   return rows.length > 0;
 };
 
+let dbInitPromise = null;
+
 // Initialize database schema (clean without any dummy data)
 export const initDatabase = async () => {
-  try {
-    const connection = await retryOnce(() => rawGetConnection());
+  if (dbInitPromise) return dbInitPromise;
+  dbInitPromise = (async () => {
+    try {
+      const connection = await retryOnce(() => rawGetConnection());
     console.log('⚡ Connected to TiDB Cloud Database successfully!');
 
     // Create Users table
@@ -421,11 +425,151 @@ export const initDatabase = async () => {
       // Non-fatal if index exists
     }
 
+    // ---------------- ADDITIVE MIGRATIONS: BANNERS, VENDORS, USERS, PRODUCTS, COUPONS, DEALS ----------------
+
+    const safeAddColumn = async (table, column, definition) => {
+      try {
+        const exists = await columnExists(connection, table, column);
+        if (!exists) {
+          await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+          console.log(`✅ Added ${table}.${column}`);
+        }
+      } catch (err) {
+        if (!err.message?.includes('Duplicate column') && err.code !== 'ER_DUP_FIELDNAME') {
+          console.warn(`⚠️ Migration notice for ${table}.${column}:`, err.message);
+        }
+      }
+    };
+
+    // 1. Homepage banners: mobile and tablet image URLs and aspect ratios
+    await safeAddColumn('homepage_banners', 'mobile_image_url', 'VARCHAR(1024) NULL DEFAULT NULL');
+    await safeAddColumn('homepage_banners', 'tablet_image_url', 'VARCHAR(1024) NULL DEFAULT NULL');
+    await safeAddColumn('homepage_banners', 'image_aspect_ratio', 'VARCHAR(32) NULL DEFAULT "16:5"');
+
+    // 2. Vendors: business info, tax, certificates, bank details, verification notes, and commission
+    const vendorColumns = [
+      ['business_name', 'VARCHAR(255) NULL DEFAULT NULL'],
+      ['business_type', 'VARCHAR(100) NULL DEFAULT NULL'],
+      ['owner_name', 'VARCHAR(255) NULL DEFAULT NULL'],
+      ['registered_name', 'VARCHAR(255) NULL DEFAULT NULL'],
+      ['address', 'TEXT NULL DEFAULT NULL'],
+      ['city', 'VARCHAR(100) NULL DEFAULT NULL'],
+      ['district', 'VARCHAR(100) NULL DEFAULT NULL'],
+      ['state', 'VARCHAR(100) NULL DEFAULT NULL'],
+      ['pincode', 'VARCHAR(20) NULL DEFAULT NULL'],
+      ['country', 'VARCHAR(100) DEFAULT "India"'],
+      ['gst_status', 'VARCHAR(50) DEFAULT "not_registered"'],
+      ['gstin', 'VARCHAR(50) NULL DEFAULT NULL'],
+      ['gst_certificate_url', 'VARCHAR(1024) NULL DEFAULT NULL'],
+      ['fssai_status', 'VARCHAR(50) DEFAULT "not_applicable"'],
+      ['fssai_number', 'VARCHAR(100) NULL DEFAULT NULL'],
+      ['fssai_certificate_url', 'VARCHAR(1024) NULL DEFAULT NULL'],
+      ['bank_account_holder', 'VARCHAR(255) NULL DEFAULT NULL'],
+      ['bank_name', 'VARCHAR(255) NULL DEFAULT NULL'],
+      ['bank_account_number', 'VARCHAR(100) NULL DEFAULT NULL'],
+      ['bank_ifsc', 'VARCHAR(50) NULL DEFAULT NULL'],
+      ['bank_document_url', 'VARCHAR(1024) NULL DEFAULT NULL'],
+      ['verification_notes', 'TEXT NULL DEFAULT NULL'],
+      ['reviewed_by', 'VARCHAR(64) NULL DEFAULT NULL'],
+      ['reviewed_at', 'TIMESTAMP NULL DEFAULT NULL'],
+      ['commission_rate', 'DECIMAL(5,2) NULL DEFAULT NULL'],
+      ['shipping_charge', 'DECIMAL(10,2) NULL DEFAULT 0.00'],
+      ['shipping_free_threshold', 'DECIMAL(10,2) NULL DEFAULT NULL'],
+      ['shipping_enabled', 'TINYINT(1) DEFAULT 1'],
+      ['shipping_estimated_days', 'VARCHAR(64) DEFAULT "3-5 business days"']
+    ];
+
+    for (const [colName, colDef] of vendorColumns) {
+      await safeAddColumn('vendors', colName, colDef);
+    }
+
+    // 3. Users: customer account status (active/deactivated) and deactivation date
+    await safeAddColumn('users', 'status', 'VARCHAR(50) DEFAULT "active"');
+    await safeAddColumn('users', 'deactivated_at', 'TIMESTAMP NULL DEFAULT NULL');
+
+    // 4. Products: multiple images support (JSON / text array)
+    await safeAddColumn('products', 'images', 'MEDIUMTEXT NULL DEFAULT NULL');
+
+    // 5. Order items: commission rate and snapshot amounts
+    await safeAddColumn('order_items', 'commission_rate', 'DECIMAL(5,2) NULL DEFAULT NULL');
+    await safeAddColumn('order_items', 'commission_amount', 'DECIMAL(10,2) DEFAULT 0');
+    await safeAddColumn('order_items', 'vendor_payout', 'DECIMAL(10,2) DEFAULT 0');
+
+    // 6. Coupons table: database-authoritative promotions
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS coupons (
+        code VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) DEFAULT '',
+        type ENUM('percent', 'flat', 'shipping') NOT NULL DEFAULT 'percent',
+        value DECIMAL(10,2) NOT NULL DEFAULT 0,
+        min_order DECIMAL(10,2) DEFAULT 0,
+        max_discount DECIMAL(10,2) DEFAULT NULL,
+        free_shipping BOOLEAN DEFAULT FALSE,
+        applicable_to VARCHAR(32) DEFAULT 'all',
+        product_ids MEDIUMTEXT DEFAULT NULL,
+        vendor_id VARCHAR(64) DEFAULT NULL,
+        per_customer_limit INT DEFAULT 1,
+        usage_limit INT DEFAULT NULL,
+        used_count INT DEFAULT 0,
+        start_date TIMESTAMP NULL DEFAULT NULL,
+        expiry_date TIMESTAMP NULL DEFAULT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await safeAddColumn('coupons', 'title', "VARCHAR(255) DEFAULT ''");
+    await safeAddColumn('coupons', 'applicable_to', "VARCHAR(32) DEFAULT 'all'");
+    await safeAddColumn('coupons', 'product_ids', "MEDIUMTEXT DEFAULT NULL");
+    await safeAddColumn('coupons', 'vendor_id', "VARCHAR(64) DEFAULT NULL");
+    await safeAddColumn('coupons', 'per_customer_limit', "INT DEFAULT 1");
+
+    // Seed default coupons if coupons table is empty
+    try {
+      const [cCount] = await connection.query('SELECT COUNT(*) as count FROM coupons');
+      if (cCount[0].count === 0) {
+        await connection.query(`
+          INSERT INTO coupons (code, type, value, min_order, max_discount, free_shipping, usage_limit, is_active)
+          VALUES
+            ('WELCOME10', 'percent', 10, 299, 100, FALSE, NULL, TRUE),
+            ('FRESH50', 'flat', 50, 499, NULL, FALSE, NULL, TRUE),
+            ('FREESHIP', 'shipping', 0, 0, NULL, TRUE, NULL, TRUE),
+            ('HARVEST20', 'percent', 20, 999, 250, FALSE, NULL, TRUE)
+        `);
+        console.log('✅ Seeded default coupons into coupons table');
+      }
+    } catch {
+      /* ignore coupon seed failure */
+    }
+
+    // 7. Deals of the Day table: time-limited special values
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS deals (
+        id VARCHAR(64) PRIMARY KEY,
+        product_id VARCHAR(64) NOT NULL,
+        deal_price DECIMAL(10,2) NOT NULL,
+        original_price DECIMAL(10,2) NOT NULL,
+        discount_percent INT DEFAULT 0,
+        start_time TIMESTAMP NOT NULL,
+        end_time TIMESTAMP NOT NULL,
+        stock_limit INT DEFAULT NULL,
+        sold_count INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_deals_product (product_id),
+        INDEX idx_deals_active_time (is_active, start_time, end_time)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await safeAddColumn('deals', 'status', "VARCHAR(32) DEFAULT 'active'");
+
     connection.release();
     console.log('✅ TiDB Cloud tables (users, vendors, categories, products, orders, order_items, reviews, admins, customer_addresses, password_resets) ready & clean (no dummy data)!');
   } catch (error) {
     console.error('❌ Error initializing TiDB Cloud database:', error.message);
   }
+  })();
+  return dbInitPromise;
 };
 
 export default pool;

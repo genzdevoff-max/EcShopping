@@ -103,7 +103,10 @@ test('PhonePe Return Flow (Requirement C): Failed or cancelled payment allows re
 
   // Retry on same order ID
   assert.ok(paymentStatusJsx.includes('createPhonePePayment(orderId)'), 'payAgain must use existing orderId, never minting a duplicate order');
-  assert.ok(paymentStatusJsx.includes('Try paying again'), 'Must present "Try paying again" button');
+  assert.ok(
+    paymentStatusJsx.includes('Try paying again') || paymentStatusJsx.includes('Retry online payment'),
+    'Must present retry payment button'
+  );
   assert.ok(paymentStatusJsx.includes('Back to cart'), 'Must provide link back to cart');
 });
 
@@ -123,8 +126,8 @@ test('PhonePe Return Flow (Server & URL Integrity): Server attaches orderId and 
 
   // Server checkout session creation passes orderId
   assert.ok(
-    serverIndexJs.includes('getPhonePeRedirectUrl(process.env, order.id)') ||
-    serverIndexJs.includes('getPhonePeRedirectUrl(process.env, merchantOrderId)'),
+    serverIndexJs.includes('getPhonePeRedirectUrl(process.env, order.id') ||
+    serverIndexJs.includes('getPhonePeRedirectUrl(process.env, merchantOrderId'),
     'server/index.js must pass order.id to getPhonePeRedirectUrl'
   );
 

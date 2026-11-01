@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -17,7 +17,7 @@ import brandLogo from '../assets/logo/without-bg-logo.png';
 import AnnouncementBar from './AnnouncementBar';
 import { useCart } from '../context/CartContext';
 import { useStorefrontCategories, fetchStorefrontProducts } from '../data/storefront';
-import { formatINR, computeTotals } from '../utils/pricing';
+import { formatINR } from '../utils/pricing';
 import './Header.css';
 
 export default function Header({ cartCount = 0, loggedInCustomer, onCustomerLogout, onOpenLogin }) {
@@ -52,10 +52,6 @@ export default function Header({ cartCount = 0, loggedInCustomer, onCustomerLogo
   const searchInputRef = useRef(null);
   const { categories, loading: categoriesLoading } = useStorefrontCategories();
   const cart = useCart();
-  const cartSubtotal = useMemo(
-    () => computeTotals({ items: cart?.items || [] }).subtotal,
-    [cart?.items]
-  );
 
   useEffect(() => {
     const updateWishlist = () => {
@@ -381,14 +377,13 @@ export default function Header({ cartCount = 0, loggedInCustomer, onCustomerLogo
 
             <button
               type="button"
-              className={`action-icon-btn header-cart-btn ${cartCount > 0 ? 'has-total' : ''}`}
+              className="action-icon-btn header-cart-btn"
               onClick={openCart}
-              title="Open cart"
-              aria-label={`Open cart, ${cartCount} items, ${formatINR(cartSubtotal)}`}
+              title="Cart"
+              aria-label={`Cart, ${cartCount} items`}
             >
               <ShoppingCart size={20} />
               {cartCount > 0 && <span className="icon-badge">{cartCount}</span>}
-              {cartCount > 0 && <span className="cart-total-text">{formatINR(cartSubtotal)}</span>}
             </button>
 
             <button

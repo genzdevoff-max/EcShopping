@@ -84,18 +84,26 @@ export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interva
                 className={`promo-banner-slide ${isActive ? 'active' : ''}`}
                 aria-hidden={!isActive}
               >
-                {/* Background campaign image with dark Pine Green gradient overlay */}
+                {/* Background campaign image with responsive picture & Pine Green gradient overlay */}
                 <div className="promo-banner-media">
-                  <img
-                    src={camp.image}
-                    alt=""
-                    className="promo-banner-img"
-                    loading={idx === 0 ? 'eager' : 'lazy'}
-                    fetchPriority={idx === 0 ? 'high' : 'low'}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
+                  <picture className="promo-banner-picture">
+                    {camp.mobileImage && (
+                      <source media="(max-width: 640px)" srcSet={camp.mobileImage} />
+                    )}
+                    {camp.tabletImage && (
+                      <source media="(max-width: 1024px)" srcSet={camp.tabletImage} />
+                    )}
+                    <img
+                      src={camp.image}
+                      alt={camp.title || 'EcShopping Promotional Banner'}
+                      className="promo-banner-img"
+                      loading={idx === 0 ? 'eager' : 'lazy'}
+                      fetchPriority={idx === 0 ? 'high' : 'low'}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </picture>
                   <div className="promo-banner-overlay" />
                 </div>
 

@@ -157,8 +157,8 @@ test('/register automatically opens customer Sign Up form', () => {
 test('/vendor/register automatically opens vendor registration form', () => {
   const appSource = read('../src/App.jsx');
   assert.ok(
-    appSource.includes('<VendorLogin onLogin={handleVendorLogin} initialSignUp={true} />'),
-    'App.jsx must route /vendor/register with initialSignUp={true}'
+    appSource.includes('<VendorRegister />') || appSource.includes('<VendorLogin onLogin={handleVendorLogin} initialSignUp={true} />'),
+    'App.jsx must route /vendor/register to VendorRegister or VendorLogin with initialSignUp={true}'
   );
 
   const vendorLoginSource = read('../src/pages/vendor/VendorLogin.jsx');

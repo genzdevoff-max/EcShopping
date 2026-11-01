@@ -15,7 +15,14 @@ import {
   Ban,
   AlertCircle,
   Check,
-  PlayCircle
+  PlayCircle,
+  Store,
+  Calendar,
+  X,
+  Loader2,
+  Tag,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { getYoutubeEmbedUrl } from './vendor/AddProduct';
 import { mapServerProduct } from '../data/mapProduct';
@@ -59,6 +66,34 @@ export default function ProductDetails({ onAddToCart }) {
   const [reviewStatus, setReviewStatus] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [related, setRelated] = useState([]);
+  const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [vendorData, setVendorData] = useState(null);
+  const [vendorLoading, setVendorLoading] = useState(false);
+  const [productCoupons, setProductCoupons] = useState([]);
+
+  const handleOpenVendorModal = async () => {
+    if (!product?.vendorId) return;
+    setVendorModalOpen(true);
+    setVendorLoading(true);
+    try {
+      const res = await api.getPublicVendor(product.vendorId);
+      if (res?.success && res.vendor) {
+        setVendorData(res.vendor);
+      } else {
+        setVendorData({
+          businessName: product.seller || 'Marketplace Seller',
+          status: 'approved'
+        });
+      }
+    } catch {
+      setVendorData({
+        businessName: product.seller || 'Marketplace Seller',
+        status: 'approved'
+      });
+    } finally {
+      setVendorLoading(false);
+    }
+  };
 
   /* The product itself always comes from the API. A same-device local cache
      is offered as an instant preview while the network fetch is in flight —
@@ -118,6 +153,21 @@ export default function ProductDetails({ onAddToCart }) {
       const res = await fetchRelatedProducts(product.id);
       if (!cancelled && res.ok) setRelated(res.products);
     })();
+    return () => { cancelled = true; };
+  }, [product?.id, loading]);
+
+  useEffect(() => {
+    if (!product?.id || loading) return undefined;
+    let cancelled = false;
+    api.getProductCoupons(product.id)
+      .then((data) => {
+        if (!cancelled && data?.success && Array.isArray(data.coupons)) {
+          setProductCoupons(data.coupons);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setProductCoupons([]);
+      });
     return () => { cancelled = true; };
   }, [product?.id, loading]);
 
@@ -267,6 +317,11 @@ export default function ProductDetails({ onAddToCart }) {
               {product.inStock === false && (
                 <span className="pdp-stock-badge out-of-stock">Out of stock</span>
               )}
+              {gallery.length > 1 && (
+                <span className="pdp-image-counter">
+                  {activeImage + 1} / {gallery.length}
+                </span>
+              )}
               <img
                 src={gallery[activeImage] || undefined}
                 alt={`${product.title} — image ${activeImage + 1}`}
@@ -277,18 +332,47 @@ export default function ProductDetails({ onAddToCart }) {
                   if (fallback && e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
                 }}
               />
+              {gallery.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    className="pdp-gallery-arrow pdp-gallery-arrow-prev"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImage((prev) => (prev > 0 ? prev - 1 : gallery.length - 1));
+                    }}
+                    aria-label="Previous product image"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    type="button"
+                    className="pdp-gallery-arrow pdp-gallery-arrow-next"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImage((prev) => (prev < gallery.length - 1 ? prev + 1 : 0));
+                    }}
+                    aria-label="Next product image"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </>
+              )}
             </div>
 
             {gallery.length > 1 && (
               <div className="pdp-thumbs" role="tablist" aria-label="Product images">
                 {gallery.map((src, index) => (
                   <button
-                    key={src}
+                    key={`${src}-${index}`}
                     type="button"
                     role="tab"
                     aria-selected={index === activeImage}
                     className={`pdp-thumb ${index === activeImage ? 'active' : ''}`}
                     onClick={() => setActiveImage(index)}
+                    onMouseEnter={() => setActiveImage(index)}
+                    onFocus={() => setActiveImage(index)}
+                    title={`View image ${index + 1}`}
                   >
                     <img
                       src={src}
@@ -325,7 +409,14 @@ export default function ProductDetails({ onAddToCart }) {
           {/* ---------- Info ---------- */}
           <div className="pdp-info">
             <div className="pdp-meta-row">
-              <span className="seller-pill"><BadgeCheck size={14} /> {product.seller}</span>
+              <span
+                className="seller-pill"
+                onClick={product.vendorId ? handleOpenVendorModal : undefined}
+                style={{ cursor: product.vendorId ? 'pointer' : 'default' }}
+                title={product.vendorId ? 'Click to view Verified Seller Profile' : 'Official EcShopping Admin Store'}
+              >
+                <BadgeCheck size={14} /> {product.seller}
+              </span>
               <button type="button" className="pdp-icon-btn" onClick={handleShare} aria-label="Share this product" title="Share">
                 <Share2 size={17} />
               </button>
@@ -375,6 +466,35 @@ export default function ProductDetails({ onAddToCart }) {
               )}
               <p className="tiny muted">Inclusive of all taxes · Shipping calculated at checkout</p>
             </div>
+
+            {productCoupons && productCoupons.length > 0 && (
+              <div className="pdp-coupons-rail" style={{ marginTop: 12, marginBottom: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#0e5c4a', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <Tag size={14} /> Available Coupons & Offers:
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {productCoupons.map((c) => (
+                    <div
+                      key={c.code}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: '#f0fdf4',
+                        border: '1px dashed #16a34a',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 12,
+                        color: '#15803d'
+                      }}
+                    >
+                      <strong style={{ letterSpacing: 0.5, fontFamily: 'monospace' }}>{c.code}</strong>
+                      <span>· {c.title || (c.type === 'percent' ? `${c.value}% off` : `₹${c.value} off`)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="pdp-stock-status-bar">
               {product.inStock === false ? (
@@ -479,7 +599,19 @@ export default function ProductDetails({ onAddToCart }) {
                 <MapPin size={17} />
                 <span>
                   <strong>Sold by {product.seller}</strong>
-                  <small>{product.vendorId ? 'Identity-verified marketplace seller' : 'Official EcShopping Admin Store'}</small>
+                  <small>
+                    {product.vendorId ? (
+                      <button
+                        type="button"
+                        onClick={handleOpenVendorModal}
+                        style={{ background: 'none', border: 'none', padding: 0, color: '#0e5c4a', textDecoration: 'underline', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                      >
+                        Identity-verified marketplace seller • View Seller Profile
+                      </button>
+                    ) : (
+                      'Official EcShopping Admin Store'
+                    )}
+                  </small>
                 </span>
               </li>
             </ul>
@@ -657,6 +789,94 @@ export default function ProductDetails({ onAddToCart }) {
             </div>
           </div>
         </section>
+      )}
+
+      {/* ---------- Public Vendor Profile Modal ---------- */}
+      {vendorModalOpen && (
+        <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={() => setVendorModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+          <div style={{ position: 'relative', background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', zIndex: 1101 }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: '#e6f4f1', color: '#0e5c4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Store size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#0f172a' }}>Verified Seller Profile</h3>
+                  <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>EcShopping Trusted Marketplace Merchant</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVendorModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '24px' }}>
+              {vendorLoading ? (
+                <div style={{ textAlign: 'center', padding: '30px 0', color: '#64748b' }}>
+                  <Loader2 size={24} className="spin" style={{ margin: '0 auto 8px auto' }} />
+                  <p style={{ margin: 0, fontSize: 13 }}>Loading seller credentials…</p>
+                </div>
+              ) : vendorData ? (
+                <div>
+                  <div style={{ marginBottom: 16 }}>
+                    <h2 style={{ margin: '0 0 4px 0', fontSize: 20, fontWeight: 800, color: '#0e5c4a' }}>
+                      {vendorData.businessName || product.seller}
+                    </h2>
+                    {vendorData.registeredName && (
+                      <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>Legal entity: {vendorData.registeredName}</p>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#e6f4f1', color: '#0e5c4a', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                      <BadgeCheck size={14} /> Identity Verified
+                    </span>
+                    {vendorData.gstStatus === 'Registered' && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                        <ShieldCheck size={14} /> GST Compliant
+                      </span>
+                    )}
+                    {vendorData.fssaiStatus === 'Applicable' && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#0e5c4a', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                        <ShieldCheck size={14} /> FSSAI Certified
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ background: '#f8fafc', padding: 14, borderRadius: 10, border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#334155' }}>
+                      <MapPin size={16} color="#0e5c4a" />
+                      <span>{vendorData.city ? `${vendorData.city}${vendorData.state ? `, ${vendorData.state}` : ''}` : 'Verified India Merchant'}</span>
+                    </div>
+                    {vendorData.createdAt && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 12 }}>
+                        <Calendar size={15} />
+                        <span>Registered seller since {new Date(vendorData.createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: 20, textAlign: 'center' }}>
+                    <Link
+                      to={`/products?seller=${encodeURIComponent(product.seller)}`}
+                      className="btn btn-primary"
+                      style={{ width: '100%', display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}
+                      onClick={() => setVendorModalOpen(false)}
+                    >
+                      Browse All Products From {product.seller}
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

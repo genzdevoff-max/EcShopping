@@ -86,6 +86,7 @@ export default function AddProduct({
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [image, setImage] = useState('');
+  const [images, setImages] = useState([]);
   const [sellingPrice, setSellingPrice] = useState('');
   const [strikePrice, setStrikePrice] = useState('');
   const [unit, setUnit] = useState(UNIT_OPTIONS[2]); // Default 'Kilogram (KG)'
@@ -199,44 +200,112 @@ export default function AddProduct({
 
   // Cloudinary File Upload Handler
   const handleFileUpload = async (file) => {
-    if (!file) return;
+    if (!file) return false;
 
     if (!file.type.startsWith('image/')) {
-      showToast('Please upload an image file (PNG, JPG, WEBP, etc.)', 'error');
-      return;
+      showToast(`"${file.name}" is not an image file (PNG, JPG, WEBP, etc.)`, 'error');
+      return false;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      showToast('Image size should be less than 10MB', 'error');
-      return;
+      showToast(`"${file.name}" exceeds 10MB limit`, 'error');
+      return false;
     }
 
-    setUploading(true);
     try {
       const uploadRole = effectiveMode === 'admin' ? 'admin' : 'vendor';
       const data = await api.uploadImage(file, uploadRole);
       if (data && data.success && data.url) {
-        setImage(data.url);
-        if (data.isFallback) {
-          showToast('Image loaded! (Add Cloudinary keys in server/.env for cloud CDN)', 'success');
-        } else {
-          showToast('Image successfully uploaded to Cloudinary! ☁️', 'success');
-        }
+        setImage((prev) => prev || data.url);
+        setImages((prev) => (prev.includes(data.url) ? prev : [...prev, data.url]));
+        return true;
       } else {
-        showToast((data && data.error) || 'Failed to upload image', 'error');
+        showToast((data && data.error) || `Failed to upload "${file.name}"`, 'error');
+        return false;
       }
     } catch (err) {
-      showToast('Image upload failed: ' + (err.message || 'unknown error'), 'error');
+      showToast(`Image upload failed for "${file.name}": ` + (err.message || 'unknown error'), 'error');
+      return false;
+    }
+  };
+
+  const handleFileInputChange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const availableSlots = Math.max(0, 8 - images.length);
+    if (availableSlots <= 0) {
+      showToast('Maximum 8 images allowed per product', 'error');
+      return;
+    }
+    const filesToUpload = files.slice(0, availableSlots);
+    setUploading(true);
+    let okCount = 0;
+    try {
+      for (const file of filesToUpload) {
+        const ok = await handleFileUpload(file);
+        if (ok) okCount++;
+      }
+      if (okCount > 0) {
+        showToast(`Uploaded ${okCount} image${okCount > 1 ? 's' : ''} successfully!`, 'success');
+      }
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+    const availableSlots = Math.max(0, 8 - images.length);
+    if (availableSlots <= 0) {
+      showToast('Maximum 8 images allowed per product', 'error');
+      return;
+    }
+    const filesToUpload = files.slice(0, availableSlots);
+    setUploading(true);
+    let okCount = 0;
+    try {
+      for (const file of filesToUpload) {
+        const ok = await handleFileUpload(file);
+        if (ok) okCount++;
+      }
+      if (okCount > 0) {
+        showToast(`Uploaded ${okCount} image${okCount > 1 ? 's' : ''} successfully!`, 'success');
+      }
     } finally {
       setUploading(false);
     }
   };
 
-  const handleFileInputChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleFileUpload(file);
-    }
+  const handleSetPrimaryImage = (index) => {
+    if (index < 0 || index >= images.length) return;
+    const target = images[index];
+    const rest = images.filter((_, i) => i !== index);
+    const reordered = [target, ...rest];
+    setImages(reordered);
+    setImage(target);
+    showToast('Primary product image updated', 'success');
+  };
+
+  const handleMoveImage = (index, direction) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= images.length) return;
+    const next = [...images];
+    const temp = next[index];
+    next[index] = next[targetIndex];
+    next[targetIndex] = temp;
+    setImages(next);
+    setImage(next[0]);
+  };
+
+  const handleRemoveGalleryImage = (index) => {
+    const next = images.filter((_, i) => i !== index);
+    setImages(next);
+    setImage(next[0] || '');
   };
 
   // Video URL and Upload Handlers
@@ -307,16 +376,6 @@ export default function AddProduct({
     }
   };
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (file) {
-      handleFileUpload(file);
-    }
-  };
-
   // Form Submit Handler
   const [submitting, setSubmitting] = useState(false);
   const handleSubmit = async (e) => {
@@ -349,7 +408,8 @@ export default function AddProduct({
       price: parsedSelling,
       strikePrice: parsedStrike > 0 ? parsedStrike : null,
       unit: unit,
-      image: image.trim(),
+      image: (images[0] || image).trim(),
+      images: images.length > 0 ? images : (image.trim() ? [image.trim()] : []),
       videoUrl: videoUrl ? videoUrl.trim() : null,
       stockStatus: parsedQty > 0 ? stockStatus : 'out_of_stock',
       stockQuantity: parsedQty
@@ -725,12 +785,13 @@ export default function AddProduct({
                 <span>Product Image (Cloudinary CDN)</span>
               </div>
 
-              {/* Hidden file input for Cloudinary upload */}
+              {/* Hidden file input for Cloudinary upload (supports multiple images) */}
               <input 
                 type="file" 
                 ref={fileInputRef}
                 onChange={handleFileInputChange}
                 accept="image/*"
+                multiple
                 style={{ display: 'none' }}
               />
 
@@ -748,8 +809,8 @@ export default function AddProduct({
                     <div className="add-prod-upload-loading">
                       <Loader2 size={36} className="add-prod-spinner" />
                       <div className="upload-loading-text">
-                        <strong>Uploading to Cloudinary CDN…</strong>
-                        <span>Sniffing magic bytes & validating format</span>
+                        <strong>Uploading images to Cloudinary CDN…</strong>
+                        <span>Sniffing magic bytes & validating 1:1 format</span>
                       </div>
                     </div>
                   ) : (
@@ -758,11 +819,11 @@ export default function AddProduct({
                         <UploadCloud size={38} />
                       </div>
                       <div className="add-prod-dropzone-text">
-                        <p className="dropzone-main"><strong>Click to upload</strong> or drag & drop</p>
-                        <p className="dropzone-sub">PNG, JPG, WEBP, GIF (up to 10MB)</p>
+                        <p className="dropzone-main"><strong>Click to select images</strong> or drag & drop multiple files</p>
+                        <p className="dropzone-sub">PNG, JPG, WEBP • Select up to 8 images at once (up to 10MB each)</p>
                       </div>
                       <span className="dropzone-badge">
-                        <Cloud size={13} /> Cloudinary Direct Storage
+                        <Cloud size={13} /> Cloudinary Multi-Image Storage
                       </span>
                     </div>
                   )}
@@ -803,6 +864,69 @@ export default function AddProduct({
                       <Trash2 size={13} />
                       <span>Remove</span>
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Product Gallery Strip */}
+              {images.length > 0 && (
+                <div style={{ marginTop: 14, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                      Gallery Images ({images.length}/8) • 1200×1200 px (1:1)
+                    </span>
+                    {images.length < 8 && (
+                      <button
+                        type="button"
+                        style={{ background: '#0e5c4a', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                      >
+                        <Plus size={13} /> Add More
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 10 }}>
+                    {images.map((imgUrl, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          position: 'relative',
+                          aspectRatio: '1/1',
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          border: idx === 0 ? '2px solid #0e5c4a' : '1px solid #cbd5e1',
+                          background: '#fff'
+                        }}
+                      >
+                        <img src={imgUrl} alt={`Thumb ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {idx === 0 && (
+                          <span style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(14, 92, 74, 0.9)', color: '#fff', fontSize: 10, fontWeight: 700, textAlign: 'center', padding: '2px 0' }}>
+                            PRIMARY
+                          </span>
+                        )}
+                        <div style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 2 }}>
+                          {idx !== 0 && (
+                            <button
+                              type="button"
+                              title="Make primary"
+                              onClick={() => handleSetPrimaryImage(idx)}
+                              style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: 4, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              ★
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            title="Remove"
+                            onClick={() => handleRemoveGalleryImage(idx)}
+                            style={{ background: 'rgba(220,38,38,0.85)', color: '#fff', border: 'none', borderRadius: 4, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
