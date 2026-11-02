@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Globe, Phone, MapPin, Check, ArrowRight, Mail } from 'lucide-react';
+import { Globe, Phone, MapPin, Check, ArrowRight, Mail, Loader2 } from 'lucide-react';
 import brandLogo from '../assets/logo/without-bg-logo.png';
 import { useStorefrontCategories } from '../data/storefront';
 import { socialLinks } from '../data/content';
+import api from '../utils/api';
 import './Footer.css';
 
 function InstagramIcon({ size = 18, ...props }) {
@@ -41,20 +42,35 @@ const SOCIAL_ICONS = {
 
 function NewsletterForm() {
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState('idle'); // idle | error | done
+  const [status, setStatus] = useState('idle'); // idle | loading | error | done
   const [message, setMessage] = useState('');
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    const cleanEmail = email.trim();
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail);
     if (!valid) {
       setStatus('error');
       setMessage('Please enter a valid email address.');
       return;
     }
-    setStatus('done');
-    setMessage('You are on the list. We will be in touch soon.');
-    setEmail('');
+
+    setStatus('loading');
+    setMessage('');
+    try {
+      const res = await api.subscribeNewsletter(cleanEmail);
+      if (res?.success) {
+        setStatus('done');
+        setMessage(res.message || 'Thank you for subscribing! Check your inbox for updates.');
+        setEmail('');
+      } else {
+        setStatus('error');
+        setMessage(res?.error || 'Unable to subscribe right now. Please try again.');
+      }
+    } catch (err) {
+      setStatus('error');
+      setMessage(err.message || 'Unable to subscribe right now. Please try again.');
+    }
   };
 
   return (
@@ -69,9 +85,10 @@ function NewsletterForm() {
           onChange={(e) => { setEmail(e.target.value); if (status !== 'idle') setStatus('idle'); }}
           aria-invalid={status === 'error'}
           className={status === 'error' ? 'has-error' : ''}
+          disabled={status === 'loading'}
         />
-        <button type="submit" aria-label="Subscribe to newsletter">
-          <ArrowRight size={17} />
+        <button type="submit" aria-label="Subscribe to newsletter" disabled={status === 'loading'}>
+          {status === 'loading' ? <Loader2 size={16} className="spin" /> : <ArrowRight size={17} />}
         </button>
       </div>
       {message && (

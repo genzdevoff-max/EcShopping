@@ -7,19 +7,29 @@
   flex-direction: column;
   gap: 24px;
   width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  position: relative;
 }
 
 /* 2-Column Split Layout */
 .add-prod-grid {
   display: grid;
-  grid-template-columns: 1fr 380px;
+  grid-template-columns: minmax(0, 1fr) 380px;
   gap: 28px;
   align-items: start;
+  width: 100%;
 }
 
 @media (max-width: 1100px) {
   .add-prod-grid {
     grid-template-columns: 1fr;
+  }
+  .add-prod-preview-card {
+    position: static !important;
+    top: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
   }
 }
 
@@ -33,6 +43,8 @@
   display: flex;
   flex-direction: column;
   gap: 28px;
+  min-width: 0;
+  position: relative;
 }
 
 .add-prod-section {
@@ -436,12 +448,23 @@
   color: #0f172a;
 }
 
-/* Form Action Buttons */
+/* Form Action Buttons - Sticky at bottom of form so Save/Cancel is always visible while scrolling */
 .add-prod-actions {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-top: 10px;
+  position: sticky;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 16px 28px;
+  margin: 12px -28px -28px -28px;
+  border-top: 1px solid #e2e8f0;
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
+  z-index: 30;
 }
 
 .add-prod-submit-btn {
@@ -491,10 +514,22 @@
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   position: sticky;
-  top: 90px;
+  top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.add-prod-preview-card::-webkit-scrollbar {
+  width: 5px;
+}
+
+.add-prod-preview-card::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
 }
 
 .add-prod-preview-header {
@@ -985,6 +1020,10 @@
     flex-direction: column-reverse;
     gap: 10px;
     width: 100%;
+    margin: 12px -12px -16px -12px;
+    padding: 12px 16px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
   }
 
   .add-prod-submit-btn,

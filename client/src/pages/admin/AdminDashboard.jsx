@@ -5,7 +5,7 @@ import {
   Menu, X, CreditCard, ShieldCheck, ShieldAlert, Globe, AlertTriangle, Save, Eye, EyeOff, Lock, CheckCircle2,
   UploadCloud, Link as LinkIcon, Play, FileVideo, Film, Store,
   Image as ImageIcon, ArrowUp, ArrowDown, Sparkles, Tag, Flame,
-  FileText, ExternalLink, AlertCircle, Search
+  FileText, ExternalLink, AlertCircle, Search, Mail, Download
 } from 'lucide-react';
 import api, { authSessions } from '../../utils/api';
 import { getCurrentAdmin } from '../../utils/storage';
@@ -191,6 +191,20 @@ export default function AdminDashboard({ onLogout }) {
   const [customerPage, setCustomerPage] = useState(1);
   const [customerPageSize, setCustomerPageSize] = useState(10);
 
+  /* Customer sub-tabs: 'registered' | 'subscribers' | 'enquiries' */
+  const [customerSubTab, setCustomerSubTab] = useState('registered');
+  const [newsletterSubscribers, setNewsletterSubscribers] = useState([]);
+  const [loadingSubscribers, setLoadingSubscribers] = useState(false);
+  const [subscriberSearch, setSubscriberSearch] = useState('');
+  const [subscriberPage, setSubscriberPage] = useState(1);
+  const [subscriberPageSize, setSubscriberPageSize] = useState(10);
+
+  const [bulkEnquiries, setBulkEnquiries] = useState([]);
+  const [loadingEnquiries, setLoadingEnquiries] = useState(false);
+  const [enquirySearch, setEnquirySearch] = useState('');
+  const [enquiryPage, setEnquiryPage] = useState(1);
+  const [enquiryPageSize, setEnquiryPageSize] = useState(10);
+
   /* Videos filters and pagination */
   const [videoSearch, setVideoSearch] = useState('');
   const [videoPage, setVideoPage] = useState(1);
@@ -297,7 +311,7 @@ export default function AdminDashboard({ onLogout }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [attempt, activeTab, onLogout]);
+  }, [attempt, onLogout]);
 
   /* Fetch Payment Config when Payment Gateway tab is active */
   useEffect(() => {
@@ -520,6 +534,78 @@ export default function AdminDashboard({ onLogout }) {
     } finally {
       setCustomerBlockLoading(false);
     }
+  };
+
+  /* Newsletter Subscribers & Bulk Enquiries Handlers */
+  const fetchSubscribers = async () => {
+    setLoadingSubscribers(true);
+    try {
+      const res = await api.getAdminNewsletterSubscribers();
+      if (res?.success) {
+        setNewsletterSubscribers(res.subscribers || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch newsletter subscribers:', err);
+    } finally {
+      setLoadingSubscribers(false);
+    }
+  };
+
+  const fetchEnquiries = async () => {
+    setLoadingEnquiries(true);
+    try {
+      const res = await api.getAdminBulkEnquiries();
+      if (res?.success) {
+        setBulkEnquiries(res.enquiries || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch bulk enquiries:', err);
+    } finally {
+      setLoadingEnquiries(false);
+    }
+  };
+
+  const exportSubscribersCSV = () => {
+    if (!newsletterSubscribers.length) return;
+    const headers = ['ID', 'Email', 'Status', 'Subscribed Date'];
+    const rows = newsletterSubscribers.map((s) => [
+      s.id,
+      `"${(s.email || '').replace(/"/g, '""')}"`,
+      `"${s.status || 'subscribed'}"`,
+      `"${s.created_at ? new Date(s.created_at).toLocaleString() : ''}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `newsletter_subscribers_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportEnquiriesCSV = () => {
+    if (!bulkEnquiries.length) return;
+    const headers = ['ID', 'Date', 'Name', 'Email', 'Phone', 'Product / Category', 'Quantity', 'Status', 'Message'];
+    const rows = bulkEnquiries.map((e) => [
+      e.id,
+      `"${e.created_at ? new Date(e.created_at).toLocaleString() : ''}"`,
+      `"${(e.name || '').replace(/"/g, '""')}"`,
+      `"${(e.email || '').replace(/"/g, '""')}"`,
+      `"${(e.phone || '').replace(/"/g, '""')}"`,
+      `"${(e.product || '').replace(/"/g, '""')}"`,
+      e.quantity || 1,
+      `"${e.status || 'pending'}"`,
+      `"${(e.message || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `bulk_order_enquiries_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   /* Coupons Action Handlers */
@@ -1408,6 +1494,33 @@ export default function AdminDashboard({ onLogout }) {
   const paginatedUsers = filteredUsers.slice(
     (customerPage - 1) * customerPageSize,
     customerPage * customerPageSize
+  );
+
+  // Newsletter Subscribers
+  const filteredSubscribers = newsletterSubscribers.filter((s) => {
+    const query = subscriberSearch.toLowerCase();
+    return !subscriberSearch || (s.email || '').toLowerCase().includes(query);
+  });
+
+  const paginatedSubscribers = filteredSubscribers.slice(
+    (subscriberPage - 1) * subscriberPageSize,
+    subscriberPage * subscriberPageSize
+  );
+
+  // Bulk Order Enquiries
+  const filteredEnquiries = bulkEnquiries.filter((e) => {
+    const query = enquirySearch.toLowerCase();
+    return !enquirySearch ||
+      (e.name || '').toLowerCase().includes(query) ||
+      (e.email || '').toLowerCase().includes(query) ||
+      (e.phone || '').toLowerCase().includes(query) ||
+      (e.product || '').toLowerCase().includes(query) ||
+      (e.message || '').toLowerCase().includes(query);
+  });
+
+  const paginatedEnquiries = filteredEnquiries.slice(
+    (enquiryPage - 1) * enquiryPageSize,
+    enquiryPage * enquiryPageSize
   );
 
   // Videos
@@ -2826,15 +2939,14 @@ export default function AdminDashboard({ onLogout }) {
             {/* ---------------- HOMEPAGE BANNERS TAB ---------------- */}
             {activeTab === 'banners' && (
               <div className="admin-banners-section">
-                <div className="vendors-header">
+                <div className="vendors-header admin-products-header">
                   <div>
                     <h2>Homepage Promotional Banners</h2>
                     <p>Manage dynamic campaign hero banners displayed on the customer storefront carousel</p>
                   </div>
                   <button
                     type="button"
-                    className="admin-sidebar-add-btn"
-                    style={{ background: '#0e5c4a', color: 'white', borderRadius: 8, padding: '10px 18px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    className="admin-add-product-main-btn"
                     onClick={handleOpenAddBanner}
                   >
                     <Plus size={16} /> Add New Banner
@@ -3051,15 +3163,14 @@ export default function AdminDashboard({ onLogout }) {
             {/* ---------------- 5. COUPONS TAB ---------------- */}
             {activeTab === 'coupons' && (
               <div className="admin-vendors-section">
-                <div className="vendors-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="vendors-header admin-products-header">
                   <div>
                     <h2>Promotional Coupons Engine</h2>
                     <p>Create and manage discount codes, percentage cuts, minimum order values, and usage caps</p>
                   </div>
                   <button
                     type="button"
-                    className="admin-sidebar-add-btn"
-                    style={{ background: '#0e5c4a', color: 'white', borderRadius: 8, padding: '10px 18px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    className="admin-add-product-main-btn"
                     onClick={handleOpenAddCoupon}
                   >
                     <Plus size={16} /> Create New Coupon
@@ -3172,15 +3283,14 @@ export default function AdminDashboard({ onLogout }) {
             {/* ---------------- 6. DEALS OF THE DAY TAB ---------------- */}
             {activeTab === 'deals' && (
               <div className="admin-vendors-section">
-                <div className="vendors-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="vendors-header admin-products-header">
                   <div>
-                    <h2>Deals of the Day & Flash Sales</h2>
+                    <h2>Deals of the Day &amp; Flash Sales</h2>
                     <p>Highlight timed promotions, countdown-driven discounts, and inventory caps</p>
                   </div>
                   <button
                     type="button"
-                    className="admin-sidebar-add-btn"
-                    style={{ background: '#0e5c4a', color: 'white', borderRadius: 8, padding: '10px 18px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    className="admin-add-product-main-btn"
                     onClick={handleOpenAddDeal}
                   >
                     <Plus size={16} /> Create New Deal
@@ -3508,9 +3618,84 @@ export default function AdminDashboard({ onLogout }) {
             {/* ---------------- 8. CUSTOMERS TAB ---------------- */}
             {activeTab === 'customers' && (
               <div className="admin-vendors-section">
-                <div className="vendors-header">
-                  <h2>Registered customers</h2>
-                  <p>Accounts from the users table — customer credentials and passwords are never displayed</p>
+                <div className="vendors-header" style={{ marginBottom: 16 }}>
+                  <h2>Customer Audience & Inquiries</h2>
+                  <p>Registered customer accounts, newsletter subscribers, and wholesale bulk order inquiries</p>
+                </div>
+
+                {/* Customer Sub-tab Switcher */}
+                <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerSubTab('registered')}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      border: '1px solid',
+                      borderColor: customerSubTab === 'registered' ? '#07502a' : '#cbd5e1',
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: customerSubTab === 'registered' ? '#07502a' : '#ffffff',
+                      color: customerSubTab === 'registered' ? '#ffffff' : '#334155',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <UsersIcon size={15} /> Registered Accounts ({state.users.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomerSubTab('subscribers');
+                      if (newsletterSubscribers.length === 0) fetchSubscribers();
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      border: '1px solid',
+                      borderColor: customerSubTab === 'subscribers' ? '#07502a' : '#cbd5e1',
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: customerSubTab === 'subscribers' ? '#07502a' : '#ffffff',
+                      color: customerSubTab === 'subscribers' ? '#ffffff' : '#334155',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Mail size={15} /> Newsletter Subscribers {newsletterSubscribers.length > 0 ? `(${newsletterSubscribers.length})` : ''}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomerSubTab('enquiries');
+                      if (bulkEnquiries.length === 0) fetchEnquiries();
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      border: '1px solid',
+                      borderColor: customerSubTab === 'enquiries' ? '#07502a' : '#cbd5e1',
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: customerSubTab === 'enquiries' ? '#07502a' : '#ffffff',
+                      color: customerSubTab === 'enquiries' ? '#ffffff' : '#334155',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <FileText size={15} /> Bulk Order Enquiries {bulkEnquiries.length > 0 ? `(${bulkEnquiries.length})` : ''}
+                  </button>
                 </div>
 
                 {customerActionMsg.text && (
@@ -3520,111 +3705,329 @@ export default function AdminDashboard({ onLogout }) {
                   </div>
                 )}
 
-                <div className="admin-filter-bar">
-                  <input
-                    type="text"
-                    className="admin-filter-input"
-                    placeholder="Search customers by name, email, phone..."
-                    value={customerSearch}
-                    onChange={(e) => { setCustomerSearch(e.target.value); setCustomerPage(1); }}
-                  />
-                </div>
+                {/* Subtab 1: Registered Accounts */}
+                {customerSubTab === 'registered' && (
+                  <>
+                    <div className="admin-filter-bar">
+                      <input
+                        type="text"
+                        className="admin-filter-input"
+                        placeholder="Search customers by name, email, phone..."
+                        value={customerSearch}
+                        onChange={(e) => { setCustomerSearch(e.target.value); setCustomerPage(1); }}
+                      />
+                    </div>
 
-                <div className="vendors-table-container">
-                  <table className="vendors-table">
-                    <thead>
-                      <tr><th>Name</th><th>Email</th><th>Phone</th><th>Registered on</th><th>Status</th><th>Actions</th></tr>
-                    </thead>
-                    <tbody>
-                      {paginatedUsers.map((c) => {
-                        const isDeactivated = c.status === 'deactivated';
-                        const isBlocked = c.status === 'blocked';
-                        return (
-                          <tr key={c.id}>
-                            <td><strong>{c.name}</strong></td>
-                            <td>{c.email}</td>
-                            <td>{c.phone || '—'}</td>
-                            <td style={{ fontSize: '13px', color: '#64748b' }}>
-                              {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
-                            </td>
-                            <td>
-                              {isBlocked ? (
-                                <span className="status-badge" style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', fontWeight: 700 }}>
-                                  BLOCKED
-                                </span>
-                              ) : isDeactivated ? (
-                                <span className="status-badge" style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }}>
-                                  DEACTIVATED
-                                </span>
-                              ) : (
-                                <span className="status-badge status-approved">
-                                  ACTIVE
-                                </span>
-                              )}
-                            </td>
-                            <td>
-                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                {isBlocked ? (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary-sm"
-                                    style={{ fontSize: 12, padding: '4px 10px', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', fontWeight: 600 }}
-                                    onClick={() => handleToggleCustomerStatus(c, 'active')}
-                                    title="Unblock customer account"
-                                  >
-                                    Unblock
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary-sm"
-                                    style={{ fontSize: 12, padding: '4px 8px', color: '#b91c1c', borderColor: '#fca5a5', background: '#fff' }}
-                                    onClick={() => setCustomerToBlock(c)}
-                                    title="Block customer account"
-                                  >
-                                    <ShieldAlert size={12} style={{ marginRight: 3, verticalAlign: 'middle' }} />
-                                    Block
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className="btn-secondary-sm"
-                                  style={{ fontSize: 12, padding: '4px 8px' }}
-                                  onClick={() => handleToggleCustomerStatus(c, isDeactivated ? 'active' : 'deactivated')}
-                                  title={isDeactivated ? 'Reactivate customer account' : 'Deactivate customer account'}
-                                >
-                                  {isDeactivated ? 'Reactivate' : 'Deactivate'}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="reject-btn"
-                                  style={{ padding: '4px 8px', fontSize: 12 }}
-                                  onClick={() => setCustomerToDelete(c)}
-                                  title="Delete or de-anonymize customer"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            </td>
+                    <div className="vendors-table-container">
+                      <table className="vendors-table">
+                        <thead>
+                          <tr><th>Name</th><th>Email</th><th>Phone</th><th>Registered on</th><th>Status</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                          {paginatedUsers.map((c) => {
+                            const isDeactivated = c.status === 'deactivated';
+                            const isBlocked = c.status === 'blocked';
+                            return (
+                              <tr key={c.id}>
+                                <td><strong>{c.name}</strong></td>
+                                <td>{c.email}</td>
+                                <td>{c.phone || '—'}</td>
+                                <td style={{ fontSize: '13px', color: '#64748b' }}>
+                                  {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
+                                </td>
+                                <td>
+                                  {isBlocked ? (
+                                    <span className="status-badge" style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', fontWeight: 700 }}>
+                                      BLOCKED
+                                    </span>
+                                  ) : isDeactivated ? (
+                                    <span className="status-badge" style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }}>
+                                      DEACTIVATED
+                                    </span>
+                                  ) : (
+                                    <span className="status-badge status-approved">
+                                      ACTIVE
+                                    </span>
+                                  )}
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                    {isBlocked ? (
+                                      <button
+                                        type="button"
+                                        className="btn-secondary-sm"
+                                        style={{ fontSize: 12, padding: '4px 10px', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', fontWeight: 600 }}
+                                        onClick={() => handleToggleCustomerStatus(c, 'active')}
+                                        title="Unblock customer account"
+                                      >
+                                        Unblock
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="btn-secondary-sm"
+                                        style={{ fontSize: 12, padding: '4px 8px', color: '#b91c1c', borderColor: '#fca5a5', background: '#fff' }}
+                                        onClick={() => setCustomerToBlock(c)}
+                                        title="Block customer account"
+                                      >
+                                        <ShieldAlert size={12} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                                        Block
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="btn-secondary-sm"
+                                      style={{ fontSize: 12, padding: '4px 8px' }}
+                                      onClick={() => handleToggleCustomerStatus(c, isDeactivated ? 'active' : 'deactivated')}
+                                      title={isDeactivated ? 'Reactivate customer account' : 'Deactivate customer account'}
+                                    >
+                                      {isDeactivated ? 'Reactivate' : 'Deactivate'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="reject-btn"
+                                      style={{ padding: '4px 8px', fontSize: 12 }}
+                                      onClick={() => setCustomerToDelete(c)}
+                                      title="Delete or de-anonymize customer"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {filteredUsers.length === 0 && (
+                            <tr><td colSpan="6" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No customer accounts match your search.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <Pagination
+                      currentPage={customerPage}
+                      totalPages={Math.ceil(filteredUsers.length / customerPageSize) || 1}
+                      onPageChange={setCustomerPage}
+                      totalItems={filteredUsers.length}
+                      pageSize={customerPageSize}
+                      onPageSizeChange={(sz) => { setCustomerPageSize(sz); setCustomerPage(1); }}
+                      pageSizeOptions={[10, 25, 50]}
+                    />
+                  </>
+                )}
+
+                {/* Subtab 2: Newsletter Subscribers */}
+                {customerSubTab === 'subscribers' && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                      <div className="admin-filter-bar" style={{ margin: 0, flex: '1 1 300px' }}>
+                        <input
+                          type="text"
+                          className="admin-filter-input"
+                          placeholder="Search subscribers by email address..."
+                          value={subscriberSearch}
+                          onChange={(e) => { setSubscriberSearch(e.target.value); setSubscriberPage(1); }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary-sm"
+                          onClick={fetchSubscribers}
+                          disabled={loadingSubscribers}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: 13 }}
+                          title="Refresh subscribers"
+                        >
+                          <RefreshCw size={14} className={loadingSubscribers ? 'animate-spin' : ''} />
+                          Refresh
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-add-product-main-btn"
+                          onClick={exportSubscribersCSV}
+                          disabled={!newsletterSubscribers.length}
+                          style={{ margin: 0, padding: '7px 14px', fontSize: 13, gap: 6 }}
+                          title="Export subscribers as CSV"
+                        >
+                          <Download size={14} />
+                          Export CSV ({newsletterSubscribers.length})
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="vendors-table-container">
+                      <table className="vendors-table">
+                        <thead>
+                          <tr>
+                            <th>Subscriber Email</th>
+                            <th>Status</th>
+                            <th>Subscribed Date</th>
                           </tr>
-                        );
-                      })}
-                      {filteredUsers.length === 0 && (
-                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '25px', color: '#64748b' }}>No customer accounts match your search.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody>
+                          {loadingSubscribers ? (
+                            <tr>
+                              <td colSpan="3" style={{ textAlign: 'center', padding: '35px', color: '#64748b' }}>
+                                <Loader2 size={22} className="animate-spin" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8 }} />
+                                Loading newsletter subscribers from database...
+                              </td>
+                            </tr>
+                          ) : paginatedSubscribers.map((s) => (
+                            <tr key={s.id}>
+                              <td>
+                                <strong style={{ color: '#0f172a' }}>{s.email}</strong>
+                              </td>
+                              <td>
+                                <span className="status-badge status-approved" style={{ fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
+                                  {s.status ? s.status.toUpperCase() : 'SUBSCRIBED'}
+                                </span>
+                              </td>
+                              <td style={{ fontSize: 13, color: '#64748b' }}>
+                                {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                          {!loadingSubscribers && filteredSubscribers.length === 0 && (
+                            <tr>
+                              <td colSpan="3" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                                No newsletter subscribers found {subscriberSearch ? 'matching your search' : 'yet'}.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
 
-                <Pagination
-                  currentPage={customerPage}
-                  totalPages={Math.ceil(filteredUsers.length / customerPageSize) || 1}
-                  onPageChange={setCustomerPage}
-                  totalItems={filteredUsers.length}
-                  pageSize={customerPageSize}
-                  onPageSizeChange={(sz) => { setCustomerPageSize(sz); setCustomerPage(1); }}
-                  pageSizeOptions={[10, 25, 50]}
-                />
+                    <Pagination
+                      currentPage={subscriberPage}
+                      totalPages={Math.ceil(filteredSubscribers.length / subscriberPageSize) || 1}
+                      onPageChange={setSubscriberPage}
+                      totalItems={filteredSubscribers.length}
+                      pageSize={subscriberPageSize}
+                      onPageSizeChange={(sz) => { setSubscriberPageSize(sz); setSubscriberPage(1); }}
+                      pageSizeOptions={[10, 25, 50]}
+                    />
+                  </>
+                )}
+
+                {/* Subtab 3: Bulk Order Enquiries */}
+                {customerSubTab === 'enquiries' && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                      <div className="admin-filter-bar" style={{ margin: 0, flex: '1 1 300px' }}>
+                        <input
+                          type="text"
+                          className="admin-filter-input"
+                          placeholder="Search enquiries by name, email, phone, product..."
+                          value={enquirySearch}
+                          onChange={(e) => { setEnquirySearch(e.target.value); setEnquiryPage(1); }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary-sm"
+                          onClick={fetchEnquiries}
+                          disabled={loadingEnquiries}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: 13 }}
+                          title="Refresh enquiries"
+                        >
+                          <RefreshCw size={14} className={loadingEnquiries ? 'animate-spin' : ''} />
+                          Refresh
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-add-product-main-btn"
+                          onClick={exportEnquiriesCSV}
+                          disabled={!bulkEnquiries.length}
+                          style={{ margin: 0, padding: '7px 14px', fontSize: 13, gap: 6 }}
+                          title="Export enquiries as CSV"
+                        >
+                          <Download size={14} />
+                          Export CSV ({bulkEnquiries.length})
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="vendors-table-container">
+                      <table className="vendors-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Contact Person</th>
+                            <th>Product / Category</th>
+                            <th>Qty</th>
+                            <th>Status</th>
+                            <th>Message & Details</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {loadingEnquiries ? (
+                            <tr>
+                              <td colSpan="6" style={{ textAlign: 'center', padding: '35px', color: '#64748b' }}>
+                                <Loader2 size={22} className="animate-spin" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8 }} />
+                                Loading bulk enquiries from database...
+                              </td>
+                            </tr>
+                          ) : paginatedEnquiries.map((e) => (
+                            <tr key={e.id}>
+                              <td style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
+                                {e.created_at ? new Date(e.created_at).toLocaleDateString() : '—'}<br />
+                                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                                  {e.created_at ? new Date(e.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                </span>
+                              </td>
+                              <td>
+                                <strong style={{ color: '#0f172a' }}>{e.name}</strong>
+                                <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>
+                                  <a href={`mailto:${e.email}`} style={{ color: '#0369a1', textDecoration: 'none' }}>{e.email}</a>
+                                </div>
+                                <div style={{ fontSize: 12, color: '#64748b' }}>
+                                  <a href={`tel:${e.phone}`} style={{ color: '#475569', textDecoration: 'none' }}>{e.phone}</a>
+                                </div>
+                              </td>
+                              <td>
+                                <strong style={{ color: '#07502a' }}>{e.product || 'General / Unspecified'}</strong>
+                              </td>
+                              <td>
+                                <span style={{ display: 'inline-block', padding: '2px 8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, fontWeight: 700, fontSize: 13 }}>
+                                  {e.quantity || 1} units
+                                </span>
+                              </td>
+                              <td>
+                                <span className={`status-badge ${e.status === 'completed' ? 'status-approved' : 'status-pending'}`} style={{ fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
+                                  {(e.status || 'pending').toUpperCase()}
+                                </span>
+                              </td>
+                              <td style={{ maxWidth: 280 }}>
+                                <p style={{ margin: 0, fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                                  {e.message}
+                                </p>
+                              </td>
+                            </tr>
+                          ))}
+                          {!loadingEnquiries && filteredEnquiries.length === 0 && (
+                            <tr>
+                              <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                                No bulk order enquiries found {enquirySearch ? 'matching your search' : 'yet'}.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <Pagination
+                      currentPage={enquiryPage}
+                      totalPages={Math.ceil(filteredEnquiries.length / enquiryPageSize) || 1}
+                      onPageChange={setEnquiryPage}
+                      totalItems={filteredEnquiries.length}
+                      pageSize={enquiryPageSize}
+                      onPageSizeChange={(sz) => { setEnquiryPageSize(sz); setEnquiryPage(1); }}
+                      pageSizeOptions={[10, 25, 50]}
+                    />
+                  </>
+                )}
               </div>
             )}
 

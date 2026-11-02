@@ -136,7 +136,9 @@ import {
   sendPaymentStatusEmail,
   sendOrderFulfillmentStatusEmail,
   sendOrderCancellationEmail,
-  sendVendorAccountStatusEmail
+  sendVendorAccountStatusEmail,
+  sendBulkOrderEnquiryNotification,
+  sendNewsletterWelcomeEmail
 } from './services/emailService.js';
 
 export {
@@ -2081,6 +2083,167 @@ app.put('/api/vendor/profile', requireAuth('vendor'), async (req, res) => {
   }
 });
 
+// Vendor self-service: Get Delivery Charges & Shipping Configuration
+app.get('/api/vendor/delivery-charges', requireAuth('vendor'), async (req, res) => {
+  const vendorId = req.auth.sub || req.auth.vendorId || req.auth.id;
+  try {
+    const [rows] = await pool.query(
+      'SELECT id, name, business_name, shipping_charge, shipping_free_threshold, shipping_enabled, shipping_estimated_days FROM vendors WHERE id = ?',
+      [vendorId]
+    );
+    if (rows.length === 0) return res.status(404).json({ success: false, error: 'Vendor not found' });
+    const v = rows[0];
+    return res.status(200).json({
+      success: true,
+      delivery: {
+        shippingEnabled: v.shipping_enabled !== 0,
+        shippingCharge: v.shipping_charge != null ? Number(v.shipping_charge) : 0,
+        shippingFreeThreshold: v.shipping_free_threshold != null ? Number(v.shipping_free_threshold) : null,
+        shippingEstimatedDays: v.shipping_estimated_days || '3–5 business days'
+      }
+    });
+  } catch (err) {
+    console.error('Get vendor delivery charges error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to load delivery charges' });
+  }
+});
+
+// Vendor self-service: Update Delivery Charges
+app.put('/api/vendor/delivery-charges', requireAuth('vendor'), async (req, res) => {
+  const vendorId = req.auth.sub || req.auth.vendorId || req.auth.id;
+  const { shippingCharge, shippingFreeThreshold, shippingEnabled, shippingEstimatedDays } = req.body || {};
+
+  const parsedShippingCharge = shippingCharge !== undefined && shippingCharge !== '' && shippingCharge !== null
+    ? Math.max(0, Number(shippingCharge) || 0)
+    : null;
+  const parsedShippingFree = shippingFreeThreshold !== undefined && shippingFreeThreshold !== '' && shippingFreeThreshold !== null
+    ? Math.max(0, Number(shippingFreeThreshold) || 0)
+    : null;
+  const parsedShippingEnabled = shippingEnabled !== undefined ? (shippingEnabled ? 1 : 0) : null;
+  const days = shippingEstimatedDays !== undefined ? String(shippingEstimatedDays).trim() : null;
+
+  try {
+    await pool.query(
+      `UPDATE vendors
+       SET shipping_charge = COALESCE(?, shipping_charge),
+           shipping_free_threshold = ?,
+           shipping_enabled = COALESCE(?, shipping_enabled),
+           shipping_estimated_days = COALESCE(?, shipping_estimated_days)
+       WHERE id = ?`,
+      [parsedShippingCharge, parsedShippingFree, parsedShippingEnabled, days, vendorId]
+    );
+    const [rows] = await pool.query(
+      'SELECT shipping_charge, shipping_free_threshold, shipping_enabled, shipping_estimated_days FROM vendors WHERE id = ?',
+      [vendorId]
+    );
+    const v = rows[0];
+    return res.status(200).json({
+      success: true,
+      message: 'Delivery charges updated successfully!',
+      delivery: {
+        shippingEnabled: v.shipping_enabled !== 0,
+        shippingCharge: v.shipping_charge != null ? Number(v.shipping_charge) : 0,
+        shippingFreeThreshold: v.shipping_free_threshold != null ? Number(v.shipping_free_threshold) : null,
+        shippingEstimatedDays: v.shipping_estimated_days || '3–5 business days'
+      }
+    });
+  } catch (err) {
+    console.error('Update vendor delivery charges error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to update delivery charges' });
+  }
+});
+
+// Vendor self-service: Store Settings
+app.get('/api/vendor/settings', requireAuth('vendor'), async (req, res) => {
+  const vendorId = req.auth.sub || req.auth.vendorId || req.auth.id;
+  try {
+    const [rows] = await pool.query(
+      'SELECT id, name, email, phone, status, direct_selling, created_at FROM vendors WHERE id = ?',
+      [vendorId]
+    );
+    if (rows.length === 0) return res.status(404).json({ success: false, error: 'Vendor not found' });
+    const v = rows[0];
+    return res.status(200).json({
+      success: true,
+      settings: {
+        storeOpen: v.status === 'approved',
+        status: v.status,
+        directSelling: Boolean(v.direct_selling),
+        emailAlerts: true,
+        lowStockThreshold: 10
+      }
+    });
+  } catch (err) {
+    console.error('Get vendor settings error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to load vendor settings' });
+  }
+});
+
+app.put('/api/vendor/settings', requireAuth('vendor'), async (req, res) => {
+  const vendorId = req.auth.sub || req.auth.vendorId || req.auth.id;
+  const { storeOpen, lowStockThreshold, emailAlerts } = req.body || {};
+  try {
+    return res.status(200).json({
+      success: true,
+      message: 'Store settings updated successfully!',
+      settings: {
+        storeOpen: storeOpen !== undefined ? Boolean(storeOpen) : true,
+        lowStockThreshold: Number(lowStockThreshold) || 10,
+        emailAlerts: emailAlerts !== undefined ? Boolean(emailAlerts) : true
+      }
+    });
+  } catch (err) {
+    console.error('Update vendor settings error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to update vendor settings' });
+  }
+});
+
+// Vendor self-service: Change Password
+app.put('/api/vendor/change-password', requireAuth('vendor'), async (req, res) => {
+  const vendorId = req.auth.sub || req.auth.vendorId || req.auth.id;
+  const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+  if (!currentPassword) {
+    return res.status(400).json({ success: false, error: 'Current password is required' });
+  }
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ success: false, error: 'New password must be at least 8 characters long' });
+  }
+  if (confirmPassword && newPassword !== confirmPassword) {
+    return res.status(400).json({ success: false, error: 'New password and confirmation do not match' });
+  }
+
+  try {
+    const [rows] = await pool.query('SELECT id, password, password_hash FROM vendors WHERE id = ?', [vendorId]);
+    if (rows.length === 0) return res.status(404).json({ success: false, error: 'Vendor account not found' });
+    const vendor = rows[0];
+
+    let authenticated = false;
+    if (vendor.password_hash) {
+      authenticated = await verifyHash(currentPassword, vendor.password_hash);
+    }
+    if (!authenticated && vendor.password) {
+      if (isHashed(vendor.password)) {
+        authenticated = await verifyHash(currentPassword, vendor.password);
+      } else if (timingSafeEqualStrings(currentPassword, vendor.password)) {
+        authenticated = true;
+      }
+    }
+
+    if (!authenticated) {
+      return res.status(401).json({ success: false, error: 'Current password entered is incorrect' });
+    }
+
+    const newHash = await hashPassword(newPassword);
+    await pool.query('UPDATE vendors SET password_hash = ?, password = "" WHERE id = ?', [newHash, vendorId]);
+    console.log(`✅ [TiDB] Vendor ${vendorId} updated password successfully`);
+    return res.status(200).json({ success: true, message: 'Password updated successfully! Please use your new password next time you log in.' });
+  } catch (err) {
+    console.error('Vendor change password error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to update password right now' });
+  }
+});
+
 // Approve / reject / request corrections / deactivate a vendor (admin)
 const handleVendorStatusUpdate = async (req, res) => {
   const { id } = req.params;
@@ -3175,9 +3338,31 @@ const fetchOrderItems = async (orderId) => {
 };
 
 const hydrateOrders = async (orders, vendorId, vendorName) => {
-  const hydrated = [];
-  for (const order of orders) {
-    const items = await fetchOrderItems(order.id);
+  if (!orders || orders.length === 0) return [];
+
+  const orderIds = orders.map((o) => o.id).filter(Boolean);
+  const itemsByOrderId = new Map();
+
+  if (orderIds.length > 0) {
+    const [allRows] = await pool.query(
+      `SELECT order_id, product_id AS id, product_id AS productId, vendor_id AS vendorId, vendor_name AS vendorName,
+              title, price, quantity, image, variant,
+              commission_rate AS commissionRate, commission_amount AS commissionAmount, vendor_payout AS vendorPayout
+       FROM order_items WHERE order_id IN (?)`,
+      [orderIds]
+    );
+
+    for (const item of allRows) {
+      const oId = String(item.order_id);
+      if (!itemsByOrderId.has(oId)) {
+        itemsByOrderId.set(oId, []);
+      }
+      itemsByOrderId.get(oId).push(item);
+    }
+  }
+
+  const hydrated = orders.map((order) => {
+    const items = itemsByOrderId.get(String(order.id)) || [];
     const decorated = {
       ...order,
       shippingAddress: parseShippingAddress(order.shippingAddress),
@@ -3191,8 +3376,9 @@ const hydrateOrders = async (orders, vendorId, vendorName) => {
         return Boolean(name && target && (name.includes(target) || target.includes(name)));
       });
     }
-    hydrated.push(decorated);
-  }
+    return decorated;
+  });
+
   return hydrated;
 };
 
@@ -5340,24 +5526,30 @@ app.post('/api/vendor/coupons', requireAuth('vendor'), async (req, res) => {
     code,
     title,
     description,
+    type: reqType,
     discountType,
     discount_type,
+    value: reqValue,
     discountValue,
     discount_value,
+    maxDiscount,
     maxDiscountAmount,
     max_discount_amount,
+    minOrder,
     minOrderAmount,
     min_order_amount,
     applicableTo,
     applicable_to,
     productIds,
     product_ids,
+    selectedProducts,
     perCustomerLimit,
     per_customer_limit,
     usageLimit,
     usage_limit,
     startDate,
     start_date,
+    expiryDate,
     endDate,
     end_date,
     isActive,
@@ -5365,8 +5557,9 @@ app.post('/api/vendor/coupons', requireAuth('vendor'), async (req, res) => {
   } = req.body || {};
 
   const cleanCode = String(code || '').trim().toUpperCase();
-  const type = String(discountType || discount_type || 'percent').toLowerCase();
-  const val = Number(discountValue !== undefined ? discountValue : discount_value) || 0;
+  const type = String(discountType || discount_type || reqType || 'percent').toLowerCase();
+  const rawVal = discountValue !== undefined ? discountValue : (discount_value !== undefined ? discount_value : (reqValue !== undefined ? reqValue : 0));
+  const val = Number(rawVal) || 0;
 
   if (!cleanCode || cleanCode.length < 3) {
     return res.status(400).json({ success: false, error: 'Coupon code must be at least 3 characters long' });
@@ -5374,12 +5567,16 @@ app.post('/api/vendor/coupons', requireAuth('vendor'), async (req, res) => {
   if (!['percent', 'flat', 'shipping'].includes(type)) {
     return res.status(400).json({ success: false, error: 'Discount type must be percent, flat, or shipping' });
   }
-  if (type !== 'shipping' && val <= 0) {
+  if (type === 'percent' && (val <= 0 || val > 100)) {
+    return res.status(400).json({ success: false, error: 'Percentage discount value must be greater than zero and at most 100%' });
+  }
+  if (type === 'flat' && val <= 0) {
     return res.status(400).json({ success: false, error: 'Discount value must be greater than zero' });
   }
 
-  const appTo = (applicableTo || applicable_to) === 'specific' ? 'specific' : 'all';
-  const targetIds = Array.isArray(productIds || product_ids) ? (productIds || product_ids) : [];
+  const rawAppTo = applicableTo || applicable_to;
+  const appTo = (rawAppTo === 'specific' || rawAppTo === 'selected') ? 'specific' : 'all';
+  const targetIds = Array.isArray(productIds || product_ids || selectedProducts) ? (productIds || product_ids || selectedProducts) : [];
 
   // Security enforcement: If vendor selects specific products, verify they belong to this vendor
   if (appTo === 'specific') {
@@ -5396,22 +5593,20 @@ app.post('/api/vendor/coupons', requireAuth('vendor'), async (req, res) => {
   }
 
   const couponTitle = String(title || description || '').trim();
-  const maxDisc = (maxDiscountAmount !== undefined || max_discount_amount !== undefined)
-    ? (Number(maxDiscountAmount || max_discount_amount) || null)
-    : null;
-  const minOrder = (minOrderAmount !== undefined || min_order_amount !== undefined)
-    ? (Number(minOrderAmount || min_order_amount) || 0)
-    : 0;
+  const rawMaxDisc = maxDiscount !== undefined ? maxDiscount : (maxDiscountAmount !== undefined ? maxDiscountAmount : max_discount_amount);
+  const maxDisc = (rawMaxDisc !== undefined && rawMaxDisc !== null && rawMaxDisc !== '') ? (Number(rawMaxDisc) || null) : null;
+  const rawMinOrder = minOrder !== undefined ? minOrder : (minOrderAmount !== undefined ? minOrderAmount : min_order_amount);
+  const minOrderVal = (rawMinOrder !== undefined && rawMinOrder !== null && rawMinOrder !== '') ? (Number(rawMinOrder) || 0) : 0;
   const prodIds = appTo === 'specific' ? JSON.stringify(targetIds) : null;
-  const perCust = parseInt(perCustomerLimit || per_customer_limit, 10) || 1;
-  const limit = (usageLimit !== undefined || usage_limit !== undefined)
-    ? (parseInt(usageLimit || usage_limit, 10) || null)
-    : null;
-  const start = (startDate || start_date) ? new Date(startDate || start_date) : null;
-  const end = (endDate || end_date) ? new Date(endDate || end_date) : null;
-  const active = (isActive !== undefined || is_active !== undefined)
-    ? ((isActive !== undefined ? isActive : is_active) ? 1 : 0)
-    : 1;
+  const perCust = parseInt(perCustomerLimit !== undefined ? perCustomerLimit : per_customer_limit, 10) || 1;
+  const rawLimit = usageLimit !== undefined ? usageLimit : usage_limit;
+  const limit = (rawLimit !== undefined && rawLimit !== null && rawLimit !== '') ? (parseInt(rawLimit, 10) || null) : null;
+  const rawStart = startDate || start_date;
+  const rawEnd = expiryDate || endDate || end_date;
+  const start = rawStart ? new Date(rawStart) : null;
+  const end = rawEnd ? new Date(rawEnd) : null;
+  const rawActive = isActive !== undefined ? isActive : is_active;
+  const active = rawActive !== undefined ? (rawActive ? 1 : 0) : 1;
 
   try {
     const [existing] = await pool.query('SELECT code FROM coupons WHERE UPPER(code) = UPPER(?)', [cleanCode]);
@@ -5423,7 +5618,7 @@ app.post('/api/vendor/coupons', requireAuth('vendor'), async (req, res) => {
       `INSERT INTO coupons
         (code, title, type, value, min_order, max_discount, free_shipping, applicable_to, product_ids, vendor_id, per_customer_limit, usage_limit, is_active, start_date, expiry_date)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [cleanCode, couponTitle, type, val, minOrder, maxDisc, type === 'shipping' ? 1 : 0, appTo, prodIds, vendorId, perCust, limit, active, start, end]
+      [cleanCode, couponTitle, type, val, minOrderVal, maxDisc, type === 'shipping' ? 1 : 0, appTo, prodIds, vendorId, perCust, limit, active, start, end]
     );
 
     const [rows] = await pool.query('SELECT * FROM coupons WHERE UPPER(code) = UPPER(?)', [cleanCode]);
@@ -5444,24 +5639,30 @@ app.put('/api/vendor/coupons/:code', requireAuth('vendor'), async (req, res) => 
   const {
     title,
     description,
+    type: reqType,
     discountType,
     discount_type,
+    value: reqValue,
     discountValue,
     discount_value,
+    maxDiscount,
     maxDiscountAmount,
     max_discount_amount,
+    minOrder,
     minOrderAmount,
     min_order_amount,
     applicableTo,
     applicable_to,
     productIds,
     product_ids,
+    selectedProducts,
     perCustomerLimit,
     per_customer_limit,
     usageLimit,
     usage_limit,
     startDate,
     start_date,
+    expiryDate,
     endDate,
     end_date,
     isActive,
@@ -5478,11 +5679,12 @@ app.put('/api/vendor/coupons/:code', requireAuth('vendor'), async (req, res) => 
     }
 
     const current = existing[0];
-    const appTo = (applicableTo || applicable_to) ? ((applicableTo || applicable_to) === 'specific' ? 'specific' : 'all') : current.applicable_to;
+    const rawAppTo = applicableTo || applicable_to;
+    const appTo = rawAppTo ? ((rawAppTo === 'specific' || rawAppTo === 'selected') ? 'specific' : 'all') : current.applicable_to;
     let prodIds = current.product_ids;
 
     if (appTo === 'specific') {
-      const targetIds = Array.isArray(productIds || product_ids) ? (productIds || product_ids) : [];
+      const targetIds = Array.isArray(productIds || product_ids || selectedProducts) ? (productIds || product_ids || selectedProducts) : [];
       if (targetIds.length > 0) {
         const [ownerRows] = await pool.query(
           'SELECT id FROM products WHERE id IN (?) AND vendor_id = ?',
@@ -5498,15 +5700,30 @@ app.put('/api/vendor/coupons/:code', requireAuth('vendor'), async (req, res) => 
     }
 
     const couponTitle = (title !== undefined || description !== undefined) ? String(title || description || '').trim() : current.title;
-    const type = (discountType || discount_type) ? String(discountType || discount_type).toLowerCase() : current.type;
-    const val = (discountValue !== undefined || discount_value !== undefined) ? Number(discountValue !== undefined ? discountValue : discount_value) : current.value;
-    const maxDisc = (maxDiscountAmount !== undefined || max_discount_amount !== undefined) ? (Number(maxDiscountAmount || max_discount_amount) || null) : current.max_discount;
-    const minOrder = (minOrderAmount !== undefined || min_order_amount !== undefined) ? (Number(minOrderAmount || min_order_amount) || 0) : current.min_order;
-    const perCust = (perCustomerLimit !== undefined || per_customer_limit !== undefined) ? (parseInt(perCustomerLimit || per_customer_limit, 10) || 1) : current.per_customer_limit;
-    const limit = (usageLimit !== undefined || usage_limit !== undefined) ? (parseInt(usageLimit || usage_limit, 10) || null) : current.usage_limit;
-    const start = (startDate !== undefined || start_date !== undefined) ? ((startDate || start_date) ? new Date(startDate || start_date) : null) : current.start_date;
-    const end = (endDate !== undefined || end_date !== undefined) ? ((endDate || end_date) ? new Date(endDate || end_date) : null) : current.expiry_date;
-    const active = (isActive !== undefined || is_active !== undefined) ? ((isActive !== undefined ? isActive : is_active) ? 1 : 0) : current.is_active;
+    const type = (discountType || discount_type || reqType) ? String(discountType || discount_type || reqType).toLowerCase() : current.type;
+    const rawVal = discountValue !== undefined ? discountValue : (discount_value !== undefined ? discount_value : reqValue);
+    const val = rawVal !== undefined ? Number(rawVal) : current.value;
+
+    if (type === 'percent' && (val <= 0 || val > 100)) {
+      return res.status(400).json({ success: false, error: 'Percentage discount value must be greater than zero and at most 100%' });
+    }
+    if (type === 'flat' && val <= 0) {
+      return res.status(400).json({ success: false, error: 'Discount value must be greater than zero' });
+    }
+
+    const rawMaxDisc = maxDiscount !== undefined ? maxDiscount : (maxDiscountAmount !== undefined ? maxDiscountAmount : max_discount_amount);
+    const maxDisc = rawMaxDisc !== undefined ? (rawMaxDisc === '' || rawMaxDisc === null ? null : Number(rawMaxDisc)) : current.max_discount;
+    const rawMinOrder = minOrder !== undefined ? minOrder : (minOrderAmount !== undefined ? minOrderAmount : min_order_amount);
+    const minOrderVal = rawMinOrder !== undefined ? (Number(rawMinOrder) || 0) : current.min_order;
+    const perCust = (perCustomerLimit !== undefined || per_customer_limit !== undefined) ? (parseInt(perCustomerLimit !== undefined ? perCustomerLimit : per_customer_limit, 10) || 1) : current.per_customer_limit;
+    const rawLimit = usageLimit !== undefined ? usageLimit : usage_limit;
+    const limit = rawLimit !== undefined ? (rawLimit === '' || rawLimit === null ? null : parseInt(rawLimit, 10)) : current.usage_limit;
+    const rawStart = startDate !== undefined ? startDate : start_date;
+    const rawEnd = expiryDate !== undefined ? expiryDate : (endDate !== undefined ? endDate : end_date);
+    const start = rawStart !== undefined ? (rawStart ? new Date(rawStart) : null) : current.start_date;
+    const end = rawEnd !== undefined ? (rawEnd ? new Date(rawEnd) : null) : current.expiry_date;
+    const rawActive = isActive !== undefined ? isActive : is_active;
+    const active = rawActive !== undefined ? (rawActive ? 1 : 0) : current.is_active;
 
     await pool.query(
       `UPDATE coupons
@@ -5514,7 +5731,7 @@ app.put('/api/vendor/coupons/:code', requireAuth('vendor'), async (req, res) => 
            applicable_to = ?, product_ids = ?, per_customer_limit = ?, usage_limit = ?, is_active = ?,
            start_date = ?, expiry_date = ?
        WHERE UPPER(code) = UPPER(?) AND vendor_id = ?`,
-      [couponTitle, type, val, minOrder, maxDisc, type === 'shipping' ? 1 : 0, appTo, prodIds, perCust, limit, active, start, end, cleanCode, vendorId]
+      [couponTitle, type, val, minOrderVal, maxDisc, type === 'shipping' ? 1 : 0, appTo, prodIds, perCust, limit, active, start, end, cleanCode, vendorId]
     );
 
     const [updated] = await pool.query('SELECT * FROM coupons WHERE UPPER(code) = UPPER(?)', [cleanCode]);
@@ -6271,6 +6488,144 @@ app.put('/api/admin/payment-config', requireAuth('admin'), async (req, res) => {
 // is handled separately in a later phase.
 app.post('/api/send-welcome', (req, res) => {
   return res.status(410).json({ success: false, error: 'Welcome emails have been discontinued.' });
+});
+
+// ================= BULK ORDER ENQUIRIES =================
+
+// Submit a bulk order enquiry (Public)
+app.post('/api/bulk-enquiry', async (req, res) => {
+  const { name, email, phone, product, quantity, message } = req.body || {};
+
+  const cleanName = typeof name === 'string' ? name.trim() : '';
+  const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const cleanPhone = typeof phone === 'string' ? phone.trim() : '';
+  const cleanProduct = typeof product === 'string' ? product.trim() : '';
+  const cleanQuantity = quantity !== undefined && quantity !== null ? String(quantity).trim() : '';
+  const cleanMessage = typeof message === 'string' ? message.trim() : '';
+
+  if (!cleanName || cleanName.length < 2) {
+    return res.status(400).json({ success: false, error: 'Please provide your full name.' });
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+    return res.status(400).json({ success: false, error: 'Please provide a valid email address.' });
+  }
+  if (!cleanPhone || cleanPhone.length < 7) {
+    return res.status(400).json({ success: false, error: 'Please provide a valid contact phone number.' });
+  }
+  if (!cleanQuantity) {
+    return res.status(400).json({ success: false, error: 'Please specify the estimated quantity needed.' });
+  }
+
+  try {
+    // 2-minute deduplication safeguard against accidental double-clicks or spam
+    const [recent] = await pool.query(
+      'SELECT id FROM bulk_order_enquiries WHERE email = ? AND created_at > NOW() - INTERVAL 2 MINUTE',
+      [cleanEmail]
+    );
+    if (recent.length > 0) {
+      return res.status(429).json({
+        success: false,
+        error: 'A recent enquiry from this email was already received. Our wholesale team will contact you shortly.'
+      });
+    }
+
+    const id = 'enq_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    await pool.query(
+      `INSERT INTO bulk_order_enquiries (id, name, email, phone, product, quantity, message, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [id, cleanName, cleanEmail, cleanPhone, cleanProduct, cleanQuantity, cleanMessage]
+    );
+
+    // Asynchronously dispatch email notification
+    sendBulkOrderEnquiryNotification({
+      name: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      product: cleanProduct,
+      quantity: cleanQuantity,
+      message: cleanMessage
+    }).catch(err => {
+      console.error('Failed to dispatch bulk enquiry email notification:', err);
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Bulk order enquiry submitted successfully! Our wholesale team will get in touch with you shortly.'
+    });
+  } catch (err) {
+    console.error('Bulk enquiry submission error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to submit enquiry. Please try again later.' });
+  }
+});
+
+// Admin: View all bulk order enquiries
+app.get('/api/admin/bulk-enquiries', requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM bulk_order_enquiries ORDER BY created_at DESC LIMIT 200');
+    return res.status(200).json({ success: true, enquiries: rows });
+  } catch (err) {
+    console.error('Fetch bulk enquiries error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch bulk enquiries' });
+  }
+});
+
+// ================= NEWSLETTER SUBSCRIPTION =================
+
+// Subscribe to newsletter (Public)
+app.post('/api/newsletter/subscribe', async (req, res) => {
+  const { email } = req.body || {};
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || typeof email !== 'string' || !emailRegex.test(email.trim())) {
+    return res.status(400).json({ success: false, error: 'Please provide a valid email address.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    const [existing] = await pool.query('SELECT id, status FROM newsletter_subscribers WHERE email = ?', [cleanEmail]);
+    if (existing.length > 0) {
+      if (existing[0].status === 'subscribed') {
+        return res.status(200).json({
+          success: true,
+          alreadySubscribed: true,
+          message: 'You are already subscribed to our newsletter! Stay tuned for seasonal offers.'
+        });
+      } else {
+        await pool.query("UPDATE newsletter_subscribers SET status = 'subscribed' WHERE email = ?", [cleanEmail]);
+        return res.status(200).json({
+          success: true,
+          message: 'Welcome back! Your newsletter subscription has been reactivated.'
+        });
+      }
+    }
+
+    const id = 'sub_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    await pool.query('INSERT INTO newsletter_subscribers (id, email, status) VALUES (?, ?, ?)', [id, cleanEmail, 'subscribed']);
+
+    // Asynchronously dispatch welcome email
+    sendNewsletterWelcomeEmail({ email: cleanEmail }).catch(err => {
+      console.error('Failed to dispatch newsletter welcome email:', err);
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Thank you for subscribing! Check your inbox for exclusive updates and offers.'
+    });
+  } catch (err) {
+    console.error('Newsletter subscription error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to process subscription right now. Please try again.' });
+  }
+});
+
+// Admin: View all newsletter subscribers
+app.get('/api/admin/newsletter-subscribers', requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM newsletter_subscribers ORDER BY created_at DESC LIMIT 500');
+    return res.status(200).json({ success: true, subscribers: rows });
+  } catch (err) {
+    console.error('Fetch newsletter subscribers error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch newsletter subscribers' });
+  }
 });
 
 const PORT = process.env.PORT || 5000;

@@ -802,3 +802,123 @@ export const sendVendorAccountStatusEmail = async ({ email, name, status }) => {
     category: `Vendor Account ${status}`
   });
 };
+
+/**
+ * Dispatches bulk order enquiry notification to admin support and sends an
+ * acknowledgment confirmation to the requesting customer.
+ */
+export const sendBulkOrderEnquiryNotification = async ({ name, email, phone, product, quantity, message }) => {
+  const brand = process.env.SENDER_NAME || 'EcShopping';
+  const adminRecipient = getAdminNotificationRecipient();
+  const frontendUrl = getFrontendUrl();
+
+  const detailsHtml = `
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+      <tr><td style="padding: 8px 12px; background: #f8fafc; font-weight: 600; width: 140px; border: 1px solid #e2e8f0;">Customer Name</td><td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${escapeHtml(name)}</td></tr>
+      <tr><td style="padding: 8px 12px; background: #f8fafc; font-weight: 600; border: 1px solid #e2e8f0;">Email</td><td style="padding: 8px 12px; border: 1px solid #e2e8f0;"><a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></td></tr>
+      <tr><td style="padding: 8px 12px; background: #f8fafc; font-weight: 600; border: 1px solid #e2e8f0;">Phone Number</td><td style="padding: 8px 12px; border: 1px solid #e2e8f0;"><a href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a></td></tr>
+      ${product ? `<tr><td style="padding: 8px 12px; background: #f8fafc; font-weight: 600; border: 1px solid #e2e8f0;">Required Product</td><td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${escapeHtml(product)}</td></tr>` : ''}
+      <tr><td style="padding: 8px 12px; background: #f8fafc; font-weight: 600; border: 1px solid #e2e8f0;">Quantity Required</td><td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${escapeHtml(quantity)}</td></tr>
+      ${message ? `<tr><td style="padding: 8px 12px; background: #f8fafc; font-weight: 600; border: 1px solid #e2e8f0;">Additional Notes</td><td style="padding: 8px 12px; border: 1px solid #e2e8f0;">${escapeHtml(message)}</td></tr>` : ''}
+    </table>
+  `;
+
+  // 1. Notify Admin Support
+  const adminHtml = renderEmailLayout({
+    headline: '📦 New Bulk Order Enquiry Received',
+    contentHtml: `
+      <p>A new customer bulk order enquiry has been submitted on <strong>${escapeHtml(brand)}</strong>:</p>
+      ${detailsHtml}
+      <p style="font-size: 13px; color: #64748b; margin-top: 20px;">You can reply directly to this email to contact the customer.</p>
+    `,
+    footerNote: `Automated Lead Notification — ${escapeHtml(brand)}`
+  });
+
+  const adminEmailPromise = sendAdminEmail({
+    to: adminRecipient,
+    subject: `[Bulk Order Enquiry] ${name} - ${quantity} units ${product ? `(${product})` : ''}`,
+    replyTo: email,
+    text: `New Bulk Order Enquiry on ${brand}\n\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nProduct: ${product || 'Not specified'}\nQuantity: ${quantity}\nMessage: ${message || 'None'}\n`,
+    html: adminHtml,
+    category: 'Bulk Order Enquiry'
+  });
+
+  // 2. Acknowledge Customer
+  const customerHtml = renderEmailLayout({
+    headline: 'Enquiry Received — EcShopping',
+    contentHtml: `
+      <p>Hello <strong>${escapeHtml(name)}</strong>,</p>
+      <p>Thank you for submitting your bulk order requirement to <strong>${escapeHtml(brand)}</strong>. Our operations and direct farm fulfillment team has received your enquiry:</p>
+      ${detailsHtml}
+      <p>Our team is reviewing stock availability, tiered wholesale pricing, and logistics lead time. We will reach out to you within one business day.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${frontendUrl}/shop" style="display: inline-block; background-color: #0e5c4a; color: #ffffff; text-decoration: none; padding: 10px 24px; font-weight: 600; font-size: 14px; border-radius: 6px;">
+          Browse Store Catalog
+        </a>
+      </div>
+    `,
+    footerNote: `Support Contact: ${getSupportReplyTo()} • ${escapeHtml(brand)}`
+  });
+
+  const customerEmailPromise = sendAdminEmail({
+    to: email,
+    subject: `We've received your bulk order enquiry — ${brand}`,
+    text: `Hello ${name},\n\nThank you for submitting your bulk order enquiry on ${brand}. We have received your request for ${quantity} units ${product ? `of ${product} ` : ''}and our team will get back to you shortly.\n\nBest regards,\n${brand} Team`,
+    html: customerHtml,
+    category: 'Bulk Order Customer Acknowledgment'
+  }).catch((err) => {
+    console.warn('⚠️ Could not send customer bulk order confirmation email:', err.message);
+    return null;
+  });
+
+  return adminEmailPromise;
+};
+
+/**
+ * Sends confirmation welcome email to a new newsletter subscriber and
+ * notifies the admin team.
+ */
+export const sendNewsletterWelcomeEmail = async ({ email }) => {
+  const brand = process.env.SENDER_NAME || 'EcShopping';
+  const frontendUrl = getFrontendUrl();
+  const adminRecipient = getAdminNotificationRecipient();
+
+  const customerHtml = renderEmailLayout({
+    headline: 'Welcome to the EcShopping Circle! 🌿',
+    contentHtml: `
+      <p>Hello,</p>
+      <p>Thank you for subscribing to <strong>${escapeHtml(brand)}</strong> updates! You are now part of our community connecting conscious consumers directly with certified organic farmers and local artisanal producers.</p>
+      <p>Here is what you can look forward to:</p>
+      <ul style="padding-left: 20px; line-height: 1.6; color: #334155;">
+        <li>Seasonal harvest announcements and fresh weekly arrivals</li>
+        <li>Exclusive subscriber discounts and Deals of the Day</li>
+        <li>Stories and farming practices from our partner growers</li>
+      </ul>
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${frontendUrl}/shop" style="display: inline-block; background-color: #0e5c4a; color: #ffffff; text-decoration: none; padding: 12px 28px; font-weight: 600; font-size: 14px; border-radius: 6px;">
+          Shop Today's Fresh Harvest
+        </a>
+      </div>
+    `,
+    footerNote: `You received this email because you subscribed on ${frontendUrl}. To unsubscribe, reply with 'Unsubscribe'.`
+  });
+
+  const welcomePromise = sendAdminEmail({
+    to: email,
+    subject: `Welcome to ${brand} — Fresh Farm Harvests & Direct Produce`,
+    text: `Welcome to ${brand}!\n\nThank you for subscribing to our updates. Discover farm-fresh produce and artisanal goods directly from local sellers at ${frontendUrl}/shop.\n\nWarm regards,\n${brand} Team`,
+    html: customerHtml,
+    category: 'Newsletter Welcome'
+  });
+
+  // Admin Notification
+  sendAdminEmail({
+    to: adminRecipient,
+    subject: `[Newsletter] New Subscriber: ${email}`,
+    text: `A new customer subscribed to the EcShopping newsletter: ${email}`,
+    html: `<p>A new customer subscribed to the <strong>${escapeHtml(brand)}</strong> newsletter: <strong>${escapeHtml(email)}</strong></p>`,
+    category: 'Newsletter Admin Notice'
+  }).catch(() => {});
+
+  return welcomePromise;
+};

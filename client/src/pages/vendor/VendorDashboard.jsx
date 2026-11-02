@@ -31,7 +31,13 @@ import {
   FileCheck2,
   Loader2,
   MapPin,
-  ShieldCheck
+  ShieldCheck,
+  User,
+  Truck,
+  Lock,
+  Shield,
+  Edit2,
+  Percent
 } from 'lucide-react';
 import brandLogoWithBg from '../../assets/logo/logo.png';
 import Pagination from '../../components/ui/Pagination';
@@ -80,6 +86,8 @@ export default function VendorDashboard({ vendor, onLogout }) {
     if (path.includes('/vendor/stocks')) return 'stocks';
     if (path.includes('/vendor/reviews')) return 'reviews';
     if (path.includes('/vendor/coupons')) return 'coupons';
+    if (path.includes('/vendor/delivery')) return 'delivery';
+    if (path.includes('/vendor/profile')) return 'profile';
     if (path.includes('/vendor/settings')) return 'settings';
     return 'dashboard';
   };
@@ -118,6 +126,12 @@ export default function VendorDashboard({ vendor, onLogout }) {
         break;
       case 'coupons':
         navigate('/vendor/coupons');
+        break;
+      case 'delivery':
+        navigate('/vendor/delivery');
+        break;
+      case 'profile':
+        navigate('/vendor/profile');
         break;
       case 'settings':
         navigate('/vendor/settings');
@@ -199,6 +213,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
   // Vendor Coupons State
   const [coupons, setCoupons] = useState([]);
   const [couponsLoading, setCouponsLoading] = useState(false);
+  const [couponSearch, setCouponSearch] = useState('');
   const [couponModalOpen, setCouponModalOpen] = useState(false);
   const [couponProductSearch, setCouponProductSearch] = useState('');
   const [couponSaving, setCouponSaving] = useState(false);
@@ -302,6 +317,21 @@ export default function VendorDashboard({ vendor, onLogout }) {
       setCouponFormMsg({ type: 'error', text: 'Coupon code is required.' });
       return;
     }
+
+    if (couponForm.type === 'percent') {
+      const val = Number(couponForm.value);
+      if (!val || val <= 0 || val > 100) {
+        setCouponFormMsg({ type: 'error', text: 'Percentage discount must be between 1% and 100%.' });
+        return;
+      }
+    } else if (couponForm.type === 'flat') {
+      const val = Number(couponForm.value);
+      if (!val || val <= 0) {
+        setCouponFormMsg({ type: 'error', text: 'Discount value must be greater than zero.' });
+        return;
+      }
+    }
+
     setCouponSaving(true);
     setCouponFormMsg({ type: null, text: '' });
     try {
@@ -318,7 +348,12 @@ export default function VendorDashboard({ vendor, onLogout }) {
         perCustomerLimit: couponForm.perCustomerLimit !== '' ? parseInt(couponForm.perCustomerLimit, 10) : 1,
         startDate: couponForm.startDate || null,
         expiryDate: couponForm.expiryDate || null,
-        isActive: Boolean(couponForm.isActive)
+        isActive: Boolean(couponForm.isActive),
+        discountType: couponForm.type,
+        discountValue: Number(couponForm.value) || 0,
+        minOrderAmount: Number(couponForm.minOrder) || 0,
+        maxDiscountAmount: couponForm.maxDiscount !== '' ? Number(couponForm.maxDiscount) : null,
+        selectedProducts: couponForm.applicableTo === 'selected' ? couponForm.selectedProducts : []
       };
 
       if (editingCouponCode) {
@@ -350,6 +385,145 @@ export default function VendorDashboard({ vendor, onLogout }) {
       }
     } catch (err) {
       alert(err?.message || 'Failed to delete coupon');
+    }
+  };
+
+  // ── Delivery Charges State & Handlers ─────────────────────────────────────
+  const [deliveryData, setDeliveryData] = useState({
+    shippingEnabled: true,
+    shippingCharge: 50,
+    shippingFreeThreshold: 499,
+    shippingEstimatedDays: '2–4 business days'
+  });
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [deliverySaving, setDeliverySaving] = useState(false);
+  const [deliverySuccessMsg, setDeliverySuccessMsg] = useState('');
+  const [deliveryErrorMsg, setDeliveryErrorMsg] = useState('');
+
+  const loadDeliveryCharges = async () => {
+    setDeliveryLoading(true);
+    setDeliveryErrorMsg('');
+    try {
+      const res = await api.getVendorDeliveryCharges();
+      if (res?.success && res.delivery) {
+        setDeliveryData(res.delivery);
+      }
+    } catch {
+      setDeliveryErrorMsg('Unable to load delivery configuration.');
+    } finally {
+      setDeliveryLoading(false);
+    }
+  };
+
+  const handleSaveDeliveryCharges = async (e) => {
+    e.preventDefault();
+    setDeliverySaving(true);
+    setDeliverySuccessMsg('');
+    setDeliveryErrorMsg('');
+    try {
+      const res = await api.updateVendorDeliveryCharges(deliveryData);
+      if (res?.success) {
+        setDeliverySuccessMsg(res.message || 'Delivery charges updated successfully!');
+        if (res.delivery) setDeliveryData(res.delivery);
+      } else {
+        setDeliveryErrorMsg(res?.error || 'Failed to update delivery charges.');
+      }
+    } catch (err) {
+      setDeliveryErrorMsg(err.message || 'Failed to update delivery charges.');
+    } finally {
+      setDeliverySaving(false);
+    }
+  };
+
+  // ── Operational Settings & Password State & Handlers ──────────────────────
+  const [settingsData, setSettingsData] = useState({
+    storeOpen: true,
+    status: 'approved',
+    emailAlerts: true,
+    lowStockThreshold: 10
+  });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSuccessMsg, setSettingsSuccessMsg] = useState('');
+  const [settingsErrorMsg, setSettingsErrorMsg] = useState('');
+
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordSuccessMsg, setPasswordSuccessMsg] = useState('');
+  const [passwordErrorMsg, setPasswordErrorMsg] = useState('');
+
+  const loadSettings = async () => {
+    setSettingsLoading(true);
+    setSettingsErrorMsg('');
+    try {
+      const res = await api.getVendorSettings();
+      if (res?.success && res.settings) {
+        setSettingsData(res.settings);
+      }
+    } catch {
+      setSettingsErrorMsg('Unable to load vendor settings.');
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    setSettingsSaving(true);
+    setSettingsSuccessMsg('');
+    setSettingsErrorMsg('');
+    try {
+      const res = await api.updateVendorSettings(settingsData);
+      if (res?.success) {
+        setSettingsSuccessMsg(res.message || 'Store operational settings saved successfully!');
+        if (res.settings) setSettingsData(res.settings);
+      } else {
+        setSettingsErrorMsg(res?.error || 'Failed to save store settings.');
+      }
+    } catch (err) {
+      setSettingsErrorMsg(err.message || 'Failed to save settings.');
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPasswordSuccessMsg('');
+    setPasswordErrorMsg('');
+    if (!passwordForm.currentPassword) {
+      setPasswordErrorMsg('Current password is required.');
+      return;
+    }
+    if (!passwordForm.newPassword || passwordForm.newPassword.length < 6) {
+      setPasswordErrorMsg('New password must be at least 6 characters long.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordErrorMsg('New passwords do not match.');
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const res = await api.changeVendorPassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
+      if (res?.success) {
+        setPasswordSuccessMsg(res.message || 'Password changed successfully!');
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        setPasswordErrorMsg(res?.error || 'Failed to change password.');
+      }
+    } catch (err) {
+      setPasswordErrorMsg(err.message || 'Failed to change password.');
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -410,9 +584,9 @@ export default function VendorDashboard({ vendor, onLogout }) {
     return () => { cancelled = true; };
   }, [activeTab, vendor?.id]);
 
-  // Fetch live vendor profile from backend when opening settings
+  // Fetch live vendor profile from backend when opening profile
   useEffect(() => {
-    if (activeTab === 'settings' && vendor?.id) {
+    if ((activeTab === 'profile' || activeTab === 'settings') && vendor?.id) {
       setProfileLoading(true);
       api.getVendorProfile()
         .then((res) => {
@@ -450,6 +624,20 @@ export default function VendorDashboard({ vendor, onLogout }) {
         })
         .catch(() => {})
         .finally(() => setProfileLoading(false));
+    }
+  }, [activeTab, vendor?.id]);
+
+  // Fetch live delivery charges config when opening delivery tab
+  useEffect(() => {
+    if (activeTab === 'delivery' && vendor?.id) {
+      loadDeliveryCharges();
+    }
+  }, [activeTab, vendor?.id]);
+
+  // Fetch live operational settings when opening settings tab
+  useEffect(() => {
+    if (activeTab === 'settings' && vendor?.id) {
+      loadSettings();
     }
   }, [activeTab, vendor?.id]);
 
@@ -894,7 +1082,29 @@ export default function VendorDashboard({ vendor, onLogout }) {
             </button>
           </div>
 
-          {/* 6. Settings */}
+          {/* 5c. Delivery Charges */}
+          <div className="vendor-menu-item">
+            <button 
+              className={`vendor-menu-btn ${activeTab === 'delivery' ? 'active' : ''}`}
+              onClick={() => handleNavigate('delivery')}
+            >
+              <Truck size={19} className="vendor-menu-icon" />
+              <span className="vendor-menu-title">Delivery Charges</span>
+            </button>
+          </div>
+
+          {/* 6. Vendor Profile */}
+          <div className="vendor-menu-item">
+            <button 
+              className={`vendor-menu-btn ${activeTab === 'profile' ? 'active' : ''}`}
+              onClick={() => handleNavigate('profile')}
+            >
+              <User size={19} className="vendor-menu-icon" />
+              <span className="vendor-menu-title">Vendor Profile</span>
+            </button>
+          </div>
+
+          {/* 7. Settings */}
           <div className="vendor-menu-item">
             <button 
               className={`vendor-menu-btn ${activeTab === 'settings' ? 'active' : ''}`}
@@ -939,7 +1149,10 @@ export default function VendorDashboard({ vendor, onLogout }) {
                 {activeTab === 'orders' && 'Orders Received'}
                 {activeTab === 'stocks' && 'Stock Management'}
                 {activeTab === 'reviews' && 'Customer Reviews'}
-                {activeTab === 'settings' && 'Vendor Settings'}
+                {activeTab === 'coupons' && 'Store Coupons'}
+                {activeTab === 'delivery' && 'Delivery Charges & Shipping'}
+                {activeTab === 'profile' && 'Vendor Profile & Regulatory Details'}
+                {activeTab === 'settings' && 'Vendor Settings & Security'}
               </h1>
             </div>
             <p>
@@ -952,7 +1165,10 @@ export default function VendorDashboard({ vendor, onLogout }) {
               {activeTab === 'orders' && `Track orders received for your store (${orders.length} orders). Customer contact details are kept private.`}
               {activeTab === 'stocks' && 'Control which products are in stock and available to customers.'}
               {activeTab === 'reviews' && `Feedback from customers on your products (${reviews.length} reviews).`}
-              {activeTab === 'settings' && 'Update your seller profile, contact info, and store preferences.'}
+              {activeTab === 'coupons' && 'Create and manage promotional discounts and coupon codes for your storefront.'}
+              {activeTab === 'delivery' && 'Set custom shipping charges, free delivery thresholds, and delivery timelines for your store.'}
+              {activeTab === 'profile' && 'Update your business address, GSTIN, FSSAI regulatory compliance, and settlement bank accounts.'}
+              {activeTab === 'settings' && 'Configure store availability status, inventory alert thresholds, order notifications, and password credentials.'}
             </p>
           </div>
 
@@ -1399,8 +1615,8 @@ export default function VendorDashboard({ vendor, onLogout }) {
             </div>
           )}
 
-          {/* ---------------- 6. SETTINGS VIEW (Vendor Profile & Compliance) ---------------- */}
-          {activeTab === 'settings' && (
+          {/* ---------------- 6. VENDOR PROFILE VIEW ---------------- */}
+          {activeTab === 'profile' && (
             <div className="settings-container" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               {profileSuccessMsg && (
                 <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', padding: '12px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
@@ -1780,75 +1996,6 @@ export default function VendorDashboard({ vendor, onLogout }) {
                     </div>
                   </div>
 
-                  {/* Card 4: Store Delivery & Shipping Charges */}
-                  <div className="settings-card">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', color: '#0e5c4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Truck size={20} />
-                      </div>
-                      <div>
-                        <h3 className="settings-card-title" style={{ margin: 0 }}>Store Delivery & Shipping Charges</h3>
-                        <p className="settings-card-desc" style={{ margin: '2px 0 0' }}>Configure delivery fees and free shipping order thresholds for customers ordering your produce.</p>
-                      </div>
-                    </div>
-
-                    <div className="form-two-column-grid">
-                      <div className="form-full-column">
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
-                          <input
-                            type="checkbox"
-                            checked={profileData.shippingEnabled}
-                            onChange={(e) => setProfileData({ ...profileData, shippingEnabled: e.target.checked })}
-                            style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
-                          />
-                          <span>Charge delivery fee on orders of my produce (uncheck for Store Free Delivery)</span>
-                        </label>
-                      </div>
-
-                      <div>
-                        <label className="v-input-label">Standard Delivery Charge (₹)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          className="v-input-text"
-                          placeholder="e.g. 50"
-                          value={profileData.shippingCharge}
-                          onChange={(e) => setProfileData({ ...profileData, shippingCharge: e.target.value })}
-                          disabled={!profileData.shippingEnabled}
-                        />
-                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Applied to customer checkout orders containing your items.</small>
-                      </div>
-
-                      <div>
-                        <label className="v-input-label">Free Delivery Threshold (₹)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          className="v-input-text"
-                          placeholder="e.g. 499 (0 or blank for no free shipping)"
-                          value={profileData.shippingFreeThreshold}
-                          onChange={(e) => setProfileData({ ...profileData, shippingFreeThreshold: e.target.value })}
-                          disabled={!profileData.shippingEnabled}
-                        />
-                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Orders of your items meeting or exceeding this subtotal receive Free Shipping.</small>
-                      </div>
-
-                      <div className="form-full-column">
-                        <label className="v-input-label">Estimated Delivery Timeline</label>
-                        <input
-                          type="text"
-                          className="v-input-text"
-                          placeholder="e.g. 2–4 business days (Direct farm harvest)"
-                          value={profileData.shippingEstimatedDays}
-                          onChange={(e) => setProfileData({ ...profileData, shippingEstimatedDays: e.target.value })}
-                        />
-                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Displayed to customers during product browsing and checkout.</small>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Save Action */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
                     <button
@@ -1859,11 +2006,11 @@ export default function VendorDashboard({ vendor, onLogout }) {
                     >
                       {profileSaving ? (
                         <>
-                          <Loader2 size={18} className="spin" /> Saving Changes...
+                          <Loader2 size={18} className="spin" /> Saving Profile...
                         </>
                       ) : (
                         <>
-                          <Check size={18} /> Save Profile & Settings
+                          <Check size={18} /> Save Vendor Profile
                         </>
                       )}
                     </button>
@@ -1873,138 +2020,486 @@ export default function VendorDashboard({ vendor, onLogout }) {
             </div>
           )}
 
+          {/* ---------------- 6b. DELIVERY CHARGES VIEW ---------------- */}
+          {activeTab === 'delivery' && (
+            <div className="settings-container" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {deliverySuccessMsg && (
+                <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', padding: '12px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                  <CheckCircle size={20} />
+                  <span>{deliverySuccessMsg}</span>
+                </div>
+              )}
+              {deliveryErrorMsg && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '12px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                  <AlertCircle size={20} />
+                  <span>{deliveryErrorMsg}</span>
+                </div>
+              )}
+
+              {deliveryLoading ? (
+                <div style={{ textAlign: 'center', padding: '48px', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                  <Loader2 size={32} className="spin" style={{ margin: '0 auto 12px', color: '#0e5c4a' }} />
+                  <p style={{ color: '#64748b', margin: 0 }}>Loading delivery charges configuration...</p>
+                </div>
+              ) : (
+                <form onSubmit={handleSaveDeliveryCharges} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  <div className="settings-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', color: '#0e5c4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Truck size={20} />
+                      </div>
+                      <div>
+                        <h3 className="settings-card-title" style={{ margin: 0 }}>Store Delivery &amp; Shipping Charges</h3>
+                        <p className="settings-card-desc" style={{ margin: '2px 0 0' }}>Configure delivery fees and free shipping order thresholds for customers ordering your produce.</p>
+                      </div>
+                    </div>
+
+                    <div className="form-two-column-grid">
+                      <div className="form-full-column">
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: '#1e293b', background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                          <input
+                            type="checkbox"
+                            checked={deliveryData.shippingEnabled}
+                            onChange={(e) => setDeliveryData({ ...deliveryData, shippingEnabled: e.target.checked })}
+                            style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                          />
+                          <span>Charge delivery fee on orders of my produce (uncheck for Free Store Delivery)</span>
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Standard Shipping Charge (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="v-input-text"
+                          placeholder="e.g. 50"
+                          value={deliveryData.shippingCharge}
+                          onChange={(e) => setDeliveryData({ ...deliveryData, shippingCharge: Math.max(0, parseFloat(e.target.value) || 0) })}
+                          disabled={!deliveryData.shippingEnabled}
+                        />
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Standard fee applied to customer orders containing your items.</small>
+                      </div>
+
+                      <div>
+                        <label className="v-input-label">Free Delivery Threshold (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="v-input-text"
+                          placeholder="e.g. 499 (0 or blank for no free shipping)"
+                          value={deliveryData.shippingFreeThreshold ?? ''}
+                          onChange={(e) => setDeliveryData({ ...deliveryData, shippingFreeThreshold: e.target.value === '' ? null : Math.max(0, parseFloat(e.target.value) || 0) })}
+                          disabled={!deliveryData.shippingEnabled}
+                        />
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Orders of your items meeting or exceeding this subtotal qualify for Free Delivery.</small>
+                      </div>
+
+                      <div className="form-full-column">
+                        <label className="v-input-label">Estimated Delivery Timeline</label>
+                        <input
+                          type="text"
+                          className="v-input-text"
+                          placeholder="e.g. 2–4 business days (Direct farm harvest)"
+                          value={deliveryData.shippingEstimatedDays}
+                          onChange={(e) => setDeliveryData({ ...deliveryData, shippingEstimatedDays: e.target.value })}
+                        />
+                        <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Displayed to customers during product browsing and checkout.</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
+                    <button
+                      type="submit"
+                      className="btn-primary-action"
+                      disabled={deliverySaving}
+                      style={{ padding: '12px 28px', fontSize: '0.95rem' }}
+                    >
+                      {deliverySaving ? (
+                        <>
+                          <Loader2 size={18} className="spin" /> Saving Delivery Charges...
+                        </>
+                      ) : (
+                        <>
+                          <Check size={18} /> Save Delivery Charges
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* ---------------- 6c. VENDOR SETTINGS VIEW ---------------- */}
+          {activeTab === 'settings' && (
+            <div className="settings-container" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {settingsSuccessMsg && (
+                <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', padding: '12px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                  <CheckCircle size={20} />
+                  <span>{settingsSuccessMsg}</span>
+                </div>
+              )}
+              {settingsErrorMsg && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '12px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                  <AlertCircle size={20} />
+                  <span>{settingsErrorMsg}</span>
+                </div>
+              )}
+
+              {settingsLoading ? (
+                <div style={{ textAlign: 'center', padding: '48px', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                  <Loader2 size={32} className="spin" style={{ margin: '0 auto 12px', color: '#0e5c4a' }} />
+                  <p style={{ color: '#64748b', margin: 0 }}>Loading store operational settings...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Card 1: Operations */}
+                  <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', color: '#0e5c4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Settings size={20} />
+                        </div>
+                        <div>
+                          <h3 className="settings-card-title" style={{ margin: 0 }}>Store Operations &amp; Preferences</h3>
+                          <p className="settings-card-desc" style={{ margin: '2px 0 0' }}>Manage store availability, stock alert levels, and notification triggers.</p>
+                        </div>
+                      </div>
+
+                      <div className="form-two-column-grid">
+                        <div className="form-full-column">
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: '#1e293b', background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                            <input
+                              type="checkbox"
+                              checked={settingsData.storeOpen}
+                              onChange={(e) => setSettingsData({ ...settingsData, storeOpen: e.target.checked })}
+                              style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                            />
+                            <span>Store Accepting Orders (uncheck to temporarily pause incoming orders)</span>
+                          </label>
+                        </div>
+
+                        <div>
+                          <label className="v-input-label">Low Stock Alert Threshold (units)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            className="v-input-text"
+                            placeholder="e.g. 10"
+                            value={settingsData.lowStockThreshold}
+                            onChange={(e) => setSettingsData({ ...settingsData, lowStockThreshold: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                          />
+                          <small style={{ color: '#64748b', display: 'block', marginTop: 4 }}>Products with stock below this count trigger a low inventory alert.</small>
+                        </div>
+
+                        <div>
+                          <label className="v-input-label">Order Notification Emails</label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 500, fontSize: '0.88rem', color: '#334155', marginTop: 8 }}>
+                            <input
+                              type="checkbox"
+                              checked={settingsData.emailAlerts}
+                              onChange={(e) => setSettingsData({ ...settingsData, emailAlerts: e.target.checked })}
+                              style={{ width: 18, height: 18, accentColor: '#0e5c4a' }}
+                            />
+                            <span>Receive email alerts whenever an order containing your products is placed</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 16 }}>
+                        <button
+                          type="submit"
+                          className="btn-primary-action"
+                          disabled={settingsSaving}
+                          style={{ padding: '10px 24px', fontSize: '0.9rem' }}
+                        >
+                          {settingsSaving ? (
+                            <>
+                              <Loader2 size={16} className="spin" /> Saving Settings...
+                            </>
+                          ) : (
+                            <>
+                              <Check size={16} /> Save Store Preferences
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+
+                  {/* Card 2: Password */}
+                  <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div className="settings-card">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Lock size={20} />
+                        </div>
+                        <div>
+                          <h3 className="settings-card-title" style={{ margin: 0 }}>Security &amp; Account Password</h3>
+                          <p className="settings-card-desc" style={{ margin: '2px 0 0' }}>Update your vendor portal login password credentials.</p>
+                        </div>
+                      </div>
+
+                      {passwordSuccessMsg && (
+                        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', padding: '10px 16px', borderRadius: '8px', marginBottom: 14, fontSize: '0.88rem' }}>
+                          {passwordSuccessMsg}
+                        </div>
+                      )}
+                      {passwordErrorMsg && (
+                        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '10px 16px', borderRadius: '8px', marginBottom: 14, fontSize: '0.88rem' }}>
+                          {passwordErrorMsg}
+                        </div>
+                      )}
+
+                      <div className="form-two-column-grid">
+                        <div className="form-full-column">
+                          <label className="v-input-label">Current Password *</label>
+                          <input
+                            type="password"
+                            className="v-input-text"
+                            placeholder="Enter your current password"
+                            value={passwordForm.currentPassword}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="v-input-label">New Password *</label>
+                          <input
+                            type="password"
+                            className="v-input-text"
+                            placeholder="At least 6 characters"
+                            value={passwordForm.newPassword}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="v-input-label">Confirm New Password *</label>
+                          <input
+                            type="password"
+                            className="v-input-text"
+                            placeholder="Repeat new password"
+                            value={passwordForm.confirmPassword}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 16 }}>
+                        <button
+                          type="submit"
+                          className="btn-primary-action"
+                          disabled={passwordSaving}
+                          style={{ padding: '10px 24px', fontSize: '0.9rem', background: '#dc2626' }}
+                        >
+                          {passwordSaving ? (
+                            <>
+                              <Loader2 size={16} className="spin" /> Updating Password...
+                            </>
+                          ) : (
+                            <>
+                              <Lock size={16} /> Change Password
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </>
+              )}
+            </div>
+          )}
+
           {/* ---------------- 7. STORE COUPONS VIEW ---------------- */}
           {activeTab === 'coupons' && (
-            <div className="products-table-card">
-              <div className="table-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14, padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>Store Coupons & Promotional Offers</h3>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a', fontWeight: 700 }}>Store Coupons &amp; Promotional Offers</h3>
                   <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
                     Create discounts and special promotional codes applicable to your store's products
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="btn-primary-action"
-                  onClick={handleOpenAddCoupon}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                >
-                  <Plus size={16} /> Create Coupon
-                </button>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      type="text"
+                      placeholder="Search coupons..."
+                      value={couponSearch}
+                      onChange={(e) => setCouponSearch(e.target.value)}
+                      style={{ padding: '7px 12px 7px 30px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, width: 200 }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-primary-action"
+                    onClick={handleOpenAddCoupon}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, background: 'linear-gradient(135deg, #0e5c4a, #16a34a)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    <Plus size={15} /> Create Coupon
+                  </button>
+                </div>
               </div>
 
               {couponsLoading ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
-                  Loading coupons…
+                <div style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8 }} />
+                  Loading store coupons from server…
                 </div>
               ) : coupons.length === 0 ? (
                 <div style={{ padding: '48px 20px', textAlign: 'center', color: '#64748b' }}>
-                  <Tag size={36} style={{ color: '#cbd5e1', marginBottom: 12 }} />
-                  <h4 style={{ margin: '0 0 6px', color: '#1e293b', fontSize: 16 }}>No store coupons created yet</h4>
-                  <p style={{ margin: '0 0 16px', fontSize: 13 }}>Create your first discount coupon to boost your store sales.</p>
-                  <button type="button" className="btn-primary-action" onClick={handleOpenAddCoupon}>
+                  <Tag size={42} style={{ color: '#cbd5e1', marginBottom: 12 }} />
+                  <h4 style={{ margin: '0 0 6px', color: '#1e293b', fontSize: 16, fontWeight: 600 }}>No store coupons created yet</h4>
+                  <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b' }}>Create discount coupons to boost your store conversion and sales.</p>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddCoupon}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#0e5c4a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                  >
                     <Plus size={15} /> Create First Coupon
                   </button>
                 </div>
               ) : (
-                <div className="table-responsive" style={{ overflowX: 'auto' }}>
-                  <table className="products-table">
+                <div style={{ overflowX: 'auto', width: '100%' }}>
+                  <table className="vendor-data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr>
-                        <th>Code</th>
-                        <th>Title / Description</th>
-                        <th>Discount</th>
-                        <th>Scope</th>
-                        <th>Min Order / Max Cap</th>
-                        <th>Validity Window</th>
-                        <th>Status</th>
-                        <th>Actions</th>
+                        <th style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Coupon Code</th>
+                        <th style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Title / Description</th>
+                        <th style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Discount</th>
+                        <th style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Applicable Scope</th>
+                        <th style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Order Minimum &amp; Cap</th>
+                        <th style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Validity Window</th>
+                        <th style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Status</th>
+                        <th style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {coupons.map((c) => {
-                        const isActive = Boolean(c.is_active ?? c.isActive ?? 1);
-                        const isPercent = (c.type || c.discountType) === 'percent';
-                        let prodCount = 0;
-                        if (c.applicable_to === 'selected' || c.applicableTo === 'selected') {
-                          try {
-                            const parsed = typeof c.product_ids === 'string' ? JSON.parse(c.product_ids) : (c.product_ids || c.productIds || []);
-                            prodCount = Array.isArray(parsed) ? parsed.length : 0;
-                          } catch {
-                            prodCount = 0;
+                      {coupons
+                        .filter(c => {
+                          if (!couponSearch.trim()) return true;
+                          const q = couponSearch.toLowerCase();
+                          return (c.code || '').toLowerCase().includes(q) || (c.title || c.description || '').toLowerCase().includes(q);
+                        })
+                        .map((c) => {
+                          const isActive = Boolean(c.is_active ?? c.isActive ?? 1);
+                          const isPercent = (c.type || c.discountType) === 'percent';
+                          const isExpired = (c.expiry_date || c.expiryDate) && new Date(c.expiry_date || c.expiryDate) < new Date();
+                          let prodCount = 0;
+                          if (c.applicable_to === 'selected' || c.applicableTo === 'selected') {
+                            try {
+                              const parsed = typeof c.product_ids === 'string' ? JSON.parse(c.product_ids) : (c.product_ids || c.productIds || []);
+                              prodCount = Array.isArray(parsed) ? parsed.length : 0;
+                            } catch {
+                              prodCount = 0;
+                            }
                           }
-                        }
-                        return (
-                          <tr key={c.code}>
-                            <td>
-                              <strong style={{ color: '#0e5c4a', fontFamily: 'monospace', letterSpacing: 1, fontSize: 14 }}>
-                                {c.code}
-                              </strong>
-                            </td>
-                            <td>
-                              <div style={{ fontWeight: 500, color: '#1e293b' }}>{c.title || c.description || '—'}</div>
-                            </td>
-                            <td>
-                              <span style={{ fontWeight: 600, color: '#0f172a' }}>
-                                {c.value ?? c.discountValue}{isPercent ? '%' : '₹'} off
-                              </span>
-                            </td>
-                            <td>
-                              {(c.applicable_to === 'selected' || c.applicableTo === 'selected') ? (
-                                <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 500 }}>
-                                  {prodCount} specific product{prodCount === 1 ? '' : 's'}
+                          return (
+                            <tr key={c.code} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '14px 20px' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: '#ecfdf5', border: '1px dashed #059669', borderRadius: 6 }}>
+                                  <Tag size={12} style={{ color: '#059669' }} />
+                                  <strong style={{ color: '#065f46', fontFamily: 'monospace', letterSpacing: '0.05em', fontSize: 13 }}>
+                                    {c.code}
+                                  </strong>
+                                </div>
+                              </td>
+                              <td style={{ padding: '14px 20px' }}>
+                                <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13.5 }}>{c.title || c.description || '—'}</div>
+                                {c.title && c.description && c.title !== c.description && (
+                                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{c.description}</div>
+                                )}
+                              </td>
+                              <td style={{ padding: '14px 20px' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '4px 9px',
+                                  borderRadius: 6,
+                                  fontWeight: 700,
+                                  fontSize: 12.5,
+                                  background: isPercent ? '#fef3c7' : '#e0e7ff',
+                                  color: isPercent ? '#92400e' : '#3730a3'
+                                }}>
+                                  <Percent size={12} />
+                                  {isPercent ? `${c.value ?? c.discountValue}% OFF` : `₹${c.value ?? c.discountValue} FLAT OFF`}
                                 </span>
-                              ) : (
-                                <span style={{ background: '#f1f5f9', color: '#475569', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 500 }}>
-                                  All my products
-                                </span>
-                              )}
-                            </td>
-                            <td>
-                              <div style={{ fontSize: 12 }}>Min: ₹{c.min_order ?? c.minOrder ?? 0}</div>
-                              {(c.max_discount || c.maxDiscount) && (
-                                <div style={{ fontSize: 11, color: '#64748b' }}>Cap: ₹{c.max_discount || c.maxDiscount}</div>
-                              )}
-                            </td>
-                            <td style={{ fontSize: 12, color: '#475569' }}>
-                              {c.expiry_date || c.expiryDate
-                                ? `Until ${new Date(c.expiry_date || c.expiryDate).toLocaleDateString()}`
-                                : 'No expiry'}
-                            </td>
-                            <td>
-                              <span style={{
-                                display: 'inline-block',
-                                padding: '3px 8px',
-                                borderRadius: 12,
-                                fontSize: 11,
-                                fontWeight: 600,
-                                background: isActive ? '#ecfdf5' : '#f1f5f9',
-                                color: isActive ? '#065f46' : '#64748b'
-                              }}>
-                                {isActive ? 'Active' : 'Inactive'}
-                              </span>
-                            </td>
-                            <td>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditCoupon(c)}
-                                  style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', color: '#334155' }}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteCoupon(c.code)}
-                                  style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', color: '#991b1b' }}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              </td>
+                              <td style={{ padding: '14px 20px' }}>
+                                {(c.applicable_to === 'selected' || c.applicableTo === 'selected') ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 500 }}>
+                                    {prodCount} specific product{prodCount === 1 ? '' : 's'}
+                                  </span>
+                                ) : (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 500 }}>
+                                    All store products
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '14px 20px' }}>
+                                <div style={{ fontSize: 12.5, color: '#334155' }}>
+                                  <div>Min: <strong>₹{c.min_order ?? c.minOrder ?? 0}</strong></div>
+                                  {(c.max_discount || c.maxDiscount) && (
+                                    <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 1 }}>Cap: ₹{c.max_discount || c.maxDiscount}</div>
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ padding: '14px 20px', fontSize: 12, color: '#475569' }}>
+                                {c.expiry_date || c.expiryDate ? (
+                                  <div>Until <strong>{new Date(c.expiry_date || c.expiryDate).toLocaleDateString()}</strong></div>
+                                ) : (
+                                  <span style={{ color: '#059669', fontWeight: 500 }}>No expiration</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '14px 20px' }}>
+                                {isExpired ? (
+                                  <span className="status-badge" style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
+                                    EXPIRED
+                                  </span>
+                                ) : isActive ? (
+                                  <span className="status-badge status-approved" style={{ fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
+                                    ACTIVE
+                                  </span>
+                                ) : (
+                                  <span className="status-badge" style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1', fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
+                                    INACTIVE
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '14px 20px' }}>
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditCoupon(c)}
+                                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#334155', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                    title="Edit coupon details"
+                                  >
+                                    <Edit2 size={12} /> Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCoupon(c.code)}
+                                    style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '5px 8px', fontSize: 12, cursor: 'pointer', color: '#dc2626', display: 'inline-flex', alignItems: 'center' }}
+                                    title="Delete coupon"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
@@ -2098,7 +2593,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
                     />
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
                     <div>
                       <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
                         Discount Value *
@@ -2270,7 +2765,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
                     })()}
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
                     <div>
                       <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#334155' }}>
                         Usage Limit

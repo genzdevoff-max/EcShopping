@@ -357,9 +357,30 @@
   flex-direction: column;
   min-width: 0;
   height: 100vh;
-  overflow-y: auto;
+  overflow-y: auto !important;
   overflow-x: hidden;
   background-color: #f8fafc;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.vendor-main::-webkit-scrollbar {
+  width: 8px;
+}
+
+.vendor-main::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.vendor-main::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.vendor-main::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
 }
 
 /* Top Header */
@@ -429,6 +450,8 @@
 .vendor-content-body {
   padding: 28px 32px;
   flex-grow: 1;
+  min-height: min-content;
+  overflow: visible;
 }
 
 /* ---------------- DASHBOARD TAB ---------------- */

@@ -141,11 +141,40 @@ export const api = {
   deleteVendor: (id) => request(`/api/vendors/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
 
   /* Categories (vendor or admin) */
-  getCategories: (params = {}, role = 'vendor') => request(`/api/categories${qs(params)}`, { role }),
+  getCategories: (params = {}, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else if (authSessions.get('vendor')) resolvedRole = 'vendor';
+      else resolvedRole = 'vendor';
+    }
+    return request(`/api/categories${qs(params)}`, { role: resolvedRole });
+  },
   getPublicCategories: () => request('/api/categories/public'),
-  createCategory: (data, role = 'vendor') => request('/api/categories', { method: 'POST', body: data, role }),
-  updateCategory: (id, updates, role = 'vendor') => request(`/api/categories/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role }),
-  deleteCategory: (id, role = 'vendor') => request(`/api/categories/${encodeURIComponent(id)}`, { method: 'DELETE', role }),
+  createCategory: (data, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else resolvedRole = 'vendor';
+    }
+    return request('/api/categories', { method: 'POST', body: data, role: resolvedRole });
+  },
+  updateCategory: (id, updates, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else resolvedRole = 'vendor';
+    }
+    return request(`/api/categories/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role: resolvedRole });
+  },
+  deleteCategory: (id, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else resolvedRole = 'vendor';
+    }
+    return request(`/api/categories/${encodeURIComponent(id)}`, { method: 'DELETE', role: resolvedRole });
+  },
 
   /* Products — reads are public unless a vendor wants their pending items too */
   getProducts: (params = {}, role) => request(`/api/products${qs(params)}`, { role }),
@@ -167,11 +196,32 @@ export const api = {
     }
     return request(`/api/products/${encodeURIComponent(id)}/related`, { role: resolvedRole });
   },
-  createProduct: (product, role = 'vendor') => request('/api/products', { method: 'POST', body: product, role }),
+  createProduct: (product, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else resolvedRole = 'vendor';
+    }
+    return request('/api/products', { method: 'POST', body: product, role: resolvedRole });
+  },
   createAdminProduct: (product) => request('/api/admin/products', { method: 'POST', body: product, role: 'admin' }),
-  updateProduct: (id, updates, role = 'vendor') => request(`/api/products/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role }),
+  updateProduct: (id, updates, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else resolvedRole = 'vendor';
+    }
+    return request(`/api/products/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role: resolvedRole });
+  },
   updateProductStatus: (id, status) => request(`/api/products/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status }, role: 'admin' }),
-  deleteProduct: (id, role = 'vendor') => request(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE', role }),
+  deleteProduct: (id, role) => {
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      if (authSessions.get('admin')) resolvedRole = 'admin';
+      else resolvedRole = 'vendor';
+    }
+    return request(`/api/products/${encodeURIComponent(id)}`, { method: 'DELETE', role: resolvedRole });
+  },
 
   /* Videos (Shorts & Video Reviews) */
   getPublicVideos: () => request('/api/videos/public'),
@@ -200,7 +250,7 @@ export const api = {
       // If XMLHttpRequest is available (browser), use it for real progress updates
       if (typeof XMLHttpRequest !== 'undefined') {
         const xhr = new XMLHttpRequest();
-        const token = authSessions.get(role);
+        const token = (role && authSessions.get(role)) || authSessions.get('admin') || authSessions.get('vendor');
 
         xhr.open('POST', `${API_URL}/api/upload/video`);
         if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -263,7 +313,7 @@ export const api = {
   upload(file, role) {
     return new Promise((resolve, reject) => {
       const headers = {};
-      const token = authSessions.get(role);
+      const token = (role && authSessions.get(role)) || authSessions.get('admin') || authSessions.get('vendor');
       if (token) headers.Authorization = `Bearer ${token}`;
       const formData = new FormData();
       formData.append('image', file);
@@ -417,6 +467,32 @@ export const api = {
     request(`/api/admin/deals/${encodeURIComponent(id)}`, { method: 'PUT', body: dealData, role: 'admin' }),
   deleteDeal: (id) =>
     request(`/api/admin/deals/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
+
+  /* Vendor Delivery Charges & Self-Service Shipping */
+  getVendorDeliveryCharges: () =>
+    request('/api/vendor/delivery-charges', { role: 'vendor' }),
+  updateVendorDeliveryCharges: (deliveryData) =>
+    request('/api/vendor/delivery-charges', { method: 'PUT', body: deliveryData, role: 'vendor' }),
+
+  /* Vendor Operational Settings & Password Security */
+  getVendorSettings: () =>
+    request('/api/vendor/settings', { role: 'vendor' }),
+  updateVendorSettings: (settingsData) =>
+    request('/api/vendor/settings', { method: 'PUT', body: settingsData, role: 'vendor' }),
+  changeVendorPassword: (passwordData) =>
+    request('/api/vendor/change-password', { method: 'PUT', body: passwordData, role: 'vendor' }),
+
+  /* Bulk Order Inquiries */
+  submitBulkEnquiry: (enquiryData) =>
+    request('/api/bulk-enquiry', { method: 'POST', body: enquiryData }),
+  getAdminBulkEnquiries: () =>
+    request('/api/admin/bulk-enquiries', { role: 'admin' }),
+
+  /* Newsletter Subscriptions */
+  subscribeNewsletter: (email) =>
+    request('/api/newsletter/subscribe', { method: 'POST', body: { email } }),
+  getAdminNewsletterSubscribers: () =>
+    request('/api/admin/newsletter-subscribers', { role: 'admin' }),
 };
 
 export default api;

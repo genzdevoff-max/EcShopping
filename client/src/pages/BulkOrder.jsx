@@ -1,8 +1,9 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Clock, Percent, CheckCircle2, Send, Package } from 'lucide-react';
+import { Users, Clock, Percent, CheckCircle2, Send, Package, Loader2, AlertCircle } from 'lucide-react';
 import { PageHero } from '../components/ui/PageHeader';
 import { bulkOrderInfo, siteInfo } from '../data/content';
+import api from '../utils/api';
 import '../components/policy.css';
 
 const initialForm = { name: '', email: '', phone: '', product: '', quantity: '', message: '' };
@@ -22,19 +23,36 @@ export default function BulkOrder() {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const update = (key) => (event) => {
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
     setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
+    if (submitError) setSubmitError('');
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setSubmitError('');
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    setSubmitted(true);
-    setForm(initialForm);
+
+    setSubmitting(true);
+    try {
+      const res = await api.submitBulkEnquiry(form);
+      if (res?.success) {
+        setSubmitted(true);
+        setForm(initialForm);
+      } else {
+        setSubmitError(res?.error || 'Unable to submit enquiry. Please try again.');
+      }
+    } catch (err) {
+      setSubmitError(err.message || 'Unable to submit enquiry. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const facts = [
@@ -108,13 +126,18 @@ export default function BulkOrder() {
               <div className="form-success" role="status">
                 <CheckCircle2 size={18} aria-hidden="true" />
                 <div>
-                  <strong>Enquiry received.</strong> Our team will review your requirement and get back to you
-                  with availability, pricing and lead time. You can also reach us at{' '}
+                  <strong>Enquiry received!</strong> Our wholesale team has received your requirement and will contact you directly via email or phone within 1 business day. You can also reach us at{' '}
                   <a href={`mailto:${siteInfo.email}`}>{siteInfo.email}</a>.
                 </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} noValidate>
+                {submitError && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '12px 16px', borderRadius: 8, marginBottom: 18, fontSize: '0.88rem' }}>
+                    <AlertCircle size={18} aria-hidden="true" />
+                    <span>{submitError}</span>
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                   <div className="field">
                     <label className="field-label" htmlFor="bulk-name">
@@ -207,8 +230,16 @@ export default function BulkOrder() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', marginTop: '20px' }}>
-                  <button type="submit" className="btn btn-primary">
-                    <Send size={16} aria-hidden="true" /> Send enquiry
+                  <button type="submit" className="btn btn-primary" disabled={submitting}>
+                    {submitting ? (
+                      <>
+                        <Loader2 size={16} className="spin" aria-hidden="true" /> Submitting Enquiry...
+                      </>
+                    ) : (
+                      <>
+                        <Send size={16} aria-hidden="true" /> Send enquiry
+                      </>
+                    )}
                   </button>
                   <Link to="/faq" className="btn btn-ghost">Read bulk-order FAQs</Link>
                 </div>

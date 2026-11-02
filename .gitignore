@@ -21,6 +21,7 @@ build/
 
 # Temporary scratch, test profiles & backups
 scratch/
+backup_hostinger/
 
 # Environment files
 .env

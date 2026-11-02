@@ -7,8 +7,8 @@
 export const siteInfo = {
   brand: 'EcShopping',
   tagline: 'Local sellers, delivered fresh',
-  email: 'support@ecshopping.example',
-  phone: '+91 90000 00000',
+  email: 'econnectshopping@gmail.com',
+  phone: '+91 97860 70708',
   hours: 'Mon–Sat, 9:00 AM – 7:00 PM (IST)',
   address: 'Operations Hub, Erode, Tamil Nadu, India',
   registered: 'EcShopping Marketplace',

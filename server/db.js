@@ -563,6 +563,41 @@ export const initDatabase = async () => {
 
     await safeAddColumn('deals', 'status', "VARCHAR(32) DEFAULT 'active'");
 
+    // 8. Newsletter subscribers table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+        id VARCHAR(64) PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        status VARCHAR(50) DEFAULT 'subscribed',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_subscribers_email (email),
+        INDEX idx_subscribers_created (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 9. Bulk order enquiries table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS bulk_order_enquiries (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone VARCHAR(50) NOT NULL,
+        product VARCHAR(255) DEFAULT '',
+        quantity VARCHAR(100) NOT NULL,
+        message TEXT DEFAULT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_bulk_enquiries_email (email),
+        INDEX idx_bulk_enquiries_created (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    try {
+      await connection.query('CREATE INDEX idx_orders_created_at ON orders (created_at)');
+    } catch {
+      // Non-fatal if index exists
+    }
+
     connection.release();
     console.log('✅ TiDB Cloud tables (users, vendors, categories, products, orders, order_items, reviews, admins, customer_addresses, password_resets) ready & clean (no dummy data)!');
   } catch (error) {
