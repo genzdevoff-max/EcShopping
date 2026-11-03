@@ -56,17 +56,13 @@ export default function AdminDashboard({ onLogout }) {
   const [newCatDesc, setNewCatDesc] = useState('');
   const [newCatVendor, setNewCatVendor] = useState('shared');
   const [newCatStatus, setNewCatStatus] = useState('active');
-  const [newCatImage, setNewCatImage] = useState('');
   const [creatingCat, setCreatingCat] = useState(false);
   const [catFormMsg, setCatFormMsg] = useState({ type: null, text: '' });
-  const [catUploadingImg, setCatUploadingImg] = useState(false);
-  const catFileInputRef = useRef(null);
 
   const [editingCatId, setEditingCatId] = useState(null);
   const [editCatName, setEditCatName] = useState('');
   const [editCatDesc, setEditCatDesc] = useState('');
   const [editCatStatus, setEditCatStatus] = useState('active');
-  const [editCatImage, setEditCatImage] = useState('');
 
   /* Vendor Review / Verification Modal State */
   const [reviewingVendor, setReviewingVendor] = useState(null);
@@ -385,14 +381,12 @@ export default function AdminDashboard({ onLogout }) {
       const res = await api.createCategory({
         name: newCatName.trim(),
         description: newCatDesc.trim(),
-        image: newCatImage.trim() || null,
         status: newCatStatus,
         vendorId: newCatVendor === 'shared' ? null : newCatVendor
       }, 'admin');
       if (res?.success) {
         setNewCatName('');
         setNewCatDesc('');
-        setNewCatImage('');
         setNewCatVendor('shared');
         setNewCatStatus('active');
         setCatFormMsg({ type: 'success', text: `Category "${res.category.name}" created successfully!` });
@@ -405,36 +399,6 @@ export default function AdminDashboard({ onLogout }) {
       setCatFormMsg({ type: 'error', text: err?.message || 'Failed to create category' });
     } finally {
       setCreatingCat(false);
-    }
-  };
-
-  /* Category Image Upload (600x600 px 1:1 guideline) */
-  const handleCatImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      setCatFormMsg({ type: 'error', text: 'Please select a valid image file (PNG, JPG, WEBP).' });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setCatFormMsg({ type: 'error', text: 'Category image size exceeds 5MB limit.' });
-      return;
-    }
-    setCatUploadingImg(true);
-    setCatFormMsg({ type: null, text: '' });
-    try {
-      const res = await api.uploadImage(file, 'admin');
-      if (res?.success && res.url) {
-        setNewCatImage(res.url);
-        setCatFormMsg({ type: 'success', text: 'Category image uploaded successfully!' });
-      } else {
-        setCatFormMsg({ type: 'error', text: res?.error || 'Failed to upload category image' });
-      }
-    } catch (err) {
-      setCatFormMsg({ type: 'error', text: err.message || 'Category image upload failed' });
-    } finally {
-      setCatUploadingImg(false);
     }
   };
 
@@ -949,7 +913,6 @@ export default function AdminDashboard({ onLogout }) {
     setEditingCatId(cat.id);
     setEditCatName(cat.name);
     setEditCatDesc(cat.description || '');
-    setEditCatImage(cat.image || '');
     setEditCatStatus(cat.status || 'active');
   };
 
@@ -960,7 +923,6 @@ export default function AdminDashboard({ onLogout }) {
       const res = await api.updateCategory(editingCatId, {
         name: editCatName.trim(),
         description: editCatDesc.trim(),
-        image: editCatImage.trim() || null,
         status: editCatStatus
       }, 'admin');
       if (!res?.success) throw new Error(res?.error || 'Failed to update category');
@@ -1781,44 +1743,6 @@ export default function AdminDashboard({ onLogout }) {
                       />
                     </div>
 
-                    <div className="cat-form-field" style={{ gridColumn: 'span 2' }}>
-                      <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Category Icon / Image (600×600 px 1:1, PNG/WebP supported)</span>
-                        <span style={{ fontSize: 11, color: '#64748b' }}>Transparent PNG & WebP recommended</span>
-                      </label>
-                      <input
-                        type="file"
-                        ref={catFileInputRef}
-                        accept="image/png,image/webp,image/jpeg"
-                        style={{ display: 'none' }}
-                        onChange={handleCatImageUpload}
-                      />
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
-                        <button
-                          type="button"
-                          className="approve-btn"
-                          style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1', padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
-                          onClick={() => catFileInputRef.current?.click()}
-                          disabled={catUploadingImg}
-                        >
-                          {catUploadingImg ? <Loader2 size={13} className="spin" /> : <UploadCloud size={13} />}
-                          <span>{catUploadingImg ? 'Uploading...' : 'Upload Image'}</span>
-                        </button>
-                        <input
-                          type="url"
-                          className="admin-filter-input"
-                          style={{ flex: 1 }}
-                          placeholder="or paste image URL: https://..."
-                          value={newCatImage}
-                          onChange={(e) => setNewCatImage(e.target.value)}
-                        />
-                        {newCatImage && (
-                          <div style={{ width: 38, height: 38, borderRadius: 6, overflow: 'hidden', border: '1px solid #cbd5e1', background: '#f8fafc', flexShrink: 0 }}>
-                            <img src={newCatImage} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
 
                     <div className="cat-form-field">
                       <label>Scope / Owner</label>
