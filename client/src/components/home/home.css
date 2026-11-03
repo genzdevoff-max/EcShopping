@@ -164,6 +164,8 @@
 
 .rail-section {
   border-bottom: 1px solid var(--line);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 340px;
 }
 
 .rail-section.tone-accent {

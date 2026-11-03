@@ -28,6 +28,7 @@ import {
 import ProductCard from '../ui/ProductCard';
 import SectionHead from '../ui/SectionHead';
 import { ErrorState } from '../ui/States';
+import { optimizeImageUrl } from '../../utils/imageOptimizer';
 import PromotionalBanner from './PromotionalBanner';
 import CircularCategoryShowcase from './CircularCategoryShowcase';
 import './home.css';
@@ -67,7 +68,7 @@ export function CompactCategoryNav({ categories = [], loading = false }) {
         {activeCategories.map((cat) => (
           <Link key={cat.slug} to={`/category/${cat.slug}`} className="compact-cat-item">
             <div className="compact-cat-thumb">
-              <img src={cat.image} alt="" width="32" height="32" loading="lazy" />
+              <img src={optimizeImageUrl(cat.image, { width: 64 })} alt="" width="32" height="32" loading="lazy" />
             </div>
             <span className="compact-cat-label">{cat.title}</span>
           </Link>
@@ -135,7 +136,7 @@ export function CompactCategoryTiles({ categories = [], loading = false }) {
           {activeCategories.map((cat) => (
             <Link key={cat.slug} to={`/category/${cat.slug}`} className="compact-tile-card">
               <div className="compact-tile-media">
-                <img src={cat.image} alt={cat.title} width="160" height="110" loading="lazy" />
+                <img src={optimizeImageUrl(cat.image, { width: 320 })} alt={cat.title} width="160" height="110" loading="lazy" />
               </div>
               <div className="compact-tile-body">
                 <h4 className="compact-tile-title">{cat.title}</h4>
@@ -349,7 +350,7 @@ export function PromoBanners() {
             <p>{deals.subtitle}</p>
             <span className="promo-link">Shop now <ArrowRight size={15} /></span>
           </div>
-          <img src={deals.image} alt="" width="640" height="420" loading="lazy" />
+          <img src={optimizeImageUrl(deals.image, { width: 640 })} alt="" width="640" height="420" loading="lazy" />
         </Link>
       </div>
     </section>
@@ -378,7 +379,7 @@ export function CollectionsStrip({ newArrivalsCount = null, dealsCount = null, l
             if (!coll) return null;
             return (
               <Link key={slug} to={to} className="coll-card">
-                <img src={coll.image} alt="" width="640" height="400" loading="lazy" />
+                <img src={optimizeImageUrl(coll.image, { width: 640 })} alt="" width="640" height="400" loading="lazy" />
                 <div className="coll-overlay">
                   {typeof count === 'number' && <span className="coll-count">{count} products</span>}
                   <h3>{coll.title}</h3>
@@ -429,7 +430,7 @@ export function VideoShop() {
               onClick={() => setActiveVideo(video)}
               aria-label={`Play video: ${video.title}`}
             >
-              <img src={video.poster} alt="" loading="lazy" />
+              <img src={optimizeImageUrl(video.poster, { width: 400 })} alt="" loading="lazy" />
               <span className="video-play" aria-hidden="true">
                 <Play size={20} fill="currentColor" />
               </span>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { DEFAULT_CATEGORY_IMAGE } from '../../data/content';
+import { optimizeImageUrl } from '../../utils/imageOptimizer';
 import './CircularCategoryShowcase.css';
 
 export default function CircularCategoryShowcase({ categories = [], loading = false }) {
@@ -18,19 +19,24 @@ export default function CircularCategoryShowcase({ categories = [], loading = fa
     const el = trackRef.current;
     if (!el) return;
     const { scrollLeft, scrollWidth, clientWidth } = el;
-    setCanScrollLeft(scrollLeft > 4);
-    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 6);
+    const nextLeft = scrollLeft > 4;
+    const nextRight = scrollLeft + clientWidth < scrollWidth - 6;
+    setCanScrollLeft((prev) => (prev !== nextLeft ? nextLeft : prev));
+    setCanScrollRight((prev) => (prev !== nextRight ? nextRight : prev));
   }, []);
 
   useEffect(() => {
     const el = trackRef.current;
     if (!el) return undefined;
 
-    updateScrollState();
+    const rafId = requestAnimationFrame(() => {
+      updateScrollState();
+    });
     el.addEventListener('scroll', updateScrollState, { passive: true });
     window.addEventListener('resize', updateScrollState);
 
     return () => {
+      cancelAnimationFrame(rafId);
       el.removeEventListener('scroll', updateScrollState);
       window.removeEventListener('resize', updateScrollState);
     };
@@ -156,7 +162,12 @@ export default function CircularCategoryShowcase({ categories = [], loading = fa
               >
                 <div className="circular-cat-media">
                   <img
-                    src={imgSrc}
+                    src={optimizeImageUrl(imgSrc, { width: 96 })}
+                    srcSet={`
+                      ${optimizeImageUrl(imgSrc, { width: 96 })} 96w,
+                      ${optimizeImageUrl(imgSrc, { width: 176 })} 176w
+                    `}
+                    sizes="88px"
                     alt={cat.title}
                     width="88"
                     height="88"

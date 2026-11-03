@@ -35,15 +35,13 @@ export default function Home({ onAddToCart }) {
     const results = await Promise.allSettled([
       fetchStorefrontCategories(),
       fetchStorefrontProducts({ limit: RAIL_POOL_LIMIT }),
-      fetchStorefrontProducts({ hasDiscount: '1', limit: 8 }),
       api.getBanners().catch(() => null),
       api.getActiveDeals().catch(() => null)
     ]);
 
-    const [catRes, listRes, dealRes, bannerRes, activeDealsRes] = results;
+    const [catRes, listRes, bannerRes, activeDealsRes] = results;
     const categories = catRes.status === 'fulfilled' ? catRes.value : [];
     const listings = listRes.status === 'fulfilled' ? listRes.value : { ok: false, products: [], total: null };
-    const deals = dealRes.status === 'fulfilled' ? dealRes.value : { ok: false, products: [] };
     const dedicatedDeals = (activeDealsRes.status === 'fulfilled' && activeDealsRes.value?.success && Array.isArray(activeDealsRes.value.deals))
       ? activeDealsRes.value.deals.map((d) => ({
           id: d.productId || d.product_id,
@@ -82,7 +80,8 @@ export default function Home({ onAddToCart }) {
       items: items.filter((p) => p.categorySlug === category.slug)
     }));
 
-    const finalDeals = dedicatedDeals.length > 0 ? dedicatedDeals : (deals.ok ? deals.products : []);
+    const fallbackDeals = items.filter((p) => (p.compareAt && Number(p.compareAt) > Number(p.price)) || p.couponOffer).slice(0, 8);
+    const finalDeals = dedicatedDeals.length > 0 ? dedicatedDeals : fallbackDeals;
 
     setState({
       loading: false,

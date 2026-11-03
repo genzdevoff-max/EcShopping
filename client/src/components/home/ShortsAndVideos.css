@@ -5,6 +5,8 @@
   background: var(--paper-1, #fcfbf9);
   position: relative;
   overflow: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
 }
 
 .shorts-header-row {

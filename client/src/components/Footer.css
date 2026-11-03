@@ -2,6 +2,8 @@
   background: var(--brand-900);
   color: #cfe0da;
   margin-top: auto;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
 }
 
 .footer-main {

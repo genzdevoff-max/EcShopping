@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Play, X, ExternalLink, Sparkles, ArrowRight } from 'lucide-react';
 import api from '../../utils/api';
 import { formatINR } from '../../utils/pricing';
+import { optimizeImageUrl } from '../../utils/imageOptimizer';
 import SectionHead from '../ui/SectionHead';
 import './ShortsAndVideos.css';
 
@@ -19,19 +20,33 @@ export default function ShortsAndVideos() {
 
   useEffect(() => {
     let cancelled = false;
-    api.getPublicVideos()
-      .then((res) => {
-        if (!cancelled && res?.videos && res.videos.length > 0) {
-          setVideos(res.videos);
-        }
-      })
-      .catch(() => {
-        // Degrade gracefully if offline
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+    const fetchVideos = () => {
+      api.getPublicVideos()
+        .then((res) => {
+          if (!cancelled && res?.videos && res.videos.length > 0) {
+            setVideos(res.videos);
+          }
+        })
+        .catch(() => {
+          // Degrade gracefully if offline
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const handle = window.requestIdleCallback(fetchVideos, { timeout: 2500 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(handle);
+      };
+    }
+    const timer = setTimeout(fetchVideos, 1200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleCloseModal = useCallback(() => {
@@ -97,14 +112,14 @@ export default function ShortsAndVideos() {
               <div
                 key={vid.id}
                 className="video-reel-card"
-                role="button"
-                tabIndex={0}
                 onClick={() => setActiveVideo(vid)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveVideo(vid); }}
-                aria-label={`Play video: ${vid.title}`}
+                tabIndex={0}
+                role="region"
+                aria-label={`Video reel: ${vid.title}`}
               >
                 <img
-                  src={poster}
+                  src={optimizeImageUrl(poster, { width: 400 })}
                   alt={vid.title}
                   className="video-reel-poster"
                   loading="lazy"
@@ -118,9 +133,18 @@ export default function ShortsAndVideos() {
                   </span>
                 </div>
 
-                <div className="video-play-center" aria-hidden="true">
-                  <Play size={22} fill="currentColor" />
-                </div>
+                <button
+                  type="button"
+                  className="video-play-center"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveVideo(vid);
+                  }}
+                  aria-label={`Play video: ${vid.title}`}
+                  style={{ border: 'none', cursor: 'pointer' }}
+                >
+                  <Play size={22} fill="currentColor" aria-hidden="true" />
+                </button>
 
                 <div className="video-reel-bottom">
                   <h3 className="video-reel-title">{vid.title}</h3>
@@ -132,7 +156,7 @@ export default function ShortsAndVideos() {
                     >
                       {vid.productImage && (
                         <img
-                          src={vid.productImage}
+                          src={optimizeImageUrl(vid.productImage, { width: 80 })}
                           alt=""
                           className="video-prod-thumb"
                           onError={(e) => { e.currentTarget.style.display = 'none'; }}
@@ -144,8 +168,8 @@ export default function ShortsAndVideos() {
                       </div>
                       <Link
                         to={`/product/${vid.productId}`}
-                        className="btn btn-xs btn-primary"
-                        style={{ padding: '4px 8px', fontSize: '0.72rem', flexShrink: 0 }}
+                        className="btn btn-xs btn-primary video-shop-btn"
+                        style={{ padding: '6px 12px', minHeight: 36, minWidth: 44, fontSize: '0.74rem', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                         title="View Product"
                       >
                         Shop <ArrowRight size={12} />

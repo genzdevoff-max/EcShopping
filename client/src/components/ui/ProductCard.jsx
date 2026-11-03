@@ -4,24 +4,36 @@ import { useEffect, useState } from 'react';
 import { useCart } from '../../context/CartContext';
 import { categoryDisplayForName, DEFAULT_CATEGORY_IMAGE } from '../../data/content';
 import { formatINR, discountPercent, parsePrice } from '../../utils/pricing';
+import { optimizeImageUrl } from '../../utils/imageOptimizer';
 import ProductQuickView from './ProductQuickView';
 import './ui.css';
 
 const WISHLIST_KEY = 'ecshopping_wishlist';
+let wishlistMemCache = null;
+let wishlistMemTime = 0;
 
 function readWishlist() {
+  const now = Date.now();
+  if (wishlistMemCache && now - wishlistMemTime < 150) {
+    return wishlistMemCache;
+  }
   try {
-    return JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]');
+    wishlistMemCache = JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]');
+    wishlistMemTime = now;
+    return wishlistMemCache;
   } catch {
     return [];
   }
 }
 
 export function toggleWishlistItem(product) {
+  wishlistMemCache = null;
   const list = readWishlist();
   const exists = list.some((i) => String(i.id) === String(product.id));
   const next = exists ? list.filter((i) => String(i.id) !== String(product.id)) : [...list, product];
   localStorage.setItem(WISHLIST_KEY, JSON.stringify(next));
+  wishlistMemCache = next;
+  wishlistMemTime = Date.now();
   window.dispatchEvent(new Event('wishlistUpdated'));
   return !exists;
 }
@@ -44,7 +56,9 @@ export default function ProductCard({
   const [quickViewOpen, setQuickViewOpen] = useState(false);
 
   useEffect(() => {
-    setWished(isWishlisted(product.id));
+    const onWishlistSync = () => setWished(isWishlisted(product.id));
+    window.addEventListener('wishlistUpdated', onWishlistSync);
+    return () => window.removeEventListener('wishlistUpdated', onWishlistSync);
   }, [product.id]);
 
   const price = parsePrice(product.price);
@@ -101,7 +115,13 @@ export default function ProductCard({
             className="pcard-media-link"
           >
             <img
-              src={product.image}
+              src={optimizeImageUrl(product.image, { width: 380 })}
+              srcSet={`
+                ${optimizeImageUrl(product.image, { width: 220 })} 220w,
+                ${optimizeImageUrl(product.image, { width: 380 })} 380w,
+                ${optimizeImageUrl(product.image, { width: 500 })} 500w
+              `}
+              sizes="(max-width: 480px) 46vw, (max-width: 1024px) 31vw, 280px"
               alt={product.title}
               loading="lazy"
               width="440"

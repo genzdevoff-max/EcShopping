@@ -14,6 +14,7 @@ import {
   Truck
 } from 'lucide-react';
 import brandLogo from '../assets/logo/without-bg-logo.png';
+import brandLogoWebp from '../assets/logo/without-bg-logo.webp';
 import AnnouncementBar from './AnnouncementBar';
 import { useCart } from '../context/CartContext';
 import { useStorefrontCategories, fetchStorefrontProducts } from '../data/storefront';
@@ -150,7 +151,10 @@ export default function Header({ cartCount = 0, loggedInCustomer, onCustomerLogo
       <header className={`site-header ${scrolled ? 'is-scrolled' : ''}`}>
         <div className="container header-container">
           <Link to="/" className="brand-logo" aria-label="EcShopping home">
-            <img src={brandLogo} alt="EcShopping" className="brand-logo-img" />
+            <picture>
+              <source srcSet={brandLogoWebp} type="image/webp" />
+              <img src={brandLogo} alt="EcShopping" className="brand-logo-img" width="110" height="44" />
+            </picture>
           </Link>
 
           {/* Prominent permanent retail search bar on desktop */}
@@ -418,7 +422,10 @@ export default function Header({ cartCount = 0, loggedInCustomer, onCustomerLogo
       {mobileMenuOpen && (
         <div className="mobile-drawer" role="dialog" aria-modal="true" aria-label="Navigation menu">
           <div className="mobile-drawer-top">
-            <img src={brandLogo} alt="EcShopping" className="mobile-brand" />
+            <picture>
+              <source srcSet={brandLogoWebp} type="image/webp" />
+              <img src={brandLogo} alt="EcShopping" className="mobile-brand" width="110" height="44" />
+            </picture>
             <button type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">
               <X size={22} />
             </button>

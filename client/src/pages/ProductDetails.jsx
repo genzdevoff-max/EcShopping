@@ -29,6 +29,7 @@ import { mapServerProduct } from '../data/mapProduct';
 import { fetchRelatedProducts } from '../data/storefront';
 import { categoryDisplayForName } from '../data/content';
 import { formatINR, discountPercent, DELIVERY_METHODS, getDeliveryMethod } from '../utils/pricing';
+import { optimizeImageUrl } from '../utils/imageOptimizer';
 import { useCart } from '../context/CartContext';
 import { Breadcrumbs } from '../components/ui/PageHeader';
 import QuantityStepper from '../components/ui/QuantityStepper';
@@ -323,7 +324,7 @@ export default function ProductDetails({ onAddToCart }) {
                 </span>
               )}
               <img
-                src={gallery[activeImage] || undefined}
+                src={optimizeImageUrl(gallery[activeImage], { width: 800 }) || undefined}
                 alt={`${product.title} — image ${activeImage + 1}`}
                 width="720"
                 height="720"
@@ -375,7 +376,7 @@ export default function ProductDetails({ onAddToCart }) {
                     title={`View image ${index + 1}`}
                   >
                     <img
-                      src={src}
+                      src={optimizeImageUrl(src, { width: 160 })}
                       alt={`View ${index + 1}`}
                       width="80"
                       height="80"

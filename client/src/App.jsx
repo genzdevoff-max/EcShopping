@@ -7,10 +7,6 @@ import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
 import ScrollToTop from './components/ui/ScrollToTop';
 import Home from './pages/Home';
-import Shop from './pages/Shop';
-import Cart from './pages/Cart';
-import ProductDetails from './pages/ProductDetails';
-import Login from './pages/Login';
 import LoginModal from './components/auth/LoginModal';
 import { CheckCircle } from 'lucide-react';
 import './App.css';
@@ -21,6 +17,10 @@ if (typeof window !== 'undefined' && window.location.hostname === 'ec-shopping.v
 }
 
 // Lazy-loaded routes for code splitting
+const Shop = lazy(() => import('./pages/Shop'));
+const Cart = lazy(() => import('./pages/Cart'));
+const ProductDetails = lazy(() => import('./pages/ProductDetails'));
+const Login = lazy(() => import('./pages/Login'));
 const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const VendorLogin = lazy(() => import('./pages/vendor/VendorLogin'));
@@ -88,9 +88,18 @@ function App() {
 
   useEffect(() => {
     initStorage();
-    // Pull server-persisted products and orders into the local cache, then
-    // bump dataVersion so catalog pages re-read the refreshed catalogue.
-    syncFromServer().then(() => setDataVersion((v) => v + 1));
+    // Schedule background synchronization when browser is idle so it never competes
+    // with initial critical render, LCP hero image, and above-the-fold content.
+    const runSync = () => {
+      syncFromServer().then(() => setDataVersion((v) => v + 1));
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const handle = window.requestIdleCallback(runSync, { timeout: 2500 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = setTimeout(runSync, 1200);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {

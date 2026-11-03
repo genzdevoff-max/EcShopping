@@ -1,28 +1,30 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, ChevronDown } from 'lucide-react';
+import { optimizeImageUrl } from '../../utils/imageOptimizer';
 import './PromotionalBanner.css';
 
 export const PROMO_CAMPAIGNS = [
   {
-    id: 'harvest-fresh',
+    id: 'banner-wood-pressed-oils',
+    tag: 'Traditional',
+    title: 'Pure Organic Turmeric & Authentic Wood-Pressed Oils',
+    subtitle: 'சுத்தமான கலப்படம் இல்லாத மஞ்சள் • Pure stone-ground cold pressed oils & natural staples.',
+    primaryCta: { label: 'Shop Pantry Staples', to: '/category/pantry-staples' },
+    secondaryCta: { label: 'Browse Catalog', to: '/shop' },
+    badge: 'Zero Chemical Refining • Pure Nutrient Retention',
+    image: 'https://res.cloudinary.com/wibpemz5/image/upload/v1793699427/ecshopping_products/bbifd273k1j6calxcaag.png',
+    mobileImage: 'https://res.cloudinary.com/wibpemz5/image/upload/v1793699497/ecshopping_products/tkhvr1opaiuzoeisbh6r.png'
+  },
+  {
+    id: 'banner-harvest-fresh',
     tag: 'Direct Farm Harvest',
     title: 'Pure Organic Produce & Farm Harvests',
     subtitle: 'Residue-free vegetables, cold-pressed oils & raw forest honey directly from certified local farmers.',
     primaryCta: { label: 'Shop Fresh Harvest', to: '/shop' },
     secondaryCta: { label: 'Explore Deals', to: '/collection/deals' },
     badge: '100% Certified Organic • Free Delivery over ₹499',
-    image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1600&q=80'
-  },
-  {
-    id: 'wood-pressed-oils',
-    tag: 'Traditional Cold-Pressed',
-    title: 'Authentic Wood-Pressed Oils & Pure Desi Ghee',
-    subtitle: 'Stone-ground sesame, groundnut, and coconut oils crafted by artisanal Tamil Nadu producers.',
-    primaryCta: { label: 'Shop Pantry Staples', to: '/category/pantry-staples' },
-    secondaryCta: { label: 'Browse Catalog', to: '/shop' },
-    badge: 'Zero Chemical Refining • Pure Nutrient Retention',
-    image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=1600&q=80'
+    image: 'https://res.cloudinary.com/wibpemz5/image/upload/v1793546298/ecshopping_products/nrnffcn1ky3liymlvum2.png'
   },
   {
     id: 'weekend-deals',
@@ -36,10 +38,12 @@ export const PROMO_CAMPAIGNS = [
   }
 ];
 
-export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interval = 6000 }) {
+export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interval = 8000 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const timerRef = useRef(null);
+  const touchStartXRef = useRef(null);
+  const touchStartYRef = useRef(null);
 
   const total = campaigns.length;
 
@@ -53,6 +57,35 @@ export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interva
 
   const goToSlide = (idx) => {
     setCurrentIndex(idx);
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches[0]) {
+      touchStartXRef.current = e.touches[0].clientX;
+      touchStartYRef.current = e.touches[0].clientY;
+      setIsPaused(true);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    setIsPaused(false);
+    if (touchStartXRef.current === null) return;
+    const touchEndX = e.changedTouches?.[0]?.clientX ?? null;
+    const touchEndY = e.changedTouches?.[0]?.clientY ?? null;
+    if (touchEndX !== null && touchEndY !== null) {
+      const deltaX = touchEndX - touchStartXRef.current;
+      const deltaY = touchEndY - touchStartYRef.current;
+      // Trigger swipe if horizontal displacement is >= 40px and predominantly horizontal
+      if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+        if (deltaX < 0) {
+          nextSlide();
+        } else {
+          prevSlide();
+        }
+      }
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
   };
 
   useEffect(() => {
@@ -73,6 +106,8 @@ export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interva
       onMouseLeave={() => setIsPaused(false)}
       onFocus={() => setIsPaused(true)}
       onBlur={() => setIsPaused(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       <div className="promo-banner-container">
         <div className="promo-banner-viewport">
@@ -88,17 +123,40 @@ export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interva
                 <div className="promo-banner-media">
                   <picture className="promo-banner-picture">
                     {camp.mobileImage && (
-                      <source media="(max-width: 640px)" srcSet={camp.mobileImage} />
+                      <source
+                        media="(max-width: 640px)"
+                        srcSet={`
+                          ${optimizeImageUrl(camp.mobileImage, { width: 480 })} 480w,
+                          ${optimizeImageUrl(camp.mobileImage, { width: 640 })} 640w
+                        `}
+                        sizes="100vw"
+                        width="750"
+                        height="900"
+                      />
                     )}
                     {camp.tabletImage && (
-                      <source media="(max-width: 1024px)" srcSet={camp.tabletImage} />
+                      <source
+                        media="(max-width: 1024px)"
+                        srcSet={optimizeImageUrl(camp.tabletImage, { width: 1024 })}
+                        sizes="100vw"
+                        width="1024"
+                        height="426"
+                      />
                     )}
                     <img
-                      src={camp.image}
+                      src={optimizeImageUrl(camp.image, { width: 1200 })}
+                      srcSet={`
+                        ${optimizeImageUrl(camp.mobileImage || camp.image, { width: 480 })} 480w,
+                        ${optimizeImageUrl(camp.tabletImage || camp.image, { width: 768 })} 768w,
+                        ${optimizeImageUrl(camp.image, { width: 1200 })} 1200w
+                      `}
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 100vw, 1200px"
                       alt={camp.title || 'EcShopping Promotional Banner'}
                       className="promo-banner-img"
                       loading={idx === 0 ? 'eager' : 'lazy'}
                       fetchPriority={idx === 0 ? 'high' : 'low'}
+                      width="1600"
+                      height="500"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
                       }}
@@ -158,7 +216,6 @@ export default function PromotionalBanner({ campaigns = PROMO_CAMPAIGNS, interva
                 window.scrollBy({ top: window.innerHeight * 0.75, behavior: 'smooth' });
               }
             }}
-            aria-label="Scroll down to explore categories and deals"
           >
             <span>Explore Store</span>
             <ChevronDown size={14} className="promo-scroll-cue-icon" aria-hidden="true" />

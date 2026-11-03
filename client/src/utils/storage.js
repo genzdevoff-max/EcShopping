@@ -495,6 +495,9 @@ export const syncProductsFromServer = async (role) => {
 
 /** Pull every vendor from the server into the local cache (admin only). */
 export const syncVendorsFromServer = async () => {
+  if (!authSessions.get('admin')) {
+    return getVendors();
+  }
   try {
     const data = await api.getVendors();
     if (data?.success && Array.isArray(data.vendors)) {
@@ -522,8 +525,12 @@ export const syncVendorsFromServer = async () => {
  * on failure so pages can distinguish loading, auth and network errors.
  */
 export const syncOrdersFromServerDetailed = async (params = {}, role) => {
+  const resolvedRole = role || (authSessions.get('customer') ? 'customer' : authSessions.get('vendor') ? 'vendor' : authSessions.get('admin') ? 'admin' : undefined);
+  if (!resolvedRole) {
+    return { ok: true, orders: getOrders() };
+  }
   try {
-    const data = await api.getOrders(params, role);
+    const data = await api.getOrders(params, resolvedRole);
     if (data?.success && Array.isArray(data.orders)) {
       const serverOrders = data.orders.map(normalizeOrder);
       let merged = serverOrders;
@@ -554,10 +561,14 @@ export const syncFromServer = async ({ ordersRole } = {}) => {
   const resolvedOrdersRole =
     ordersRole ||
     (authSessions.get('customer') ? 'customer' : authSessions.get('vendor') ? 'vendor' : authSessions.get('admin') ? 'admin' : undefined);
-  const [vendors, products, orders] = await Promise.all([
-    syncVendorsFromServer(),
-    syncProductsFromServer(),
-    syncOrdersFromServer({}, resolvedOrdersRole)
-  ]);
-  return { vendors, products, orders };
+  
+  const tasks = [syncProductsFromServer()];
+  if (authSessions.get('admin')) {
+    tasks.push(syncVendorsFromServer());
+  }
+  if (resolvedOrdersRole) {
+    tasks.push(syncOrdersFromServer({}, resolvedOrdersRole));
+  }
+  await Promise.all(tasks);
+  return { vendors: getVendors(), products: getProducts(), orders: getOrders() };
 };

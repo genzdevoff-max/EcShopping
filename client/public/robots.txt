@@ -1,0 +1,30 @@
+User-agent: *
+Allow: /
+Allow: /shop
+Allow: /category/
+Allow: /product/
+Allow: /about
+Allow: /contact
+Allow: /faq
+Allow: /terms
+Allow: /privacy
+Allow: /shipping-policy
+Allow: /returns-refunds
+Allow: /bulk-order
+Allow: /blog
+
+# Disallow private user, vendor and admin portals
+Disallow: /admin
+Disallow: /admin-login
+Disallow: /vendor/
+Disallow: /vendor-login
+Disallow: /customer-profile
+Disallow: /checkout
+Disallow: /my-orders
+Disallow: /order/
+Disallow: /payment/
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /api/
+
+Sitemap: https://ecshopping.in/sitemap.xml

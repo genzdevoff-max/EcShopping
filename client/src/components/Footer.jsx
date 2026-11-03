@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Globe, Phone, MapPin, Check, ArrowRight, Mail, Loader2 } from 'lucide-react';
 import brandLogo from '../assets/logo/without-bg-logo.png';
+import brandLogoWebp from '../assets/logo/without-bg-logo.webp';
 import { useStorefrontCategories } from '../data/storefront';
 import { socialLinks } from '../data/content';
 import api from '../utils/api';
@@ -109,7 +110,10 @@ export default function Footer() {
         <div className="container footer-grid">
           <div className="footer-brand-col">
             <Link to="/" className="footer-brand" aria-label="EcShopping home">
-              <img src={brandLogo} alt="EcShopping" className="footer-brand-logo-img" />
+              <picture>
+                <source srcSet={brandLogoWebp} type="image/webp" />
+                <img src={brandLogo} alt="EcShopping" className="footer-brand-logo-img" width="115" height="46" loading="lazy" />
+              </picture>
             </Link>
             <p className="footer-desc">
               A marketplace where verified local sellers meet customers who want fresh, honest,

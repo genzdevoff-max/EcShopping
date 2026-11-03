@@ -199,17 +199,17 @@
 }
 
 .promo-btn-primary {
-  background: var(--accent, #d9663d);
+  background: var(--accent-600, #bd5128);
   color: #ffffff;
-  border: 1px solid var(--accent, #d9663d);
-  box-shadow: 0 4px 16px rgba(217, 102, 61, 0.38);
+  border: 1px solid var(--accent-600, #bd5128);
+  box-shadow: 0 4px 16px rgba(189, 81, 40, 0.38);
 }
 
 .promo-btn-primary:hover {
-  background: var(--accent-600, #bd5128);
-  border-color: var(--accent-600, #bd5128);
+  background: #a9421c;
+  border-color: #a9421c;
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(217, 102, 61, 0.48);
+  box-shadow: 0 6px 20px rgba(189, 81, 40, 0.48);
 }
 
 .promo-btn-primary:focus-visible {
@@ -287,28 +287,43 @@
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .promo-dot {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: var(--r-pill, 999px);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.promo-dot::before {
+  content: '';
+  display: block;
   width: 9px;
   height: 9px;
   border-radius: var(--r-pill, 999px);
   background: rgba(255, 255, 255, 0.45);
-  border: none;
-  padding: 0;
-  cursor: pointer;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.promo-dot:hover {
+.promo-dot:hover::before {
   background: rgba(255, 255, 255, 0.8);
 }
 
-.promo-dot.active {
-  width: 26px;
-  background: var(--accent, #d9663d);
-  box-shadow: 0 0 8px rgba(217, 102, 61, 0.6);
+.promo-dot.active::before {
+  width: 24px;
+  background: var(--accent-600, #bd5128);
+  box-shadow: 0 0 8px rgba(189, 81, 40, 0.6);
 }
 
 .promo-dot:focus-visible {
@@ -547,21 +562,11 @@
   }
 
   .promo-arrow {
-    width: 28px;
-    height: 28px;
-    bottom: 10px;
-  }
-
-  .promo-arrow-prev {
-    right: 82px;
-  }
-
-  .promo-arrow-next {
-    right: 48px;
+    display: none; /* Touch mobile devices navigate via pagination dots */
   }
 
   .promo-dots {
-    bottom: 14px;
+    bottom: 12px;
     right: 12px;
   }
 

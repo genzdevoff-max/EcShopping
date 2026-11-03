@@ -44,8 +44,8 @@
   /* Neutrals (warm) */
   --ink: #1f2a26;
   --ink-2: #40514b;
-  --muted: #6b7d76;
-  --muted-2: #93a29c;
+  --muted: #50615b;
+  --muted-2: #586962;
   --line: #e6e1d7;
   --line-strong: #d3ccbf;
   --paper: #faf8f3;
@@ -538,7 +538,7 @@ p { color: var(--ink-2); }
   border: 1px solid var(--line);
 }
 
-.badge-sale { background: var(--accent); color: #fff; border-color: transparent; }
+.badge-sale { background: var(--accent-600, #bd5128); color: #fff; border-color: transparent; }
 .badge-new { background: var(--brand); color: #fff; border-color: transparent; }
 .badge-hot { background: var(--gold-soft); color: var(--warning); border-color: #f3dfb5; }
 .badge-soft { background: var(--brand-50); color: var(--brand-700); border-color: var(--brand-100); }
