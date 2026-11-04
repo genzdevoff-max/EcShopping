@@ -2586,7 +2586,7 @@ app.put('/api/categories/:id', requireAuth('vendor', 'admin'), async (req, res) 
     const updatedName = name !== undefined ? name.trim() : current.name;
     const updatedDesc = description !== undefined ? description.trim() : current.description;
     const updatedImage = (image !== undefined || imageUrl !== undefined) ? ((image || imageUrl || '').trim() || null) : current.image_url;
-    const updatedStatus = status !== undefined ? (status === 'inactive' ? 'inactive' : 'active') : current.status;
+    const updatedStatus = status !== undefined ? String(status).trim() : current.status;
 
     if (!updatedName) {
       return res.status(400).json({ success: false, error: 'Category name cannot be empty' });
@@ -3106,6 +3106,29 @@ const handleCreateProduct = async (req, res, isAdminEndpoint = false) => {
     const [rows] = await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products WHERE id = ?`, [productId]);
     console.log(`✅ [TiDB] Product created (${finalStatus}): ${title} by ${ownVendorName || ownVendorId || 'Admin'}`);
 
+    // If product has a videoUrl, register it in product_videos (pending if vendor, approved if admin approved)
+    if (productVideoUrl) {
+      try {
+        const vidStatus = finalStatus === 'approved' ? 'approved' : 'pending';
+        const [existingVids] = await pool.query('SELECT id FROM product_videos WHERE product_id = ? LIMIT 1', [productId]);
+        if (existingVids.length > 0) {
+          await pool.query(
+            'UPDATE product_videos SET video_url = ?, thumbnail_url = COALESCE(?, thumbnail_url), title = ?, status = ? WHERE id = ?',
+            [productVideoUrl, primaryImage, title, vidStatus, existingVids[0].id]
+          );
+        } else {
+          const vidId = 'vid_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+          await pool.query(
+            `INSERT INTO product_videos (id, title, description, video_url, thumbnail_url, product_id, vendor_id, vendor_name, status, display_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [vidId, title, description || '', productVideoUrl, primaryImage, productId, ownVendorId, ownVendorName, vidStatus]
+          );
+        }
+      } catch (vidSyncErr) {
+        console.warn('⚠️ Product video sync warning:', vidSyncErr.message);
+      }
+    }
+
     // If submitted by a vendor, notify the admin that a vendor submitted a product for approval.
     if (req.auth.role === 'vendor') {
       let ownVendorEmail = req.auth.email || '';
@@ -3230,6 +3253,29 @@ app.put('/api/products/:id', requireVendorOrAdmin, async (req, res) => {
       [updated.title, updated.name, updated.description, updated.category, updated.price, updated.strikePrice, updated.unit, updated.image, updated.images, updated.videoUrl, updated.stockStatus, updated.stockQuantity, newStatus, id]
     );
 
+    // Sync product video if provided
+    if (updated.videoUrl) {
+      try {
+        const vidStatus = newStatus === 'approved' ? 'approved' : 'pending';
+        const [existingVids] = await pool.query('SELECT id FROM product_videos WHERE product_id = ? LIMIT 1', [id]);
+        if (existingVids.length > 0) {
+          await pool.query(
+            'UPDATE product_videos SET video_url = ?, thumbnail_url = COALESCE(?, thumbnail_url), title = ?, status = ? WHERE id = ?',
+            [updated.videoUrl, updated.image, updated.title, vidStatus, existingVids[0].id]
+          );
+        } else {
+          const vidId = 'vid_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+          await pool.query(
+            `INSERT INTO product_videos (id, title, description, video_url, thumbnail_url, product_id, vendor_id, vendor_name, status, display_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [vidId, updated.title, updated.description || '', updated.videoUrl, updated.image, id, current.vendor_id, current.vendor_name, vidStatus]
+          );
+        }
+      } catch (vidErr) {
+        console.warn('⚠️ Product edit video sync warning:', vidErr.message);
+      }
+    }
+
     const [result] = await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products WHERE id = ?`, [id]);
     console.log(`✅ [TiDB] Product updated: ${id} (status: ${newStatus}, stock: ${updated.stockQuantity})`);
     return res.status(200).json({ success: true, product: normalizeProduct(result[0]) });
@@ -3257,6 +3303,18 @@ app.put('/api/products/:id/status', requireAdmin, async (req, res) => {
     const [rows] = await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products WHERE id = ?`, [id]);
     const updatedProduct = rows[0];
     const vendorId = updatedProduct?.vendorId || updatedProduct?.vendor_id;
+
+    // Synchronize video approval status if product has attached video
+    if (status === 'approved') {
+      try {
+        await pool.query(
+          'UPDATE product_videos SET status = "approved" WHERE product_id = ? AND status = "pending"',
+          [id]
+        );
+      } catch (vidErr) {
+        console.warn('⚠️ Product video status sync warning:', vidErr.message);
+      }
+    }
 
     // Bi-directional notification: notify vendor when product is approved or rejected
     if (updatedProduct && vendorId && (status === 'approved' || status === 'rejected')) {
@@ -4558,18 +4616,20 @@ app.post('/api/payments/phonepe/callback', paymentLimiter, async (req, res) => {
 
 // ================= SHORTS & VIDEO REVIEWS (Homepage & Admin) =================
 
-// Public active videos for homepage shorts rail (joined with approved product details)
+// Public active / approved videos for homepage shorts rail (joined with approved product details)
 app.get('/api/videos/public', async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT v.id, v.title, v.description, v.video_url AS videoUrl, v.thumbnail_url AS thumbnailUrl,
-              v.product_id AS productId, v.status, v.display_order AS displayOrder,
+              v.product_id AS productId, v.vendor_id AS vendorId, v.vendor_name AS vendorName,
+              v.status, v.display_order AS displayOrder,
               v.public_id AS publicId, v.format, v.duration, v.bytes, v.created_at AS createdAt,
               p.title AS productTitle, p.name AS productName, p.price AS productPrice,
               p.strike_price AS productStrikePrice, p.image AS productImage, p.category AS productCategory
        FROM product_videos v
        LEFT JOIN products p ON p.id = v.product_id
-       WHERE v.status = 'active' AND (p.status = 'approved' OR v.product_id IS NULL)
+       WHERE (v.status = 'approved' OR v.status = 'active')
+         AND (p.status = 'approved' OR v.product_id IS NULL)
        ORDER BY v.display_order ASC, v.created_at DESC
        LIMIT 12`
     );
@@ -4580,22 +4640,210 @@ app.get('/api/videos/public', async (req, res) => {
   }
 });
 
-// Admin list all videos (active + inactive)
+// Admin list all videos (pending, approved, rejected, inactive)
 app.get('/api/videos', requireAuth('admin'), async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT v.id, v.title, v.description, v.video_url AS videoUrl, v.thumbnail_url AS thumbnailUrl,
-              v.product_id AS productId, v.status, v.display_order AS displayOrder,
+              v.product_id AS productId, v.vendor_id AS vendorId, v.vendor_name AS vendorName,
+              v.status, v.rejection_reason AS rejectionReason, v.display_order AS displayOrder,
               v.public_id AS publicId, v.format, v.duration, v.bytes, v.created_at AS createdAt,
-              p.title AS productTitle, p.price AS productPrice, p.image AS productImage
+              p.title AS productTitle, p.price AS productPrice, p.image AS productImage,
+              vend.name AS dbVendorName, vend.business_name AS dbVendorBusiness
        FROM product_videos v
        LEFT JOIN products p ON p.id = v.product_id
-       ORDER BY v.display_order ASC, v.created_at DESC`
+       LEFT JOIN vendors vend ON vend.id = v.vendor_id
+       ORDER BY
+         CASE WHEN v.status = 'pending' THEN 0 ELSE 1 END,
+         v.display_order ASC,
+         v.created_at DESC`
     );
     return res.status(200).json({ success: true, videos: rows });
   } catch (err) {
     console.error('❌ Get admin videos DB error:', err);
     return res.status(500).json({ success: false, error: 'Unable to load videos.' });
+  }
+});
+
+// Vendor list their submitted videos
+app.get('/api/vendor/videos', requireAuth('vendor'), async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT v.id, v.title, v.description, v.video_url AS videoUrl, v.thumbnail_url AS thumbnailUrl,
+              v.product_id AS productId, v.vendor_id AS vendorId, v.vendor_name AS vendorName,
+              v.status, v.rejection_reason AS rejectionReason, v.display_order AS displayOrder,
+              v.public_id AS publicId, v.format, v.duration, v.bytes, v.created_at AS createdAt,
+              p.title AS productTitle, p.price AS productPrice, p.image AS productImage
+       FROM product_videos v
+       LEFT JOIN products p ON p.id = v.product_id
+       WHERE v.vendor_id = ?
+       ORDER BY v.created_at DESC`,
+      [req.auth.vendorId]
+    );
+    return res.status(200).json({ success: true, videos: rows });
+  } catch (err) {
+    console.error('❌ Get vendor videos error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to load videos' });
+  }
+});
+
+// Vendor submit video for admin approval
+app.post('/api/vendor/videos', requireAuth('vendor'), async (req, res) => {
+  const {
+    title,
+    description,
+    videoUrl,
+    thumbnailUrl,
+    productId,
+    publicId,
+    public_id,
+    format,
+    duration,
+    bytes
+  } = req.body || {};
+
+  if (!title || !title.trim()) {
+    return res.status(400).json({ success: false, error: 'Video title is required' });
+  }
+  if (!videoUrl || !videoUrl.trim()) {
+    return res.status(400).json({ success: false, error: 'Video URL or file is required' });
+  }
+
+  const cleanUrl = videoUrl.trim();
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    return res.status(400).json({ success: false, error: 'A valid http(s) video URL is required' });
+  }
+
+  const finalPublicId = (publicId || public_id) ? String(publicId || public_id).trim() : null;
+  const finalFormat = format ? String(format).trim() : null;
+  const finalDuration = duration != null ? parseFloat(duration) : null;
+  const finalBytes = bytes != null ? parseInt(bytes, 10) : null;
+
+  try {
+    const [vRows] = await pool.query('SELECT id, name, business_name FROM vendors WHERE id = ?', [req.auth.vendorId]);
+    const vendorName = vRows.length > 0 ? (vRows[0].business_name || vRows[0].name) : 'Vendor';
+
+    let productThumb = null;
+    let cleanProdId = null;
+    if (productId && productId.trim()) {
+      const [prods] = await pool.query(
+        'SELECT id, title, image FROM products WHERE id = ? AND (vendor_id = ? OR vendor_id IS NULL)',
+        [productId.trim(), req.auth.vendorId]
+      );
+      if (prods.length > 0) {
+        cleanProdId = prods[0].id;
+        productThumb = prods[0].image;
+      }
+    }
+
+    const id = 'vid_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+
+    await pool.query(
+      `INSERT INTO product_videos (
+         id, title, description, video_url, thumbnail_url, product_id,
+         vendor_id, vendor_name, status, display_order, public_id, format, duration, bytes
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)`,
+      [
+        id,
+        title.trim(),
+        description ? description.trim() : '',
+        cleanUrl,
+        thumbnailUrl ? thumbnailUrl.trim() : productThumb,
+        cleanProdId,
+        req.auth.vendorId,
+        vendorName,
+        finalPublicId,
+        finalFormat,
+        finalDuration,
+        finalBytes
+      ]
+    );
+
+    const newVideo = {
+      id,
+      title: title.trim(),
+      description: description ? description.trim() : '',
+      videoUrl: cleanUrl,
+      thumbnailUrl: thumbnailUrl ? thumbnailUrl.trim() : productThumb,
+      productId: cleanProdId,
+      vendorId: req.auth.vendorId,
+      vendorName,
+      status: 'pending',
+      displayOrder: 0,
+      createdAt: new Date().toISOString()
+    };
+
+    console.log(`✅ [TiDB] Vendor submitted video for approval: "${title.trim()}" (${id}) by ${vendorName}`);
+    return res.status(201).json({ success: true, video: newVideo });
+  } catch (err) {
+    console.error('❌ Vendor video submission error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to submit video right now.' });
+  }
+});
+
+// Vendor delete their video
+app.delete('/api/vendor/videos/:id', requireAuth('vendor'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await pool.query('SELECT * FROM product_videos WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+    const current = rows[0];
+    if (String(current.vendor_id) !== String(req.auth.vendorId)) {
+      return res.status(403).json({ success: false, error: 'You can only delete your own videos' });
+    }
+
+    await pool.query('DELETE FROM product_videos WHERE id = ?', [id]);
+
+    if (current.public_id && current.public_id.startsWith('ecshopping/products/videos/')) {
+      const [usedElsewhere] = await pool.query(
+        'SELECT id FROM product_videos WHERE public_id = ? LIMIT 1',
+        [current.public_id]
+      );
+      if (usedElsewhere.length === 0 && cloudinary?.uploader?.destroy) {
+        try {
+          await cloudinary.uploader.destroy(current.public_id, { resource_type: 'video' });
+          console.log(`🧹 Cleaned up deleted Cloudinary asset: ${current.public_id}`);
+        } catch {}
+      }
+    }
+
+    console.log(`✅ [TiDB] Vendor deleted video: ${id}`);
+    return res.status(200).json({ success: true, message: 'Video deleted' });
+  } catch (err) {
+    console.error('❌ Vendor delete video error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to delete video' });
+  }
+});
+
+// Admin update video approval status (approve / reject / active / inactive)
+app.put('/api/videos/:id/status', requireAuth('admin'), async (req, res) => {
+  const { id } = req.params;
+  const { status, reason } = req.body || {};
+  const allowed = ['approved', 'rejected', 'pending', 'active', 'inactive'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ success: false, error: `Invalid status. Allowed: ${allowed.join(', ')}` });
+  }
+
+  try {
+    const [rows] = await pool.query('SELECT * FROM product_videos WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+
+    const rejectionReason = status === 'rejected' ? (reason ? String(reason).trim() : 'Does not meet guidelines') : null;
+
+    await pool.query(
+      'UPDATE product_videos SET status = ?, rejection_reason = ? WHERE id = ?',
+      [status, rejectionReason, id]
+    );
+
+    console.log(`✅ [TiDB] Video ${id} status -> ${status}${rejectionReason ? ` (reason: ${rejectionReason})` : ''}`);
+    return res.status(200).json({ success: true, status, rejectionReason });
+  } catch (err) {
+    console.error('❌ Update video status DB error:', err);
+    return res.status(500).json({ success: false, error: 'Unable to update video status.' });
   }
 });
 
@@ -4733,7 +4981,7 @@ app.put('/api/videos/:id', requireAuth('admin'), async (req, res) => {
     const updatedUrl = videoUrl !== undefined ? videoUrl.trim() : current.video_url;
     const updatedThumb = thumbnailUrl !== undefined ? (thumbnailUrl.trim() || null) : current.thumbnail_url;
     const updatedProdId = productId !== undefined ? productId.trim() : current.product_id;
-    const updatedStatus = status !== undefined ? (status === 'inactive' ? 'inactive' : 'active') : current.status;
+    const updatedStatus = status !== undefined ? String(status).trim() : current.status;
     const updatedOrder = displayOrder !== undefined ? (parseInt(displayOrder, 10) || 0) : current.display_order;
     const updatedPublicId = (publicId !== undefined || public_id !== undefined)
       ? ((publicId || public_id) ? String(publicId || public_id).trim() : null)

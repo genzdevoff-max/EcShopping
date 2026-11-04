@@ -317,8 +317,11 @@ export const initDatabase = async () => {
         description TEXT DEFAULT NULL,
         video_url VARCHAR(500) NOT NULL,
         thumbnail_url VARCHAR(500) DEFAULT NULL,
-        product_id VARCHAR(64) NOT NULL,
-        status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+        product_id VARCHAR(64) NULL DEFAULT NULL,
+        vendor_id VARCHAR(64) NULL DEFAULT NULL,
+        vendor_name VARCHAR(255) NULL DEFAULT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+        rejection_reason TEXT DEFAULT NULL,
         display_order INT NOT NULL DEFAULT 0,
         public_id VARCHAR(255) DEFAULT NULL,
         format VARCHAR(32) DEFAULT NULL,
@@ -326,11 +329,43 @@ export const initDatabase = async () => {
         bytes BIGINT DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_videos_product (product_id),
+        INDEX idx_videos_vendor (vendor_id),
         INDEX idx_videos_status (status)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
     // Safe additive column migrations for product_videos
+    try {
+      await connection.query('ALTER TABLE product_videos MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT "pending"');
+      await connection.query('ALTER TABLE product_videos MODIFY COLUMN product_id VARCHAR(64) NULL DEFAULT NULL');
+    } catch (e) {
+      console.warn('⚠️ Column modify warning on product_videos:', e.message);
+    }
+
+    try {
+      if (!(await columnExists(connection, 'product_videos', 'vendor_id'))) {
+        await connection.query('ALTER TABLE product_videos ADD COLUMN vendor_id VARCHAR(64) NULL DEFAULT NULL');
+        console.log('✅ Added product_videos.vendor_id');
+      }
+    } catch (e) {
+      if (!e.message?.includes('Duplicate column')) throw e;
+    }
+    try {
+      if (!(await columnExists(connection, 'product_videos', 'vendor_name'))) {
+        await connection.query('ALTER TABLE product_videos ADD COLUMN vendor_name VARCHAR(255) NULL DEFAULT NULL');
+        console.log('✅ Added product_videos.vendor_name');
+      }
+    } catch (e) {
+      if (!e.message?.includes('Duplicate column')) throw e;
+    }
+    try {
+      if (!(await columnExists(connection, 'product_videos', 'rejection_reason'))) {
+        await connection.query('ALTER TABLE product_videos ADD COLUMN rejection_reason TEXT NULL DEFAULT NULL');
+        console.log('✅ Added product_videos.rejection_reason');
+      }
+    } catch (e) {
+      if (!e.message?.includes('Duplicate column')) throw e;
+    }
     try {
       if (!(await columnExists(connection, 'product_videos', 'public_id'))) {
         await connection.query('ALTER TABLE product_videos ADD COLUMN public_id VARCHAR(255) NULL DEFAULT NULL');

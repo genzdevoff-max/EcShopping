@@ -16,10 +16,14 @@ export default function Login({ onCustomerLogin, onVendorLogin, loggedInCustomer
   const initialRole = roleQuery === 'vendor' ? 'vendor' : 'customer';
 
   useEffect(() => {
-    if (loggedInCustomer) navigate('/profile', { replace: true });
-  }, [loggedInCustomer, navigate]);
+    if (loggedInCustomer) {
+      navigate('/profile', { replace: true });
+    } else if (isRegisterRoute && roleQuery === 'vendor') {
+      navigate('/vendor/register', { replace: true });
+    }
+  }, [loggedInCustomer, isRegisterRoute, roleQuery, navigate]);
 
-  if (loggedInCustomer) return null;
+  if (loggedInCustomer || (isRegisterRoute && roleQuery === 'vendor')) return null;
 
   return (
     <UnifiedAuthModal

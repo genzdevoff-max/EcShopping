@@ -228,7 +228,12 @@ export const api = {
   getVideos: () => request('/api/videos', { role: 'admin' }),
   createVideo: (data) => request('/api/videos', { method: 'POST', body: data, role: 'admin' }),
   updateVideo: (id, updates) => request(`/api/videos/${encodeURIComponent(id)}`, { method: 'PUT', body: updates, role: 'admin' }),
+  updateVideoStatus: (id, status, reason = '') =>
+    request(`/api/videos/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status, reason }, role: 'admin' }),
   deleteVideo: (id) => request(`/api/videos/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'admin' }),
+  getVendorVideos: () => request('/api/vendor/videos', { role: 'vendor' }),
+  createVendorVideo: (data) => request('/api/vendor/videos', { method: 'POST', body: data, role: 'vendor' }),
+  deleteVendorVideo: (id) => request(`/api/vendor/videos/${encodeURIComponent(id)}`, { method: 'DELETE', role: 'vendor' }),
 
   /* Homepage Banners (Admin & Public) */
   getBanners: () => request('/api/banners'),

@@ -11,12 +11,18 @@ export default function VendorLogin({ onLogin, initialSignUp = false, embedded =
   const [isSignUp, setIsSignUp] = useState(initialSignUp);
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    if (isSignUp) {
+      navigate('/vendor/register', { replace: true });
+    }
+  }, [isSignUp, navigate]);
+
   return (
     <UnifiedAuthModal
       isPage={!embedded}
       open={true}
       initialRole="vendor"
-      initialMode={isSignUp ? 'signup' : 'login'}
+      initialMode="login"
       onVendorLogin={onLogin}
       onClose={() => navigate('/', { replace: true })}
     />

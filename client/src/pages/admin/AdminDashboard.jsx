@@ -203,6 +203,7 @@ export default function AdminDashboard({ onLogout }) {
 
   /* Videos filters and pagination */
   const [videoSearch, setVideoSearch] = useState('');
+  const [videoStatusFilter, setVideoStatusFilter] = useState('all'); // 'all' | 'pending' | 'approved' | 'rejected'
   const [videoPage, setVideoPage] = useState(1);
   const [videoPageSize, setVideoPageSize] = useState(10);
 
@@ -1066,10 +1067,27 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
-  const handleToggleVideoStatus = async (vid) => {
-    const nextStatus = vid.status === 'active' ? 'inactive' : 'active';
+  const handleApproveVideo = async (vid) => {
     await runRowAction(vid.id, async () => {
-      const res = await api.updateVideo(vid.id, { status: nextStatus });
+      const res = await api.updateVideoStatus(vid.id, 'approved');
+      if (!res?.success) throw new Error(res?.error || 'Failed to approve video');
+    }, 'Failed to approve video');
+  };
+
+  const handleRejectVideo = async (vid) => {
+    const reason = window.prompt(`Enter rejection reason for "${vid.title}":`, 'Does not meet video quality guidelines');
+    if (reason === null) return;
+    await runRowAction(vid.id, async () => {
+      const res = await api.updateVideoStatus(vid.id, 'rejected', reason);
+      if (!res?.success) throw new Error(res?.error || 'Failed to reject video');
+    }, 'Failed to reject video');
+  };
+
+  const handleToggleVideoStatus = async (vid) => {
+    const isLive = vid.status === 'active' || vid.status === 'approved';
+    const nextStatus = isLive ? 'inactive' : 'approved';
+    await runRowAction(vid.id, async () => {
+      const res = await api.updateVideoStatus(vid.id, nextStatus);
       if (!res?.success) throw new Error(res?.error || 'Failed to update video status');
     }, 'Failed to toggle video status');
   };
@@ -1488,10 +1506,26 @@ export default function AdminDashboard({ onLogout }) {
   // Videos
   const filteredVideos = (state.videos || []).filter((v) => {
     const query = videoSearch.toLowerCase();
-    return !videoSearch ||
+    const matchesSearch = !videoSearch ||
       (v.title || '').toLowerCase().includes(query) ||
-      (v.productTitle || '').toLowerCase().includes(query);
+      (v.productTitle || '').toLowerCase().includes(query) ||
+      (v.vendorName || '').toLowerCase().includes(query) ||
+      (v.dbVendorName || '').toLowerCase().includes(query) ||
+      (v.dbVendorBusiness || '').toLowerCase().includes(query);
+
+    const isPending = v.status === 'pending';
+    const isApproved = v.status === 'approved' || v.status === 'active';
+    const isRejected = v.status === 'rejected';
+
+    let matchesStatus = true;
+    if (videoStatusFilter === 'pending') matchesStatus = isPending;
+    else if (videoStatusFilter === 'approved') matchesStatus = isApproved;
+    else if (videoStatusFilter === 'rejected') matchesStatus = isRejected;
+
+    return matchesSearch && matchesStatus;
   });
+
+  const pendingVideosCount = (state.videos || []).filter((v) => v.status === 'pending').length;
 
   const paginatedVideos = filteredVideos.slice(
     (videoPage - 1) * videoPageSize,
@@ -2737,11 +2771,87 @@ export default function AdminDashboard({ onLogout }) {
                   </form>
                 </div>
 
+                {/* Video Review Status Tabs */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary-sm"
+                    style={{
+                      background: videoStatusFilter === 'all' ? '#0e5c4a' : '#f1f5f9',
+                      color: videoStatusFilter === 'all' ? '#ffffff' : '#334155',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: 'none'
+                    }}
+                    onClick={() => { setVideoStatusFilter('all'); setVideoPage(1); }}
+                  >
+                    All Videos ({(state.videos || []).length})
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary-sm"
+                    style={{
+                      background: videoStatusFilter === 'pending' ? '#d97706' : '#f1f5f9',
+                      color: videoStatusFilter === 'pending' ? '#ffffff' : '#334155',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                    onClick={() => { setVideoStatusFilter('pending'); setVideoPage(1); }}
+                  >
+                    <span>Pending Approval</span>
+                    {pendingVideosCount > 0 && (
+                      <span style={{ background: '#ffffff', color: '#d97706', padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
+                        {pendingVideosCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary-sm"
+                    style={{
+                      background: videoStatusFilter === 'approved' ? '#0e5c4a' : '#f1f5f9',
+                      color: videoStatusFilter === 'approved' ? '#ffffff' : '#334155',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: 'none'
+                    }}
+                    onClick={() => { setVideoStatusFilter('approved'); setVideoPage(1); }}
+                  >
+                    Approved &amp; Live
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary-sm"
+                    style={{
+                      background: videoStatusFilter === 'rejected' ? '#dc2626' : '#f1f5f9',
+                      color: videoStatusFilter === 'rejected' ? '#ffffff' : '#334155',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: 'none'
+                    }}
+                    onClick={() => { setVideoStatusFilter('rejected'); setVideoPage(1); }}
+                  >
+                    Rejected
+                  </button>
+                </div>
+
                 <div className="admin-filter-bar">
                   <input
                     type="text"
                     className="admin-filter-input"
-                    placeholder="Search videos by title or product..."
+                    placeholder="Search videos by title, product, or vendor..."
                     value={videoSearch}
                     onChange={(e) => { setVideoSearch(e.target.value); setVideoPage(1); }}
                   />
@@ -2755,6 +2865,7 @@ export default function AdminDashboard({ onLogout }) {
                         <th style={{ width: 80 }}>Thumbnail</th>
                         <th>Title</th>
                         <th>Attached Product</th>
+                        <th>Uploaded By</th>
                         <th>Order</th>
                         <th>Status</th>
                         <th style={{ textAlign: 'right' }}>Actions</th>
@@ -2784,14 +2895,38 @@ export default function AdminDashboard({ onLogout }) {
                               <span style={{ color: '#94a3b8' }}>None</span>
                             )}
                           </td>
-                          <td>{vid.displayOrder}</td>
                           <td>
-                            <span className={`status-badge ${vid.status === 'active' ? 'status-approved' : 'status-rejected'}`}>
-                              {vid.status === 'active' ? 'ACTIVE' : 'INACTIVE'}
+                            <span style={{ fontSize: 13, fontWeight: 500, color: vid.vendorId ? '#0e5c4a' : '#64748b' }}>
+                              {vid.vendorName || vid.dbVendorBusiness || vid.dbVendorName || (vid.vendorId ? `Vendor (${vid.vendorId})` : 'Platform Admin')}
                             </span>
                           </td>
+                          <td>{vid.displayOrder}</td>
+                          <td>
+                            {vid.status === 'pending' ? (
+                              <span className="status-badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+                                PENDING REVIEW
+                              </span>
+                            ) : vid.status === 'rejected' ? (
+                              <span className="status-badge status-rejected" title={vid.rejectionReason || 'Rejected'}>
+                                REJECTED
+                              </span>
+                            ) : vid.status === 'inactive' ? (
+                              <span className="status-badge" style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1' }}>
+                                INACTIVE
+                              </span>
+                            ) : (
+                              <span className="status-badge status-approved">
+                                APPROVED
+                              </span>
+                            )}
+                            {vid.rejectionReason && (
+                              <p style={{ margin: '3px 0 0', fontSize: 11, color: '#dc2626' }}>
+                                {vid.rejectionReason}
+                              </p>
+                            )}
+                          </td>
                           <td style={{ textAlign: 'right' }}>
-                            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
                               {vid.videoUrl && (
                                 <button
                                   type="button"
@@ -2805,23 +2940,71 @@ export default function AdminDashboard({ onLogout }) {
                                   <span>Play</span>
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                className={vid.status === 'active' ? 'reject-btn' : 'approve-btn'}
-                                style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                                disabled={busyId === vid.id}
-                                onClick={() => handleToggleVideoStatus(vid)}
-                                title={vid.status === 'active' ? 'Deactivate video' : 'Activate video'}
-                              >
-                                {busyId === vid.id ? (
-                                  <Loader2 size={13} className="spin" />
-                                ) : vid.status === 'active' ? (
-                                  <XCircle size={13} />
-                                ) : (
-                                  <CheckCircle size={13} />
-                                )}
-                                <span>{busyId === vid.id ? 'Saving...' : vid.status === 'active' ? 'Deactivate' : 'Activate'}</span>
-                              </button>
+
+                              {vid.status === 'pending' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="approve-btn"
+                                    style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                    disabled={busyId === vid.id}
+                                    onClick={() => handleApproveVideo(vid)}
+                                    title="Approve video for customer homepage"
+                                  >
+                                    {busyId === vid.id ? <Loader2 size={13} className="spin" /> : <CheckCircle size={13} />}
+                                    <span>Approve</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="reject-btn"
+                                    style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                    disabled={busyId === vid.id}
+                                    onClick={() => handleRejectVideo(vid)}
+                                    title="Reject submitted video"
+                                  >
+                                    {busyId === vid.id ? <Loader2 size={13} className="spin" /> : <XCircle size={13} />}
+                                    <span>Reject</span>
+                                  </button>
+                                </>
+                              ) : vid.status === 'rejected' ? (
+                                <button
+                                  type="button"
+                                  className="approve-btn"
+                                  style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                  disabled={busyId === vid.id}
+                                  onClick={() => handleApproveVideo(vid)}
+                                  title="Re-approve video"
+                                >
+                                  {busyId === vid.id ? <Loader2 size={13} className="spin" /> : <CheckCircle size={13} />}
+                                  <span>Re-Approve</span>
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={vid.status === 'inactive' ? 'approve-btn' : 'btn-secondary-sm'}
+                                    style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                    disabled={busyId === vid.id}
+                                    onClick={() => handleToggleVideoStatus(vid)}
+                                    title={vid.status === 'inactive' ? 'Activate video' : 'Deactivate video'}
+                                  >
+                                    {busyId === vid.id ? <Loader2 size={13} className="spin" /> : vid.status === 'inactive' ? <CheckCircle size={13} /> : <XCircle size={13} />}
+                                    <span>{vid.status === 'inactive' ? 'Activate' : 'Deactivate'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="reject-btn"
+                                    style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                    disabled={busyId === vid.id}
+                                    onClick={() => handleRejectVideo(vid)}
+                                    title="Reject video"
+                                  >
+                                    <XCircle size={13} />
+                                    <span>Reject</span>
+                                  </button>
+                                </>
+                              )}
+
                               <button
                                 type="button"
                                 className="reject-btn"
@@ -2839,8 +3022,8 @@ export default function AdminDashboard({ onLogout }) {
                       ))}
                       {filteredVideos.length === 0 && (
                         <tr>
-                          <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                            No video reviews or shorts added yet. Use the form above to add your first video!
+                          <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                            No videos found matching your filter. Use the form above to add a video!
                           </td>
                         </tr>
                       )}

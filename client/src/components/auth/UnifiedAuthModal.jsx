@@ -115,6 +115,11 @@ export default function UnifiedAuthModal({
 
   const handleRoleChange = (newRole) => {
     if (restrictToAdmin && newRole !== 'admin') return;
+    if (newRole === 'vendor' && mode === 'signup') {
+      handleDismiss();
+      navigate('/vendor/register');
+      return;
+    }
     setRole(newRole);
     setError('');
     setSuccessMsg('');
@@ -122,6 +127,11 @@ export default function UnifiedAuthModal({
   };
 
   const handleModeChange = (newMode) => {
+    if (newMode === 'signup' && role === 'vendor') {
+      handleDismiss();
+      navigate('/vendor/register');
+      return;
+    }
     setMode(newMode);
     setError('');
     setSuccessMsg('');
@@ -235,52 +245,6 @@ export default function UnifiedAuthModal({
     }
   };
 
-  const handleVendorRegisterSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccessMsg('');
-
-    if (!name.trim() || !email.trim() || !password) {
-      setError('Please fill in all required fields.');
-      return;
-    }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const data = await api.registerVendor({
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        phone: phone.trim()
-      });
-
-      if (data?.success && data.vendor) {
-        addVendor(data.vendor);
-        if (data.vendor.status === 'pending') {
-          setVendorPendingNotice(true);
-          setMode('login');
-          setSuccessMsg('Application submitted! Your seller account is awaiting administrator review.');
-          return;
-        }
-        setSuccessMsg('Seller account registered! Opening Vendor Portal...');
-        setTimeout(() => {
-          onVendorLogin?.(data.vendor);
-          handleDismiss();
-          navigate('/vendor');
-        }, 600);
-        return;
-      }
-      setError(data?.error || 'Could not register seller account.');
-    } catch (err) {
-      setError(err.message || 'Could not complete registration. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAdminLoginSubmit = async (e) => {
     e.preventDefault();
@@ -500,10 +464,13 @@ export default function UnifiedAuthModal({
 
               <button
                 type="button"
-                className={`auth-choice-card ${role === 'vendor' ? 'selected' : ''}`}
-                onClick={() => setRole('vendor')}
+                className="auth-choice-card"
+                onClick={() => {
+                  handleDismiss();
+                  navigate('/vendor/register');
+                }}
                 role="radio"
-                aria-checked={role === 'vendor'}
+                aria-checked={false}
               >
                 <div className="auth-choice-icon vendor-icon">
                   <Store size={18} />
@@ -571,9 +538,7 @@ export default function UnifiedAuthModal({
                 role === 'admin'
                   ? handleAdminLoginSubmit
                   : mode === 'signup'
-                  ? role === 'vendor'
-                    ? handleVendorRegisterSubmit
-                    : handleCustomerSignUpSubmit
+                  ? handleCustomerSignUpSubmit
                   : role === 'vendor'
                   ? handleVendorLoginSubmit
                   : handleCustomerLoginSubmit
@@ -585,7 +550,7 @@ export default function UnifiedAuthModal({
               {mode === 'signup' && role !== 'admin' && (
                 <div className="auth-field-group">
                   <label className="auth-field-label" htmlFor="auth-name">
-                    {role === 'vendor' ? 'Business or Seller Name' : 'Full Name'} <span className="req">*</span>
+                    Full Name <span className="req">*</span>
                   </label>
                   <div className="auth-input-container">
                     <User size={16} className="auth-field-prefix-icon" />
@@ -593,7 +558,7 @@ export default function UnifiedAuthModal({
                       id="auth-name"
                       type="text"
                       className="auth-unified-input"
-                      placeholder={role === 'vendor' ? 'e.g. Green Valley Farms' : 'e.g. Ananya Sharma'}
+                      placeholder="e.g. Ananya Sharma"
                       value={name}
                       onChange={handleFieldChange(setName)}
                       required
@@ -709,26 +674,12 @@ export default function UnifiedAuthModal({
                     : role === 'admin'
                     ? 'Enter Administrator Dashboard'
                     : mode === 'signup'
-                    ? role === 'vendor'
-                      ? 'Submit Seller Registration'
-                      : 'Create Customer Account'
+                    ? 'Create Customer Account'
                     : role === 'vendor'
                     ? 'Sign In to Vendor Portal'
                     : 'Sign In'}
                 </span>
               </button>
-
-              {mode === 'signup' && role === 'vendor' && (
-                <div style={{ textAlign: 'center', marginTop: 12, fontSize: '0.82rem' }}>
-                  <Link
-                    to="/vendor/register"
-                    onClick={handleDismiss}
-                    style={{ color: '#0e5c4a', fontWeight: 600, textDecoration: 'underline' }}
-                  >
-                    Open Comprehensive Seller Registration (GST, FSSAI & Bank Details) →
-                  </Link>
-                </div>
-              )}
 
               {/* Footer Switch Prompt */}
               {role !== 'admin' && (
@@ -739,7 +690,14 @@ export default function UnifiedAuthModal({
                       <button
                         type="button"
                         className="auth-footer-switch-btn"
-                        onClick={() => handleModeChange('signup')}
+                        onClick={() => {
+                          if (role === 'vendor') {
+                            handleDismiss();
+                            navigate('/vendor/register');
+                          } else {
+                            handleModeChange('signup');
+                          }
+                        }}
                       >
                         Sign up now
                       </button>

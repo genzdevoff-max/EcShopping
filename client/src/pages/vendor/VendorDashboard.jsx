@@ -37,7 +37,9 @@ import {
   Lock,
   Shield,
   Edit2,
-  Percent
+  Percent,
+  FileVideo,
+  Play
 } from 'lucide-react';
 import brandLogoWithBg from '../../assets/logo/logo.png';
 import Pagination from '../../components/ui/Pagination';
@@ -82,6 +84,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
     if (path.includes('/vendor/products/pending')) return 'products-pending';
     if (path.includes('/vendor/products/rejected')) return 'products-rejected';
     if (path.includes('/vendor/products')) return 'products-all';
+    if (path.includes('/vendor/videos') || path.includes('/vendor/video')) return 'videos';
     if (path.includes('/vendor/orders')) return 'orders';
     if (path.includes('/vendor/stocks')) return 'stocks';
     if (path.includes('/vendor/reviews')) return 'reviews';
@@ -114,6 +117,9 @@ export default function VendorDashboard({ vendor, onLogout }) {
         break;
       case 'products-rejected':
         navigate('/vendor/products/rejected');
+        break;
+      case 'videos':
+        navigate('/vendor/videos');
         break;
       case 'orders':
         navigate('/vendor/orders');
@@ -254,6 +260,179 @@ export default function VendorDashboard({ vendor, onLogout }) {
       loadCoupons();
     }
   }, [activeTab]);
+
+  // ---------------- VENDOR SHORTS & VIDEO REVIEWS STATE ----------------
+  const [vendorVideos, setVendorVideos] = useState([]);
+  const [loadingVideos, setLoadingVideos] = useState(false);
+  const [videoFormMsg, setVideoFormMsg] = useState({ type: null, text: '' });
+  const [newVidTitle, setNewVidTitle] = useState('');
+  const [newVidDesc, setNewVidDesc] = useState('');
+  const [newVidUrl, setNewVidUrl] = useState('');
+  const [newVidProduct, setNewVidProduct] = useState('');
+  const [vidInputMode, setVidInputMode] = useState('upload'); // 'upload' | 'url'
+  const [selectedVideoFile, setSelectedVideoFile] = useState(null);
+  const [localVideoPreview, setLocalVideoPreview] = useState(null);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [submittingVideo, setSubmittingVideo] = useState(false);
+  const [previewingVideo, setPreviewingVideo] = useState(null);
+  const [busyVideoId, setBusyVideoId] = useState(null);
+  const videoFileInputRef = React.useRef(null);
+
+  const loadVendorVideos = async () => {
+    setLoadingVideos(true);
+    try {
+      const res = await api.getVendorVideos();
+      if (res?.success && Array.isArray(res.videos)) {
+        setVendorVideos(res.videos);
+      }
+    } catch {
+      setVendorVideos([]);
+    } finally {
+      setLoadingVideos(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'videos') {
+      loadVendorVideos();
+    }
+  }, [activeTab]);
+
+  const handleSelectVideoFile = (file) => {
+    if (!file) return;
+    const validTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'];
+    const validExts = ['.mp4', '.webm', '.mov', '.ogg'];
+    const hasValidExt = validExts.some((ext) => file.name.toLowerCase().endsWith(ext));
+    if (!validTypes.includes(file.type) && !hasValidExt) {
+      setVideoFormMsg({ type: 'error', text: 'Unsupported format. Please select an MP4, WebM, MOV, or OGG video.' });
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setVideoFormMsg({ type: 'error', text: 'Video exceeds maximum allowed size of 50MB.' });
+      return;
+    }
+    if (localVideoPreview) {
+      URL.revokeObjectURL(localVideoPreview);
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setSelectedVideoFile(file);
+    setLocalVideoPreview(objectUrl);
+    setVideoUploadProgress(0);
+    setVideoFormMsg({ type: null, text: '' });
+    if (!newVidTitle.trim()) {
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+      setNewVidTitle(cleanName);
+    }
+  };
+
+  const handleClearSelectedVideo = () => {
+    if (localVideoPreview) {
+      URL.revokeObjectURL(localVideoPreview);
+    }
+    setSelectedVideoFile(null);
+    setLocalVideoPreview(null);
+    setVideoUploadProgress(0);
+    setIsUploadingVideo(false);
+    if (videoFileInputRef.current) {
+      videoFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmitVendorVideo = async (e) => {
+    e.preventDefault();
+    setVideoFormMsg({ type: null, text: '' });
+
+    if (!newVidTitle.trim()) {
+      setVideoFormMsg({ type: 'error', text: 'Please enter a video title.' });
+      return;
+    }
+
+    if (vidInputMode === 'upload' && !selectedVideoFile) {
+      setVideoFormMsg({ type: 'error', text: 'Please select a video file from your device, or switch to Video URL.' });
+      return;
+    }
+
+    if (vidInputMode === 'url') {
+      const trimmed = newVidUrl.trim();
+      if (!trimmed || (!trimmed.startsWith('http://') && !trimmed.startsWith('https://'))) {
+        setVideoFormMsg({ type: 'error', text: 'Please enter a valid http(s) video URL (YouTube, Vimeo, or direct MP4 link).' });
+        return;
+      }
+    }
+
+    setSubmittingVideo(true);
+    let finalVideoUrl = newVidUrl.trim();
+    let uploadMetadata = {};
+
+    try {
+      if (vidInputMode === 'upload' && selectedVideoFile) {
+        setIsUploadingVideo(true);
+        setVideoUploadProgress(10);
+        const uploadRes = await api.uploadVideo(
+          selectedVideoFile,
+          'vendor',
+          (percent) => setVideoUploadProgress(Math.max(10, percent))
+        );
+        if (!uploadRes?.success || !uploadRes.url) {
+          throw new Error(uploadRes?.error || 'Video upload failed.');
+        }
+        finalVideoUrl = uploadRes.url;
+        uploadMetadata = {
+          publicId: uploadRes.publicId || uploadRes.public_id,
+          format: uploadRes.format,
+          duration: uploadRes.duration,
+          bytes: uploadRes.bytes
+        };
+        setVideoUploadProgress(100);
+      }
+
+      const res = await api.createVendorVideo({
+        title: newVidTitle.trim(),
+        description: newVidDesc.trim(),
+        videoUrl: finalVideoUrl,
+        productId: newVidProduct || null,
+        ...uploadMetadata
+      });
+
+      if (res?.success && res.video) {
+        setVideoFormMsg({
+          type: 'success',
+          text: 'Video submitted successfully for administrator approval! It will appear on the homepage once approved.'
+        });
+        handleClearSelectedVideo();
+        setNewVidTitle('');
+        setNewVidDesc('');
+        setNewVidUrl('');
+        setNewVidProduct('');
+        loadVendorVideos();
+      } else {
+        setVideoFormMsg({ type: 'error', text: res?.error || 'Failed to submit video.' });
+      }
+    } catch (err) {
+      setVideoFormMsg({ type: 'error', text: err?.message || 'Failed to submit video.' });
+    } finally {
+      setSubmittingVideo(false);
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleDeleteVendorVideo = async (vidId) => {
+    if (!window.confirm('Are you sure you want to delete this submitted video?')) return;
+    setBusyVideoId(vidId);
+    try {
+      const res = await api.deleteVendorVideo(vidId);
+      if (res?.success) {
+        setVendorVideos((prev) => prev.filter((v) => v.id !== vidId));
+      } else {
+        alert(res?.error || 'Failed to delete video');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete video');
+    } finally {
+      setBusyVideoId(null);
+    }
+  };
 
   const handleOpenAddCoupon = () => {
     setEditingCouponCode(null);
@@ -555,6 +734,8 @@ export default function VendorDashboard({ vendor, onLogout }) {
     // Fetch only this vendor's orders from the server (scoped for privacy).
     const vendorOrders = await syncOrdersFromServer({ vendorId: vendor.id, vendorName: vendor.name }, 'vendor');
     setOrders(Array.isArray(vendorOrders) ? vendorOrders : getVendorOrders(vendor.id, vendor.name));
+
+    loadVendorVideos();
   };
 
   useEffect(() => {
@@ -1029,6 +1210,20 @@ export default function VendorDashboard({ vendor, onLogout }) {
             )}
           </div>
 
+          {/* 2b. Shorts & Videos */}
+          <div className="vendor-menu-item">
+            <button 
+              className={`vendor-menu-btn ${activeTab === 'videos' ? 'active' : ''}`}
+              onClick={() => handleNavigate('videos')}
+            >
+              <FileVideo size={19} className="vendor-menu-icon" />
+              <span className="vendor-menu-title">Shorts &amp; Videos</span>
+              {vendorVideos.length > 0 && (
+                <span className="vendor-badge-count">{vendorVideos.length}</span>
+              )}
+            </button>
+          </div>
+
           {/* 3. Orders */}
           <div className="vendor-menu-item">
             <button 
@@ -1146,6 +1341,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
                 {activeTab === 'products-all' && 'All Products'}
                 {activeTab === 'products-pending' && 'Products Received — Pending Approval'}
                 {activeTab === 'products-rejected' && 'Products Rejected by Admin'}
+                {activeTab === 'videos' && 'Shorts & Video Reviews'}
                 {activeTab === 'orders' && 'Orders Received'}
                 {activeTab === 'stocks' && 'Stock Management'}
                 {activeTab === 'reviews' && 'Customer Reviews'}
@@ -1162,6 +1358,7 @@ export default function VendorDashboard({ vendor, onLogout }) {
               {activeTab === 'products-all' && `Manage your existing product listings (${products.length} products).`}
               {activeTab === 'products-pending' && `Products submitted to the admin and awaiting review (${pendingProducts.length}).`}
               {activeTab === 'products-rejected' && `Products the admin did not approve (${rejectedProducts.length}).`}
+              {activeTab === 'videos' && 'Submit farm harvest moments and product video reels for administrator approval to feature on the customer homepage.'}
               {activeTab === 'orders' && `Track orders received for your store (${orders.length} orders). Customer contact details are kept private.`}
               {activeTab === 'stocks' && 'Control which products are in stock and available to customers.'}
               {activeTab === 'reviews' && `Feedback from customers on your products (${reviews.length} reviews).`}
@@ -1350,7 +1547,424 @@ export default function VendorDashboard({ vendor, onLogout }) {
             </>
           )}
 
-          {/* ---------------- 4c. STOCK MANAGEMENT ---------------- */}
+          {/* ---------------- 4c. SHORTS & VIDEO REVIEWS (Vendor Submission) ---------------- */}
+          {activeTab === 'videos' && (
+            <div className="vendor-videos-section">
+              {/* Approval Notice Banner */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', padding: '14px 16px', borderRadius: 10, marginBottom: 20, fontSize: 13, lineHeight: 1.55 }}>
+                <ShieldCheck size={20} style={{ flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+                <div>
+                  <strong>Admin Video Approval Workflow:</strong>
+                  <p style={{ margin: '4px 0 0' }}>
+                    All video reels and product demonstrations submitted here require platform administrator review.
+                    Once approved by the Admin, your video will automatically be featured in the <strong>Shorts &amp; Video Reviews</strong> section on the customer homepage.
+                    Pending and rejected videos will not appear on the storefront.
+                  </p>
+                </div>
+              </div>
+
+              {/* Upload New Video Form Card */}
+              <div className="products-table-card" style={{ marginBottom: 24 }}>
+                <div className="table-toolbar">
+                  <h3 style={{ margin: 0, fontSize: 16, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <PlusCircle size={18} color="#0e5c4a" /> Submit New Video for Approval
+                  </h3>
+                </div>
+
+                {videoFormMsg.text && (
+                  <div style={{
+                    margin: '0 20px 16px',
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: videoFormMsg.type === 'error' ? '#fef2f2' : '#f0fdf4',
+                    border: videoFormMsg.type === 'error' ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                    color: videoFormMsg.type === 'error' ? '#991b1b' : '#166534'
+                  }}>
+                    {videoFormMsg.type === 'error' ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
+                    <span>{videoFormMsg.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmitVendorVideo} style={{ padding: '0 20px 20px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 16 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Video Title <span style={{ color: '#dc2626' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="vendor-input"
+                        placeholder="e.g. Fresh Honey Harvest Reel"
+                        value={newVidTitle}
+                        onChange={(e) => setNewVidTitle(e.target.value)}
+                        required
+                        disabled={submittingVideo}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Attach to Product <span style={{ fontSize: 11, color: '#64748b' }}>(Optional)</span>
+                      </label>
+                      <select
+                        className="vendor-select"
+                        value={newVidProduct}
+                        onChange={(e) => setNewVidProduct(e.target.value)}
+                        disabled={submittingVideo}
+                      >
+                        <option value="">General Store / Reel (No specific product)</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} (₹{p.price})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                      Description / Caption <span style={{ fontSize: 11, color: '#64748b' }}>(Optional)</span>
+                    </label>
+                    <textarea
+                      className="vendor-textarea"
+                      placeholder="Brief note on what makes this produce special or how it was harvested"
+                      value={newVidDesc}
+                      onChange={(e) => setNewVidDesc(e.target.value)}
+                      rows={2}
+                      disabled={submittingVideo}
+                    />
+                  </div>
+
+                  {/* Mode switcher: Upload vs URL */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          background: vidInputMode === 'upload' ? '#0e5c4a' : '#f1f5f9',
+                          color: vidInputMode === 'upload' ? '#ffffff' : '#334155',
+                          border: 'none'
+                        }}
+                        onClick={() => { setVidInputMode('upload'); setVideoFormMsg({ type: null, text: '' }); }}
+                      >
+                        Upload Video File (MP4, WebM)
+                      </button>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          background: vidInputMode === 'url' ? '#0e5c4a' : '#f1f5f9',
+                          color: vidInputMode === 'url' ? '#ffffff' : '#334155',
+                          border: 'none'
+                        }}
+                        onClick={() => { setVidInputMode('url'); setVideoFormMsg({ type: null, text: '' }); }}
+                      >
+                        Provide Video URL (YouTube / External)
+                      </button>
+                    </div>
+
+                    {vidInputMode === 'upload' ? (
+                      <div>
+                        <input
+                          ref={videoFileInputRef}
+                          type="file"
+                          accept="video/mp4,video/webm,video/quicktime,video/ogg"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleSelectVideoFile(e.target.files[0]);
+                            }
+                          }}
+                        />
+
+                        {!selectedVideoFile ? (
+                          <div
+                            style={{
+                              border: '2px dashed #cbd5e1',
+                              borderRadius: 10,
+                              padding: '24px 16px',
+                              textAlign: 'center',
+                              background: '#f8fafc',
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => videoFileInputRef.current?.click()}
+                          >
+                            <UploadCloud size={32} color="#0e5c4a" style={{ margin: '0 auto 8px' }} />
+                            <div style={{ fontWeight: 600, color: '#0e5c4a', fontSize: 14 }}>
+                              Click to choose a video file or drag and drop
+                            </div>
+                            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                              MP4, WebM, MOV, or OGG up to 50MB
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, background: '#f8fafc' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
+                                Selected: {selectedVideoFile.name} ({(selectedVideoFile.size / (1024 * 1024)).toFixed(1)} MB)
+                              </div>
+                              <button
+                                type="button"
+                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                                onClick={handleClearSelectedVideo}
+                              >
+                                Remove File
+                              </button>
+                            </div>
+                            {localVideoPreview && (
+                              <div style={{ maxWidth: 280, borderRadius: 8, overflow: 'hidden', margin: '0 auto 8px' }}>
+                                <video src={localVideoPreview} controls style={{ width: '100%', maxHeight: 180, display: 'block' }} />
+                              </div>
+                            )}
+                            {isUploadingVideo && (
+                              <div style={{ marginTop: 8 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 4 }}>
+                                  <span>Uploading video...</span>
+                                  <span>{videoUploadProgress}%</span>
+                                </div>
+                                <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{ width: `${videoUploadProgress}%`, height: '100%', background: '#0e5c4a', transition: 'width 0.2s ease' }} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="url"
+                          className="vendor-input"
+                          placeholder="https://www.youtube.com/watch?v=... or https://example.com/video.mp4"
+                          value={newVidUrl}
+                          onChange={(e) => setNewVidUrl(e.target.value)}
+                          disabled={submittingVideo}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn-primary-action"
+                    disabled={submittingVideo}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {submittingVideo ? (
+                      <>
+                        <Loader2 size={16} className="spin" />
+                        <span>{isUploadingVideo ? `Uploading (${videoUploadProgress}%)…` : 'Submitting to Admin…'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud size={16} />
+                        <span>Submit Video for Admin Approval</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              {/* My Submitted Videos Table */}
+              <div className="products-table-card">
+                <div className="table-toolbar">
+                  <h3 style={{ margin: 0, fontSize: 16, color: '#0f172a' }}>
+                    My Submitted Videos ({vendorVideos.length})
+                  </h3>
+                  <button
+                    type="button"
+                    className="category-add-link"
+                    style={{ background: 'none', border: 'none', color: '#0e5c4a', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+                    onClick={loadVendorVideos}
+                    disabled={loadingVideos}
+                  >
+                    {loadingVideos ? 'Refreshing...' : '↻ Refresh List'}
+                  </button>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="vendor-data-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 80 }}>Preview</th>
+                        <th>Title &amp; Caption</th>
+                        <th>Attached Product</th>
+                        <th>Approval Status</th>
+                        <th>Submitted On</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vendorVideos.map((vid) => (
+                        <tr key={vid.id}>
+                          <td>
+                            {vid.thumbnailUrl ? (
+                              <img
+                                src={vid.thumbnailUrl}
+                                alt=""
+                                style={{ width: 44, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0' }}
+                                onError={(e) => { e.currentTarget.src = '/placeholder.png'; }}
+                              />
+                            ) : (
+                              <div style={{ width: 44, height: 56, background: '#f1f5f9', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                                <FileVideo size={20} />
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <strong style={{ display: 'block', fontSize: 14, color: '#0f172a' }}>{vid.title}</strong>
+                            {vid.description && (
+                              <p style={{ margin: '3px 0 0', fontSize: 12, color: '#64748b' }}>{vid.description}</p>
+                            )}
+                          </td>
+                          <td>
+                            {vid.productTitle ? (
+                              <span style={{ fontSize: 13, fontWeight: 600, color: '#0e5c4a' }}>
+                                {vid.productTitle} (₹{vid.productPrice})
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 12, color: '#94a3b8' }}>General / Storefront</span>
+                            )}
+                          </td>
+                          <td>
+                            {vid.status === 'approved' || vid.status === 'active' ? (
+                              <span className="status-badge status-approved">
+                                APPROVED &amp; LIVE
+                              </span>
+                            ) : vid.status === 'rejected' ? (
+                              <div>
+                                <span className="status-badge status-rejected">
+                                  REJECTED
+                                </span>
+                                {vid.rejectionReason && (
+                                  <p style={{ margin: '4px 0 0', fontSize: 11, color: '#dc2626' }}>
+                                    Reason: {vid.rejectionReason}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="status-badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+                                PENDING REVIEW
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ fontSize: 12, color: '#64748b' }}>
+                            {vid.createdAt ? new Date(vid.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                              {vid.videoUrl && (
+                                <button
+                                  type="button"
+                                  className="btn-secondary-action"
+                                  style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                                  onClick={() => setPreviewingVideo(vid)}
+                                >
+                                  <Play size={13} /> Play
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="action-btn-del"
+                                style={{ padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 6 }}
+                                disabled={busyVideoId === vid.id}
+                                onClick={() => handleDeleteVendorVideo(vid.id)}
+                                title="Delete submitted video"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {vendorVideos.length === 0 && !loadingVideos && (
+                        <tr>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                            No videos submitted yet. Use the form above to submit your first harvest or product video!
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Video Preview Modal */}
+              {previewingVideo && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.75)',
+                    zIndex: 9999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 16
+                  }}
+                  onClick={() => setPreviewingVideo(null)}
+                >
+                  <div
+                    style={{
+                      background: '#000',
+                      borderRadius: 12,
+                      maxWidth: 640,
+                      width: '100%',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div style={{ padding: '12px 16px', background: '#1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
+                      <strong style={{ fontSize: 14 }}>{previewingVideo.title}</strong>
+                      <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}
+                        onClick={() => setPreviewingVideo(null)}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <div style={{ aspectRatio: '16/9', background: '#000' }}>
+                      {previewingVideo.videoUrl?.includes('youtube') || previewingVideo.videoUrl?.includes('youtu.be') ? (
+                        <iframe
+                          src={previewingVideo.videoUrl.replace('watch?v=', 'embed/')}
+                          style={{ width: '100%', height: '100%', border: 'none' }}
+                          title={previewingVideo.title}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <video
+                          src={previewingVideo.videoUrl}
+                          controls
+                          autoPlay
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ---------------- 4d. STOCK MANAGEMENT ---------------- */}
           {activeTab === 'stocks' && (
             <div className="products-table-card">
               <div className="table-toolbar">
