@@ -2630,6 +2630,7 @@ app.put('/api/categories/:id', requireAuth('vendor', 'admin'), async (req, res) 
         vendorId: current.vendor_id,
         name: updatedName,
         description: updatedDesc,
+        image: updatedImage,
         status: updatedStatus
       }
     });

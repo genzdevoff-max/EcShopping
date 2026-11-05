@@ -170,3 +170,63 @@ test('Can delete category when no products reference it (200)', async () => {
   assert.equal(delRes.status, 200);
   assert.equal(delRes.body.success, true);
 });
+
+test('Admin category image lifecycle: create with image, update image, and reflect in public showcase', async () => {
+  const initialImageUrl = 'https://res.cloudinary.com/test/image/upload/v1/categories/cat-organic-harvest.jpg';
+  const updatedImageUrl = 'https://res.cloudinary.com/test/image/upload/v1/categories/cat-organic-harvest-updated.jpg';
+
+  // 1. Create category with image
+  const createRes = await request()
+    .post('/api/categories')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .send({
+      name: 'Test Image Showcase Category',
+      description: 'Category testing showcase image connection',
+      status: 'active',
+      imageUrl: initialImageUrl
+    });
+
+  assert.equal(createRes.status, 201);
+  assert.equal(createRes.body.success, true);
+  assert.equal(createRes.body.category.name, 'Test Image Showcase Category');
+  assert.equal(createRes.body.category.image, initialImageUrl);
+
+  const catId = createRes.body.category.id;
+
+  // 2. Verify image in GET /api/categories (Admin)
+  const adminListRes = await request()
+    .get('/api/categories')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+  assert.equal(adminListRes.status, 200);
+  const adminCat = adminListRes.body.categories.find((c) => c.id === catId);
+  assert.ok(adminCat);
+  assert.equal(adminCat.image, initialImageUrl);
+
+  // 3. Verify image in GET /api/categories/public (Storefront)
+  const publicListRes1 = await request().get('/api/categories/public');
+  assert.equal(publicListRes1.status, 200);
+  const publicCat1 = publicListRes1.body.categories.find((c) => c.name === 'Test Image Showcase Category');
+  assert.ok(publicCat1);
+  assert.equal(publicCat1.image, initialImageUrl);
+
+  // 4. Update category image via PUT /api/categories/:id
+  const updateRes = await request()
+    .put(`/api/categories/${catId}`)
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .send({
+      imageUrl: updatedImageUrl
+    });
+  assert.equal(updateRes.status, 200);
+  assert.equal(updateRes.body.success, true);
+  assert.equal(updateRes.body.category.image, updatedImageUrl);
+
+  // 5. Verify updated image reflected immediately in GET /api/categories/public
+  const publicListRes2 = await request().get('/api/categories/public');
+  assert.equal(publicListRes2.status, 200);
+  const publicCat2 = publicListRes2.body.categories.find((c) => c.name === 'Test Image Showcase Category');
+  assert.ok(publicCat2);
+  assert.equal(publicCat2.image, updatedImageUrl);
+
+  // Cleanup
+  await pool.query('DELETE FROM categories WHERE id = ?', [catId]);
+});

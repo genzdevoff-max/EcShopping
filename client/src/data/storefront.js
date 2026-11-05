@@ -16,9 +16,17 @@ const PRODUCT_LIMIT_CAP = 48;
 
 let categoriesPromise = null;
 
+/** Invalidate cached public categories so updates reflect immediately. */
+export const clearCategoriesCache = () => {
+  categoriesPromise = null;
+};
+
 /** Active server categories merged with presentation-only display info. */
 export const fetchStorefrontCategories = ({ force = false } = {}) => {
-  if (force || !categoriesPromise) {
+  if (force) {
+    categoriesPromise = null;
+  }
+  if (!categoriesPromise) {
     categoriesPromise = api
       .getPublicCategories()
       .then((data) => {

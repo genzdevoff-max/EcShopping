@@ -33,6 +33,10 @@ function execCurl(args, pw, inputData = null) {
       '--ftp-ssl-control',
       '--insecure',
       '--no-epsv',
+      '--connect-timeout', '15',
+      '--max-time', '60',
+      '--retry', '2',
+      '--retry-delay', '2',
       '--config', '-',
       ...args
     ];
@@ -102,12 +106,39 @@ export async function uploadDist(pw) {
   if (!fs.existsSync(distDir)) {
     throw new Error('client/dist does not exist');
   }
-  const files = getFiles(distDir);
-  console.log(`Starting FTPS upload of ${files.length} production files to Hostinger...`);
+  const allFiles = getFiles(distDir);
+
+  console.log('Inspecting remote assets on Hostinger...');
+  let existingRemoteAssets = new Set();
+  try {
+    const list = await listRemoteDirectory(pw, 'assets');
+    existingRemoteAssets = new Set(list);
+    console.log(`Found ${existingRemoteAssets.size} existing assets on Hostinger.`);
+  } catch (err) {
+    console.warn('Could not list remote assets, will upload all files:', err.message);
+  }
+
+  // Filter files: skip assets that already exist with same content hash
+  const toUpload = allFiles.filter(file => {
+    if (file.rel.startsWith('assets/')) {
+      const base = path.basename(file.rel);
+      return !existingRemoteAssets.has(base);
+    }
+    return true; // Root files like index.html always upload
+  });
+
+  // Sort: upload assets/* first, index.html strictly last
+  toUpload.sort((a, b) => {
+    if (a.rel === 'index.html') return 1;
+    if (b.rel === 'index.html') return -1;
+    return a.rel.localeCompare(b.rel);
+  });
+
+  console.log(`Starting FTPS upload: ${toUpload.length} files to upload (${allFiles.length - toUpload.length} already current)...`);
   let count = 0;
-  for (const file of files) {
+  for (const file of toUpload) {
     count++;
-    process.stdout.write(`[${count}/${files.length}] Uploading ${file.rel}... `);
+    process.stdout.write(`[${count}/${toUpload.length}] Uploading ${file.rel}... `);
     const start = Date.now();
     let uploaded = false;
     for (let attempt = 1; attempt <= 4; attempt++) {

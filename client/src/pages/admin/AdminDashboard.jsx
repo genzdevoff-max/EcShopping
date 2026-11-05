@@ -12,6 +12,8 @@ import { getCurrentAdmin } from '../../utils/storage';
 import Pagination from '../../components/ui/Pagination';
 import VendorSelect from '../../components/admin/VendorSelect';
 import { FormSkeleton } from '../../components/ui/States';
+import { DEFAULT_CATEGORY_IMAGE } from '../../data/content';
+import { clearCategoriesCache } from '../../data/storefront';
 import './AdminDashboard.css';
 
 const AddProduct = lazy(() => import('../vendor/AddProduct'));
@@ -56,6 +58,9 @@ export default function AdminDashboard({ onLogout }) {
   const [newCatDesc, setNewCatDesc] = useState('');
   const [newCatVendor, setNewCatVendor] = useState('shared');
   const [newCatStatus, setNewCatStatus] = useState('active');
+  const [newCatImage, setNewCatImage] = useState('');
+  const [uploadingNewCatImage, setUploadingNewCatImage] = useState(false);
+  const newCatFileInputRef = useRef(null);
   const [creatingCat, setCreatingCat] = useState(false);
   const [catFormMsg, setCatFormMsg] = useState({ type: null, text: '' });
 
@@ -63,6 +68,9 @@ export default function AdminDashboard({ onLogout }) {
   const [editCatName, setEditCatName] = useState('');
   const [editCatDesc, setEditCatDesc] = useState('');
   const [editCatStatus, setEditCatStatus] = useState('active');
+  const [editCatImage, setEditCatImage] = useState('');
+  const [uploadingEditCatImage, setUploadingEditCatImage] = useState(false);
+  const editCatFileInputRef = useRef(null);
 
   /* Vendor Review / Verification Modal State */
   const [reviewingVendor, setReviewingVendor] = useState(null);
@@ -373,6 +381,38 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
+  const handleNewCatImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+    if (!validTypes.includes(file.type)) {
+      setCatFormMsg({ type: 'error', text: 'Please select a valid image file (JPEG, PNG, WEBP, AVIF).' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setCatFormMsg({ type: 'error', text: 'Image file size exceeds 10MB limit.' });
+      return;
+    }
+
+    setUploadingNewCatImage(true);
+    setCatFormMsg({ type: null, text: '' });
+    try {
+      const res = await api.uploadImage(file, 'admin');
+      if (res?.success && res.url) {
+        setNewCatImage(res.url);
+        setCatFormMsg({ type: 'success', text: 'Category image uploaded successfully!' });
+      } else {
+        setCatFormMsg({ type: 'error', text: res?.error || 'Failed to upload category image' });
+      }
+    } catch (err) {
+      setCatFormMsg({ type: 'error', text: err.message || 'Image upload failed' });
+    } finally {
+      setUploadingNewCatImage(false);
+      if (newCatFileInputRef.current) newCatFileInputRef.current.value = '';
+    }
+  };
+
   const handleCreateCategory = async (e) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
@@ -383,13 +423,16 @@ export default function AdminDashboard({ onLogout }) {
         name: newCatName.trim(),
         description: newCatDesc.trim(),
         status: newCatStatus,
-        vendorId: newCatVendor === 'shared' ? null : newCatVendor
+        vendorId: newCatVendor === 'shared' ? null : newCatVendor,
+        imageUrl: newCatImage.trim() || null
       }, 'admin');
       if (res?.success) {
         setNewCatName('');
         setNewCatDesc('');
         setNewCatVendor('shared');
         setNewCatStatus('active');
+        setNewCatImage('');
+        clearCategoriesCache();
         setCatFormMsg({ type: 'success', text: `Category "${res.category.name}" created successfully!` });
         setAttempt((n) => n + 1);
         setTimeout(() => setCatFormMsg({ type: null, text: '' }), 3000);
@@ -915,6 +958,37 @@ export default function AdminDashboard({ onLogout }) {
     setEditCatName(cat.name);
     setEditCatDesc(cat.description || '');
     setEditCatStatus(cat.status || 'active');
+    setEditCatImage(cat.image || '');
+  };
+
+  const handleEditCatImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+    if (!validTypes.includes(file.type)) {
+      setActionError({ id: editingCatId, message: 'Please select a valid image file (JPEG, PNG, WEBP, AVIF).' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setActionError({ id: editingCatId, message: 'Image file size exceeds 10MB limit.' });
+      return;
+    }
+
+    setUploadingEditCatImage(true);
+    try {
+      const res = await api.uploadImage(file, 'admin');
+      if (res?.success && res.url) {
+        setEditCatImage(res.url);
+      } else {
+        setActionError({ id: editingCatId, message: res?.error || 'Failed to upload category image' });
+      }
+    } catch (err) {
+      setActionError({ id: editingCatId, message: err.message || 'Image upload failed' });
+    } finally {
+      setUploadingEditCatImage(false);
+      if (editCatFileInputRef.current) editCatFileInputRef.current.value = '';
+    }
   };
 
   const handleSaveEditCategory = async (e) => {
@@ -924,9 +998,11 @@ export default function AdminDashboard({ onLogout }) {
       const res = await api.updateCategory(editingCatId, {
         name: editCatName.trim(),
         description: editCatDesc.trim(),
-        status: editCatStatus
+        status: editCatStatus,
+        imageUrl: editCatImage.trim() || null
       }, 'admin');
       if (!res?.success) throw new Error(res?.error || 'Failed to update category');
+      clearCategoriesCache();
       setEditingCatId(null);
     }, 'Category update failed');
   };
@@ -1801,6 +1877,61 @@ export default function AdminDashboard({ onLogout }) {
                       </select>
                     </div>
 
+                    <div className="cat-form-field">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label>Category Image</label>
+                        <button
+                          type="button"
+                          className="btn-secondary-sm"
+                          disabled={uploadingNewCatImage || creatingCat}
+                          onClick={() => newCatFileInputRef.current?.click()}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}
+                        >
+                          {uploadingNewCatImage ? (
+                            <><Loader2 size={12} className="spin" /> Uploading...</>
+                          ) : (
+                            <><UploadCloud size={12} /> Upload File</>
+                          )}
+                        </button>
+                      </div>
+                      <input
+                        type="file"
+                        ref={newCatFileInputRef}
+                        accept="image/jpeg,image/png,image/webp,image/avif"
+                        style={{ display: 'none' }}
+                        onChange={handleNewCatImageUpload}
+                        disabled={uploadingNewCatImage || creatingCat}
+                      />
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          className="admin-filter-input"
+                          style={{ width: '100%' }}
+                          placeholder="Image URL or upload file..."
+                          value={newCatImage}
+                          onChange={(e) => setNewCatImage(e.target.value)}
+                        />
+                        {newCatImage && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                            <img
+                              src={newCatImage}
+                              alt="Preview"
+                              style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #0e5c4a' }}
+                              onError={(e) => { e.currentTarget.style.opacity = '0.3'; }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setNewCatImage('')}
+                              title="Clear image"
+                              style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 2 }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     <div>
                       <button
                         type="submit"
@@ -1849,6 +1980,7 @@ export default function AdminDashboard({ onLogout }) {
                   <table className="vendors-table">
                     <thead>
                       <tr>
+                        <th style={{ width: 64, textAlign: 'center' }}>Image</th>
                         <th>Category Name</th>
                         <th>Scope / Owner</th>
                         <th>Description</th>
@@ -1865,6 +1997,47 @@ export default function AdminDashboard({ onLogout }) {
                         if (isEditing) {
                           return (
                             <tr key={cat.id} style={{ background: '#f8fafc' }}>
+                              <td style={{ textAlign: 'center' }}>
+                                <input
+                                  type="file"
+                                  ref={editCatFileInputRef}
+                                  accept="image/jpeg,image/png,image/webp,image/avif"
+                                  style={{ display: 'none' }}
+                                  onChange={handleEditCatImageUpload}
+                                  disabled={uploadingEditCatImage}
+                                />
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                  <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', border: '1.5px solid #0e5c4a', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <img
+                                      src={editCatImage || DEFAULT_CATEGORY_IMAGE}
+                                      alt={editCatName}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      onError={(e) => {
+                                        if (e.currentTarget.src !== DEFAULT_CATEGORY_IMAGE) {
+                                          e.currentTarget.src = DEFAULT_CATEGORY_IMAGE;
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => editCatFileInputRef.current?.click()}
+                                    disabled={uploadingEditCatImage}
+                                    style={{ fontSize: 10, padding: '2px 6px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                  >
+                                    {uploadingEditCatImage ? '...' : 'Upload'}
+                                  </button>
+                                  {editCatImage && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditCatImage('')}
+                                      style={{ fontSize: 10, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
                               <td>
                                 <input
                                   type="text"
@@ -1926,6 +2099,20 @@ export default function AdminDashboard({ onLogout }) {
 
                         return (
                           <tr key={cat.id}>
+                            <td style={{ textAlign: 'center' }}>
+                              <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', margin: '0 auto', border: '1.5px solid #e2e8f0', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <img
+                                  src={cat.image || DEFAULT_CATEGORY_IMAGE}
+                                  alt={cat.name}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  onError={(e) => {
+                                    if (e.currentTarget.src !== DEFAULT_CATEGORY_IMAGE) {
+                                      e.currentTarget.src = DEFAULT_CATEGORY_IMAGE;
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </td>
                             <td>
                               <strong>{cat.name}</strong>
                               {busyId === cat.id && <Loader2 size={13} className="spin" style={{ marginLeft: 6 }} />}
@@ -1993,7 +2180,7 @@ export default function AdminDashboard({ onLogout }) {
                       })}
                       {filteredCategories.length === 0 && (
                         <tr>
-                          <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                          <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                             No categories found matching your criteria.
                           </td>
                         </tr>

@@ -153,6 +153,7 @@ export default function CircularCategoryShowcase({ categories = [], loading = fa
         >
           {activeCategories.map((cat) => {
             const imgSrc = cat.image || DEFAULT_CATEGORY_IMAGE;
+            const isDataUri = typeof imgSrc === 'string' && imgSrc.startsWith('data:');
             return (
               <Link
                 key={cat.slug}
@@ -162,8 +163,8 @@ export default function CircularCategoryShowcase({ categories = [], loading = fa
               >
                 <div className="circular-cat-media">
                   <img
-                    src={optimizeImageUrl(imgSrc, { width: 96 })}
-                    srcSet={`
+                    src={isDataUri ? imgSrc : optimizeImageUrl(imgSrc, { width: 96 })}
+                    srcSet={isDataUri ? undefined : `
                       ${optimizeImageUrl(imgSrc, { width: 96 })} 96w,
                       ${optimizeImageUrl(imgSrc, { width: 176 })} 176w
                     `}

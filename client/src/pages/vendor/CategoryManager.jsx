@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Edit2, 
@@ -10,10 +10,14 @@ import {
   FolderTree, 
   RefreshCw,
   Power,
-  Layers
+  Layers,
+  UploadCloud,
+  Loader2
 } from 'lucide-react';
 import api from '../../utils/api';
 import Pagination from '../../components/ui/Pagination';
+import { DEFAULT_CATEGORY_IMAGE } from '../../data/content';
+import { clearCategoriesCache } from '../../data/storefront';
 import './CategoryManager.css';
 
 export default function CategoryManager({ vendor }) {
@@ -27,6 +31,9 @@ export default function CategoryManager({ vendor }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('active');
+  const [image, setImage] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -40,6 +47,37 @@ export default function CategoryManager({ vendor }) {
     }, 3200);
   };
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+    if (!validTypes.includes(file.type)) {
+      showToast('Please select a valid image file (JPEG, PNG, WEBP, AVIF).', 'error');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Image file size exceeds 10MB limit.', 'error');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const res = await api.uploadImage(file, 'vendor');
+      if (res?.success && res.url) {
+        setImage(res.url);
+        showToast('Category image uploaded successfully!', 'success');
+      } else {
+        showToast(res?.error || 'Failed to upload category image', 'error');
+      }
+    } catch (err) {
+      showToast(err.message || 'Image upload failed', 'error');
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   // Fetch categories from TiDB (vendor token attached by api.js)
   const fetchCategories = async () => {
     setLoading(true);
@@ -51,8 +89,6 @@ export default function CategoryManager({ vendor }) {
         setCategories([]);
       }
     } catch (err) {
-      // Server unreachable — show nothing rather than stale fake data,
-      // but keep the UI usable for retry.
       setCategories([]);
     } finally {
       setLoading(false);
@@ -79,10 +115,12 @@ export default function CategoryManager({ vendor }) {
         const data = await api.updateCategory(editingId, {
           name: name.trim(),
           description: description.trim(),
-          status
+          status,
+          imageUrl: image.trim() || null
         });
 
         if (data?.success) {
+          clearCategoriesCache();
           showToast(`Category "${name}" updated successfully!`, 'success');
           resetForm();
           fetchCategories();
@@ -101,10 +139,12 @@ export default function CategoryManager({ vendor }) {
           name: name.trim(),
           description: description.trim(),
           status,
-          vendorId: vendor?.id || null
+          vendorId: vendor?.id || null,
+          imageUrl: image.trim() || null
         });
 
         if (data?.success) {
+          clearCategoriesCache();
           showToast(`Category "${name}" created successfully!`, 'success');
           resetForm();
           fetchCategories();
@@ -125,6 +165,7 @@ export default function CategoryManager({ vendor }) {
     setName(cat.name);
     setDescription(cat.description || '');
     setStatus(cat.status || 'active');
+    setImage(cat.image || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -134,6 +175,7 @@ export default function CategoryManager({ vendor }) {
     setName('');
     setDescription('');
     setStatus('active');
+    setImage('');
   };
 
   // Toggle Category Status (Active <-> Inactive)
@@ -307,6 +349,63 @@ export default function CategoryManager({ vendor }) {
               </select>
             </div>
 
+            {/* 4. Category Image */}
+            <div className="cat-field-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <label className="cat-field-label" style={{ marginBottom: 0 }}>
+                  <span>Category Image</span>
+                  <span className="opt">(displayed on storefront)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImage || submitting}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 11, background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer' }}
+                >
+                  {uploadingImage ? (
+                    <><Loader2 size={12} className="animate-spin" /> Uploading...</>
+                  ) : (
+                    <><UploadCloud size={12} /> Upload File</>
+                  )}
+                </button>
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/jpeg,image/png,image/webp,image/avif"
+                style={{ display: 'none' }}
+                onChange={handleImageUpload}
+                disabled={uploadingImage || submitting}
+              />
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="cat-text-input"
+                  placeholder="Paste Image URL or upload file..."
+                  value={image}
+                  onChange={(e) => setImage(e.target.value)}
+                />
+                {image && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <img
+                      src={image}
+                      alt="Preview"
+                      style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #0e5c4a' }}
+                      onError={(e) => { e.currentTarget.style.opacity = '0.3'; }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setImage('')}
+                      title="Clear image"
+                      style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 2 }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Submit & Cancel Buttons */}
             <div className="cat-form-buttons">
               <button 
@@ -363,6 +462,7 @@ export default function CategoryManager({ vendor }) {
               <thead>
                 <tr>
                   <th className="cat-col-num">#</th>
+                  <th style={{ width: 44, textAlign: 'center' }}>Image</th>
                   <th>Category Name</th>
                   <th>Description</th>
                   <th>Status</th>
@@ -373,6 +473,20 @@ export default function CategoryManager({ vendor }) {
                 {paginatedCategories.map((cat, idx) => (
                   <tr key={cat.id}>
                     <td className="cat-col-num">{(page - 1) * pageSize + idx + 1}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', margin: '0 auto', border: '1.5px solid #e2e8f0', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <img
+                          src={cat.image || DEFAULT_CATEGORY_IMAGE}
+                          alt={cat.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            if (e.currentTarget.src !== DEFAULT_CATEGORY_IMAGE) {
+                              e.currentTarget.src = DEFAULT_CATEGORY_IMAGE;
+                            }
+                          }}
+                        />
+                      </div>
+                    </td>
                     <td className="cat-col-name">{cat.name}</td>
                     <td className="cat-col-desc" title={cat.description || ''}>
                       {cat.description || <span style={{ color: '#cbd5e1' }}>—</span>}
